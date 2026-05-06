@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول</title>
+    <link rel="stylesheet" href="auth.css">
+</head>
+<body  dir="rtl">
+    <div class="auth-card">
+        <h1 id="titleText" data-i18n="auth.loginTitle">تسجيل الدخول</h1>
+        <p id="subtitleText" data-i18n="auth.loginSubtitle">ادخل اسم المستخدم وكلمة المرور للمتابعة.</p>
+        <form id="authForm">
+            <div class="form-group">
+                <label for="username" data-i18n="auth.username">اسم المستخدم</label>
+                <input id="username" type="text" autocomplete="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password" data-i18n="auth.password">كلمة المرور</label>
+                <div class="password-field-wrapper">
+                    <input id="password" type="password" autocomplete="current-password" required>
+                    <button type="button" class="password-toggle-btn" id="passwordToggleBtn" aria-label="إظهار كلمة المرور" title="إظهار كلمة المرور" aria-pressed="false">
+                        <span class="password-toggle-icon" aria-hidden="true">🐵</span>
+                    </button>
+                </div>
+            </div>
+            <div class="form-group" id="confirmGroup" hidden>
+                <label for="confirmPassword" data-i18n="auth.confirmPassword">تأكيد كلمة المرور</label>
+                <input id="confirmPassword" type="password" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn-primary" id="submitBtn" data-i18n="auth.loginBtn">دخول</button>
+            <div id="status" class="status"></div>
+        </form>
+    </div>
+    <script src="../../assets/js/i18n.js"></script>
+    <script src="../../assets/js/shared/navManager.js"></script>
+    <script src="auth.state.js"></script>
+    <script src="auth.api.js"></script>
+    <script src="auth.ui.js"></script>
+    <script src="auth.js"></script>
+</body>
+</html>

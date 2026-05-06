@@ -1,0 +1,176 @@
+[data-theme="dark"] {
+    /* =========================================================================
+       1. CORE COLORS (Backgrounds & Surfaces)
+       ========================================================================= */
+    --bg-color: #0a0f1a;           /* Deep Midnight Blue (Restful for eyes) */
+    --card-bg: #131b2e;            /* Elevated Cards */
+    --secondary-bg: #0f1729;       /* Panels, Modals, Secondary sections */
+    --nav-bg: #0a0f1a;             /* Navigation Side/Top bar */
+    --dropdown-bg: #0f1729;        /* Dropdowns & Popovers */
+
+    /* =========================================================================
+       2. TYPOGRAPHY
+       ========================================================================= */
+    --text-color: #f1f5f9;         /* High contrast white-blue */
+    --text-muted: #a8b3cf;         /* Relaxed muted text */
+    --text-secondary: #94a3b8;     /* Alternate secondary text */
+    --muted-text: #a8b3cf;         /* Alias */
+    --nav-text: #f1f5f9;
+    --nav-hover: #1e293b;          /* Highlighted Navigation */
+
+    /* =========================================================================
+       3. BORDERS & SHADOWS
+       ========================================================================= */
+    --border-color: #2d3b56;       /* Soft separator lines */
+    --card-border: #2d3b56;
+    --input-border: #3d4f6b;
+    --table-border: #2d3b56;
+    --shadow-color: rgba(0, 0, 0, 0.4); 
+    --shadow-sm: 0 1px 3px var(--shadow-color);
+    --shadow-md: 0 4px 6px -1px var(--shadow-color);
+    --shadow-lg: 0 10px 15px -3px var(--shadow-color);
+
+    /* =========================================================================
+       4. ACTIONS & STATES (Accent Colors)
+       ========================================================================= */
+    --primary-color: #a5c9ff;
+    --secondary-color: #38d9ee;
+    --accent-color: #70b5ff;       /* Vivid Blue for links and buttons */
+    --success-color: #34d875;      /* Luminescent Green */
+    --warning-color: #fbbf24;      /* Amber/Yellow warning */
+    --danger-color: #ff8787;       /* Soft Red for danger */
+    --info-color: #38bdf8;
+
+    /* =========================================================================
+       5. BUSINESS MODULES (Sales & Purchases)
+       ========================================================================= */
+    --sales-color: #34d875;
+    --sales-bg: #064e3b;           /* Deep green background */
+    --purchase-color: #fb923c;
+    --purchase-bg: #7c2d12;        /* Deep orange background */
+    
+    --items-accent: #818cf8;
+    --items-accent-light: rgba(129, 140, 248, 0.15);
+
+    /* =========================================================================
+       6. COMPONENTS (Inputs, Tables)
+       ========================================================================= */
+    --input-bg: #0f1729;
+    --input-focus-ring: rgba(112, 181, 255, 0.15);
+    --table-header-bg: #131b2e;
+    --table-hover-bg: rgba(112, 181, 255, 0.08);
+    --control-height: 44px;
+    --radius-sm: 10px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --elevation-sm: 0 6px 20px rgba(0, 0, 0, 0.32);
+    --elevation-md: 0 12px 30px rgba(0, 0, 0, 0.42);
+    --elevation-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+    --focus-outline: rgba(112, 181, 255, 0.42);
+
+    /* =========================================================================
+       7. GRADIENTS (Dashboard & Cards - Optimized contrast for Dark)
+       ========================================================================= */
+    --dash-gradient-1: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);  
+    --dash-gradient-2: linear-gradient(135deg, #059669 0%, #10b981 100%);  
+    --dash-gradient-3: linear-gradient(135deg, #ea580c 0%, #ef4444 100%);  
+    --dash-gradient-4: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);  
+    --dash-gradient-5: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);  
+    --dash-gradient-6: linear-gradient(135deg, #be123c 0%, #f43f5e 100%);  
+    --dash-gradient-7: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);  
+    --dash-gradient-8: linear-gradient(135deg, #047857 0%, #10b981 100%);  
+    
+    --items-gradient-1: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    --items-gradient-2: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+
+/* =========================================================================
+   Global Overrides for Dark Mode Elements
+   ========================================================================= */
+[data-theme="dark"] button,
+[data-theme="dark"] .btn { 
+    border-color: var(--border-color); 
+    background: #1e293b;
+    color: var(--text-color);
+}
+
+[data-theme="dark"] button:hover,
+[data-theme="dark"] .btn:hover { 
+    background: #2d3b56; 
+    border-color: var(--input-border); 
+}
+
+[data-theme="dark"] .table tbody tr:hover { 
+    background-color: var(--table-hover-bg); 
+}
+
+[data-theme="dark"] input:focus, 
+[data-theme="dark"] select:focus, 
+[data-theme="dark"] textarea:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+[data-theme="dark"] ::-webkit-scrollbar-track { background: var(--secondary-bg); }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 5px; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5f7b; }
+
+[data-theme="dark"] input:disabled, 
+[data-theme="dark"] button:disabled, 
+[data-theme="dark"] select:disabled {
+    opacity: 0.5; 
+    cursor: not-allowed; 
+    background: var(--secondary-bg);
+}
+
+[data-theme="dark"] .dashboard-hero p, 
+[data-theme="dark"] .last-updated, 
+[data-theme="dark"] .metric-label {
+    color: #b8c5d9;
+}
+
+[data-theme="dark"] .modal, 
+[data-theme="dark"] .modal-content {
+    background: var(--card-bg); 
+    border: 1px solid var(--card-border); 
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] .modal-header { border-bottom: 1px solid var(--card-border); background: var(--secondary-bg); }
+[data-theme="dark"] .modal-footer { border-top: 1px solid var(--card-border); background: var(--secondary-bg); }
+
+[data-theme="dark"] .card, 
+[data-theme="dark"] .stat-card, 
+[data-theme="dark"] .info-card {
+    box-shadow: var(--shadow-md); 
+    border: 1px solid var(--card-border);
+}
+
+[data-theme="dark"] select, 
+[data-theme="dark"] select option, 
+[data-theme="dark"] textarea {
+    background: var(--input-bg); 
+    color: var(--text-color); 
+    border: 1px solid var(--input-border);
+}
+
+[data-theme="dark"] a { color: var(--accent-color); text-decoration: none; }
+[data-theme="dark"] a:hover { color: var(--primary-color); }
+
+[data-theme="dark"] .alert-success { 
+    background: rgba(52, 216, 117, 0.1); 
+    border-color: rgba(52, 216, 117, 0.3); 
+    color: var(--success-color); 
+}
+[data-theme="dark"] .alert-warning { 
+    background: rgba(251, 191, 36, 0.1); 
+    border-color: rgba(251, 191, 36, 0.3); 
+    color: var(--warning-color); 
+}
+[data-theme="dark"] .alert-error, 
+[data-theme="dark"] .alert-danger { 
+    background: rgba(255, 135, 135, 0.1); 
+    border-color: rgba(255, 135, 135, 0.3); 
+    color: var(--danger-color); 
+}

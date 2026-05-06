@@ -1,0 +1,10 @@
+[
+  { "id": "dashboard", "label": "Dashboard", "href": "../dashboard/index.html" },
+  { "id": "items", "label": "Items", "href": "../items/items.html" },
+  { "id": "customers", "label": "Customers", "href": "../customers/index.html" },
+  { "id": "purchases", "label": "Purchases", "href": "../purchases/index.html" },
+  { "id": "sales", "label": "Sales", "href": "../sales/index.html" },
+  { "id": "payments", "label": "Payments", "href": "../payments/payment.html" },
+  { "id": "reports", "label": "Reports", "href": "../reports/index.html" },
+  { "id": "settings", "label": "Settings", "href": "../settings/index.html" }
+]

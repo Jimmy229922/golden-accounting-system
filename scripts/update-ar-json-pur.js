@@ -1,0 +1,42 @@
+const fs = require('fs');
+const path = './frontend-desktop/src/renderer/assets/i18n/ar.json';
+let data = JSON.parse(fs.readFileSync(path, 'utf8'));
+
+if (!data.purchaseReturns) data.purchaseReturns = {};
+data.purchaseReturns.title = 'مردودات المشتريات';
+data.purchaseReturns.subtitle = 'إدارة وتسجيل المرتجعات لفواتير الشراء بشكل سريع ومنظم.';
+data.purchaseReturns.newReturnTitle = 'تسجيل مرتجع مشتريات جديد';
+data.purchaseReturns.formStatusChip = 'مرتجع مشتريات';
+data.purchaseReturns.supplier = 'المورد';
+data.purchaseReturns.originalInvoice = 'الفاتورة الأصلية';
+data.purchaseReturns.returnNumber = 'رقم المرتجع';
+data.purchaseReturns.returnDate = 'تاريخ المرتجع';
+data.purchaseReturns.invoiceItems = 'أصناف الفاتورة';
+data.purchaseReturns.returnItem = 'إرجاع';
+data.purchaseReturns.item = 'الصنف';
+data.purchaseReturns.unit = 'الوحدة';
+data.purchaseReturns.boughtQty = 'الكمية المشتراة';
+data.purchaseReturns.returnedQty = 'مرتجع سابق';
+data.purchaseReturns.returnQty = 'كمية المرتجع';
+data.purchaseReturns.price = 'السعر';
+data.purchaseReturns.total = 'الإجمالي';
+data.purchaseReturns.notes = 'ملاحظات / سبب الإرجاع';
+data.purchaseReturns.notesPlaceholder = 'اكتب أي ملاحظات إضافية...';
+data.purchaseReturns.returnTotal = 'إجمالي المرتجع:';
+data.purchaseReturns.saveReturn = 'حفظ المرتجع';
+data.purchaseReturns.historyTitle = 'سجل المرتجعات';
+data.purchaseReturns.editReturnTitle = 'تعديل بيانات المرتجع';
+data.purchaseReturns.updateReturn = 'تحديث المرتجع';
+data.purchaseReturns.invoiceLabel = 'فاتورة رقم {number}';
+
+if (!data.purchaseReturns.toast) data.purchaseReturns.toast = {};
+data.purchaseReturns.toast.updateSuccess = 'تم تحديث المرتجع بنجاح';
+data.purchaseReturns.toast.saveSuccess = 'تم حفظ المرتجع بنجاح';
+data.purchaseReturns.toast.deleteSuccess = 'تم حذف المرتجع بنجاح';
+data.purchaseReturns.toast.selectSupplierInvoice = 'الرجاء اختيار المورد والفاتورة';
+data.purchaseReturns.toast.selectAtLeastOneItem = 'الرجاء تحديد صنف واحد على الأقل للإرجاع';
+data.purchaseReturns.toast.updateError = 'حدث خطأ أثناء تحديث المرتجع';
+data.purchaseReturns.toast.saveError = 'حدث خطأ أثناء حفظ المرتجع';
+
+fs.writeFileSync(path, JSON.stringify(data, null, 2), 'utf8');
+console.log('ar.json updated successfully!');

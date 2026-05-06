@@ -1,0 +1,31 @@
+# Prevent large files from being included when resolved as file: dependency
+# This dramatically reduces the electron-builder output size
+
+# Large folders
+APP_JS/
+frontend-desktop/
+frontend-android/
+node_modules/
+PIC/
+data/
+
+# Build artifacts
+dist/
+out/
+build/
+*.zip
+
+# Database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Dev files
+.github/
+.vscode/
+scripts/
+*.log
+*.bak

@@ -1,0 +1,137 @@
+/* Autocomplete Styles */
+.autocomplete-wrapper {
+    position: relative;
+    width: 100%;
+    z-index: 99; /* Ensure wrapper stays above neighboring inputs */
+    box-sizing: border-box;
+}
+
+.autocomplete-input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    transition: border-color 0.3s, box-shadow 0.3s;
+    box-sizing: border-box;
+}
+
+.autocomplete-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.18);
+    outline: none;
+}
+
+.autocomplete-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: var(--card-bg);
+    border: 1px solid var(--input-border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 350px;
+    overflow-y: auto;
+    z-index: 9999;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    display: none;
+    /* GPU acceleration for smoother rendering */
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    box-sizing: border-box;
+}
+
+.autocomplete-list.autocomplete-list-top {
+    top: auto;
+    bottom: 100%;
+    border-top: 1px solid var(--input-border);
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    box-shadow: 0 -4px 6px rgba(0,0,0,0.1);
+}
+
+.autocomplete-list.visible {
+    display: block;
+}
+
+.autocomplete-item {
+    padding: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--table-border);
+    transition: background 0.2s;
+    color: var(--text-color);
+    background-color: var(--card-bg);
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item:hover, .autocomplete-item.selected {
+    background-color: var(--table-header-bg);
+    color: var(--accent-color);
+}
+
+.autocomplete-item strong {
+    color: var(--accent-color);
+}
+
+/* Dark Mode Specific Overrides */
+[data-theme="dark"] .autocomplete-list {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    background: var(--card-bg);
+    border-color: var(--input-border);
+}
+
+[data-theme="dark"] .autocomplete-input {
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    border-color: var(--input-border);
+}
+
+[data-theme="dark"] .autocomplete-item {
+    border-bottom-color: var(--table-border);
+    color: var(--text-color);
+    background-color: var(--card-bg);
+}
+
+[data-theme="dark"] .autocomplete-item:hover, 
+[data-theme="dark"] .autocomplete-item.selected {
+    background-color: rgba(96,165,250,0.15);
+    color: var(--accent-color);
+}
+
+/* Group Headers */
+.autocomplete-group-header {
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    background-color: var(--table-header-bg);
+    border-bottom: 2px solid var(--table-border);
+    pointer-events: none;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Scrollbar Styling */
+.autocomplete-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.autocomplete-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.autocomplete-list::-webkit-scrollbar-thumb {
+    background-color: var(--input-border);
+    border-radius: 10px;
+}
+
+.autocomplete-list::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary-color);
+}

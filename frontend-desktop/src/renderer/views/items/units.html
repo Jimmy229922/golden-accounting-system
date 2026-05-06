@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة الوحدات - برنامج المحاسبة</title>
+    <link rel="stylesheet" href="../../assets/styles/main.css">
+    <link rel="stylesheet" href="../../css/navbar.css">
+    <link rel="stylesheet" href="../../assets/styles/toast.css">
+    <link rel="stylesheet" href="units.css">
+    <script src="../../assets/js/theme.js"></script>
+</head>
+<body  dir="rtl">
+    <div id="app">
+        <nav id="main-nav" class="top-nav"></nav>
+
+        <main class="content">
+            <div class="page-header">
+                <div class="page-title" data-i18n="units.title">إدارة الوحدات</div>
+            </div>
+
+            <div class="page-grid">
+                <!-- Right Column: Form -->
+                <div class="form-card-static">
+                    <div class="form-header-static">
+                        <h3 id="formTitle" data-i18n="units.addUnit">إضافة وحدة جديدة</h3>
+                        <button id="cancelEditBtn" class="btn btn-outline btn-sm" data-action="reset-form" style="display: none;" data-i18n="units.cancelBtn">إلغاء</button>
+                    </div>
+                    
+                    <input type="hidden" id="unitId">
+                    
+                    <div class="form-group">
+                        <label data-i18n="units.unitName">اسم الوحدة</label>
+                        <input type="text" id="unitName" class="form-control" placeholder="مثال: قطعة، كرتونة..." data-i18n-placeholder="units.unitNamePlaceholder">
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <button class="btn btn-primary" style="width: 100%; justify-content: center;" data-action="save-unit">
+                            <span id="saveBtnText" data-i18n="units.saveUnit">حفظ الوحدة</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Left Column: Data -->
+                <div class="table-container">
+                    <!-- Stats Card -->
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                        </div>
+                        <div class="stats-info">
+                            <h3 data-i18n="units.stats.totalUnits">إجمالي الوحدات المسجلة</h3>
+                            <div class="value" id="totalUnits">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Controls Bar -->
+                    <div class="controls-bar">
+                        <div class="search-container" style="position: relative;">
+                            <input type="text" id="searchInput" class="search-input" placeholder="بحث عن وحدة..." data-i18n-placeholder="units.searchPlaceholder">
+                            <button id="clearSearchBtn" class="btn-icon" style="display: none; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                            <div class="search-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Table Section -->
+                    <div class="table-card">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th width="10%">#</th>
+                                    <th data-i18n="units.tableHeaders.name">اسم الوحدة</th>
+                                    <th width="15%" data-i18n="units.tableHeaders.actions">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="unitsTableBody">
+                                <!-- Data loaded via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <div id="pagination" class="pagination-container"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Delete Confirmation Modal Only -->
+        <div id="deleteModal" class="modal-overlay">
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <div style="margin-bottom: 20px;">
+                    <div style="width: 60px; height: 60px; background: #fee2e2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                    </div>
+                    <h3 style="font-size: 1.2rem; margin-bottom: 10px;" data-i18n="units.deleteModalTitle">تأكيد الحذف</h3>
+                    <p style="color: #6b7280; margin-bottom: 0;" data-i18n="units.deleteConfirmMessage">هل أنت متأكد من حذف هذه الوحدة؟ لا يمكن التراجع عن هذا الإجراء.</p>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button class="btn btn-outline" data-action="hide-delete-modal" style="border: 1px solid #ddd;" data-i18n="units.cancelBtn">إلغاء</button>
+                    <button class="btn btn-danger" data-action="confirm-delete-unit" data-i18n="units.deleteBtn">نعم، احذف</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="../../assets/js/toast.js"></script>
+    <script src="../../assets/js/i18n.js"></script>
+    <script src="../../assets/js/shared/navManager.js"></script>
+    <script src="../../assets/js/permissionManager.js"></script>
+    <script src="../../assets/js/globalSearch.bootstrap.js"></script>
+
+    <script src="../../assets/js/globalSearch.js"></script>
+    <script src="../../assets/js/globalSearch.details.bootstrap.js"></script>
+
+    <script src="../../assets/js/globalSearch.details.js"></script>
+    <script src="units.js"></script>
+</body>
+</html>

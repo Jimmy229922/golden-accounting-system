@@ -1,0 +1,19 @@
+{
+  "name": "accounting-system-monorepo",
+  "private": true,
+  "version": "1.1.5",
+  "description": "Monorepo for desktop, backend, and future android client",
+  "scripts": {
+    "setup": "npm --prefix frontend-desktop install && npm --prefix backend install",
+    "sync:contract": "node scripts/sync-backend-channel-contract.js",
+    "start": "npm run desktop:start",
+    "desktop:start": "npm --prefix frontend-desktop run start",
+    "desktop:build": "npm --prefix frontend-desktop run build",
+    "desktop:rebuild": "npm --prefix frontend-desktop run rebuild",
+    "desktop:check-backend": "npm --prefix frontend-desktop run check-backend",
+    "backend:rebuild-native": "npm --prefix backend rebuild better-sqlite3",
+    "backend:start": "npm --prefix backend run start",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:check": "npm --prefix backend run compat:check"
+  }
+}

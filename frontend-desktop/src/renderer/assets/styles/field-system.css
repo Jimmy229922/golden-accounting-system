@@ -1,0 +1,183 @@
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+    --fs-control-height-lg: var(--control-height, 44px);
+    --fs-control-height-sm: 36px;
+    --fs-control-radius: var(--radius-sm, 10px);
+    --fs-control-padding-x: 12px;
+    --fs-control-padding-y: 8px;
+    --fs-control-font-size-lg: 0.95rem;
+    --fs-control-font-size-sm: 0.86rem;
+    --fs-control-bg: var(--input-bg, #ffffff);
+    --fs-control-border: var(--input-border, #cfd8e3);
+    --fs-control-text: var(--text-color, #1f2937);
+    --fs-control-placeholder: var(--text-muted, #6b7280);
+    --fs-control-focus-border: var(--accent-color, #2563eb);
+    --fs-control-focus-ring: var(--input-focus-ring, rgba(37, 99, 235, 0.2));
+    --fs-control-disabled-bg: var(--secondary-bg, #f8fafc);
+    --fs-control-readonly-bg: var(--secondary-bg, #f8fafc);
+    --fs-control-disabled-opacity: 0.68;
+    --fs-error-color: var(--danger-color, #dc2626);
+    --fs-success-color: var(--success-color, #16a34a);
+    --fs-autocomplete-elevation: var(--elevation-sm, 0 6px 20px rgba(15, 23, 42, 0.08));
+}
+
+.field-system-root .fs-host {
+    position: relative;
+}
+
+.field-system-root .fs-control {
+    width: 100%;
+    min-height: var(--fs-control-height-lg);
+    border: 1px solid var(--fs-control-border);
+    border-radius: var(--fs-control-radius);
+    background: var(--fs-control-bg);
+    color: var(--fs-control-text);
+    font-size: var(--fs-control-font-size-lg);
+    line-height: 1.35;
+    padding: var(--fs-control-padding-y) var(--fs-control-padding-x);
+    box-sizing: border-box;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.field-system-root .fs-control::placeholder {
+    color: var(--fs-control-placeholder);
+    opacity: 0.92;
+}
+
+.field-system-root .fs-choice {
+    accent-color: var(--fs-control-focus-border);
+}
+
+.field-system-root textarea.fs-control {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.field-system-root .fs-control.fs-size-sm {
+    min-height: var(--fs-control-height-sm);
+    font-size: var(--fs-control-font-size-sm);
+    padding: 6px 10px;
+}
+
+.field-system-root textarea.fs-control.fs-size-sm {
+    min-height: 72px;
+}
+
+.field-system-root select.fs-control {
+    appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--fs-control-placeholder) 50%),
+        linear-gradient(135deg, var(--fs-control-placeholder) 50%, transparent 50%);
+    background-position:
+        calc(14px) calc(50% - 2px),
+        calc(9px) calc(50% - 2px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-inline-end: 30px;
+}
+
+.field-system-root .fs-host.fs-state-focused .fs-control,
+.field-system-root .fs-control:focus {
+    border-color: var(--fs-control-focus-border);
+    box-shadow: 0 0 0 3px var(--fs-control-focus-ring);
+    outline: none;
+}
+
+.field-system-root .fs-host.fs-state-disabled .fs-control,
+.field-system-root .fs-control:disabled {
+    background: var(--fs-control-disabled-bg);
+    opacity: var(--fs-control-disabled-opacity);
+    cursor: not-allowed;
+}
+
+.field-system-root .fs-host.fs-state-readonly .fs-control,
+.field-system-root .fs-control[readonly] {
+    background: var(--fs-control-readonly-bg);
+}
+
+.field-system-root .fs-host.fs-state-error .fs-control,
+.field-system-root .fs-control[aria-invalid="true"] {
+    border-color: var(--fs-error-color) !important;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+}
+
+.field-system-root .fs-error-text {
+    margin-top: 6px;
+    color: var(--fs-error-color);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.field-system-root .fs-host.fs-type-number .fs-control,
+.field-system-root .fs-host.fs-type-date .fs-control {
+    direction: ltr;
+    text-align: start;
+}
+
+.field-system-root .fs-autocomplete .autocomplete-input {
+    width: 100%;
+    min-height: var(--fs-control-height-lg);
+    border: 1px solid var(--fs-control-border);
+    border-radius: var(--fs-control-radius);
+    background: var(--fs-control-bg);
+    color: var(--fs-control-text);
+    font-size: var(--fs-control-font-size-lg);
+    line-height: 1.35;
+    padding: var(--fs-control-padding-y) var(--fs-control-padding-x);
+    box-sizing: border-box;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.field-system-root .fs-autocomplete .autocomplete-input.fs-size-sm {
+    min-height: var(--fs-control-height-sm);
+    font-size: var(--fs-control-font-size-sm);
+    padding: 6px 10px;
+}
+
+.field-system-root .autocomplete-list.fs-autocomplete-list,
+.field-system-root .autocomplete-list {
+    border: 1px solid var(--fs-control-border);
+    border-top: none;
+    border-radius: 0 0 var(--fs-control-radius) var(--fs-control-radius);
+    background: var(--card-bg, #ffffff);
+    box-shadow: var(--fs-autocomplete-elevation);
+}
+
+.field-system-root .autocomplete-list.fs-autocomplete-list.autocomplete-list-top,
+.field-system-root .autocomplete-list.autocomplete-list-top {
+    border-top: 1px solid var(--fs-control-border);
+    border-bottom: none;
+    border-radius: var(--fs-control-radius) var(--fs-control-radius) 0 0;
+}
+
+.field-system-root .autocomplete-item.fs-autocomplete-item,
+.field-system-root .autocomplete-list .autocomplete-item {
+    border-bottom: 1px solid var(--table-border, #d8e1eb);
+    color: var(--fs-control-text);
+    background: var(--card-bg, #ffffff);
+}
+
+.field-system-root .autocomplete-item.fs-autocomplete-item:hover,
+.field-system-root .autocomplete-item.fs-autocomplete-item.selected,
+.field-system-root .autocomplete-list .autocomplete-item:hover,
+.field-system-root .autocomplete-list .autocomplete-item.selected {
+    background: var(--table-hover-bg, rgba(37, 99, 235, 0.04));
+    color: var(--fs-control-focus-border);
+}
+
+.field-system-root .fs-host.fs-field {
+    display: grid;
+    gap: 6px;
+}
+
+.field-system-root .fs-field-label {
+    color: var(--text-color, #1f2937);
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.field-system-root .fs-field-message {
+    color: var(--text-muted, #6b7280);
+    font-size: 0.78rem;
+}

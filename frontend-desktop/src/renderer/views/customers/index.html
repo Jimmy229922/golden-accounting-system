@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة العملاء والموردين</title>
+    <link rel="stylesheet" href="../../assets/styles/main.css">
+    <link rel="stylesheet" href="../../css/navbar.css">
+    <link rel="stylesheet" href="customers.css">
+    <link rel="stylesheet" href="../../assets/vendor/fontawesome/css/all.min.css">
+    <script src="../../assets/js/theme.js"></script>
+</head>
+<body  dir="rtl">
+    <!-- Navbar -->
+    <nav id="main-nav" class="top-nav"></nav>
+
+    <div class="page-container">
+        <!-- Header Section -->
+        <div class="header-section">
+            <h1 class="page-title" data-i18n="customers.title">إدارة العملاء والموردين</h1>
+            <button id="add-customer-btn" class="btn btn-primary">
+                <i class="fas fa-plus"></i> <span data-i18n="customers.addNew">إضافة جديد</span>
+            </button>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <!-- Total Receivables (Customers owe us) -->
+            <div class="stat-card receivables">
+                <div class="stat-icon">
+                    <i class="fas fa-hand-holding-usd"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 data-i18n="customers.stats.totalReceivables">إجمالي الديون لينا (مدين)</h3>
+                    <div class="value" id="total-receivables">0</div>
+                </div>
+            </div>
+
+            <!-- Total Payables (We owe suppliers) -->
+            <div class="stat-card payables">
+                <div class="stat-icon">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 data-i18n="customers.stats.totalPayables">إجمالي المستحقات علينا (دائن)</h3>
+                    <div class="value" id="total-payables">0</div>
+                </div>
+            </div>
+
+            <!-- Total Count -->
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 data-i18n="customers.stats.totalCount">عدد العملاء والموردين</h3>
+                    <div class="value" id="total-count">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table Section -->
+        <div class="table-section">
+            <div class="table-controls">
+                <div class="table-header-title">
+                    <h3><i class="fas fa-list"></i> <span data-i18n="customers.tableTitle">قائمة العملاء والموردين</span></h3>
+                </div>
+                
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-filter="all" data-i18n="customers.filterAll">الكل</button>
+                    <button class="filter-btn" data-filter="customer" data-i18n="customers.filterCustomers">العملاء</button>
+                    <button class="filter-btn" data-filter="supplier" data-i18n="customers.filterSuppliers">الموردين</button>
+                    <button class="filter-btn" data-filter="both" data-i18n="customers.filterBoth">عملاء وموردين</button>
+                </div>
+
+                <div class="search-box">
+                    <input type="text" id="search-input" class="search-input" placeholder="بحث بالاسم أو الهاتف أو الكود..." data-i18n-placeholder="customers.searchPlaceholder">
+                    <i class="fas fa-search search-icon"></i>
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="customers.tableHeaders.code">الكود</th>
+                            <th data-i18n="customers.tableHeaders.name">الاسم</th>
+                            <th data-i18n="customers.tableHeaders.type">النوع</th>
+                            <th data-i18n="customers.tableHeaders.phone">رقم الهاتف</th>
+                            <th data-i18n="customers.tableHeaders.address">العنوان</th>
+                            <th data-i18n="customers.tableHeaders.balance">الرصيد</th>
+                            <th data-i18n="customers.tableHeaders.actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customers-table-body">
+                        <!-- Rows will be populated by JS -->
+                    </tbody>
+                </table>
+                
+                <div id="empty-state" class="empty-state" style="display: none;">
+                    <i class="fas fa-users-slash empty-icon"></i>
+                    <p data-i18n="customers.noCustomers">لا يوجد عملاء أو موردين مطابقين للبحث</p>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination-container" id="pagination-controls">
+                <!-- Pagination buttons will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="customer-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title" data-i18n="customers.modalTitle.add">إضافة عميل/مورد جديد</h3>
+                <button class="close-modal" id="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="customer-form">
+                    <input type="hidden" id="customer-id">
+                    
+                    <div class="modal-form-grid">
+                        <div class="form-group">
+                            <label for="customer-name" data-i18n="customers.name">الاسم <span>*</span></label>
+                            <input type="text" id="customer-name" class="form-control" required placeholder="أدخل الاسم" data-i18n-placeholder="customers.namePlaceholder">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="customer-type" data-i18n="customers.type">النوع <span>*</span></label>
+                            <select id="customer-type" class="form-control" required>
+                                <option value="customer" data-i18n="customers.typeCustomer">عميل</option>
+                                <option value="supplier" data-i18n="customers.typeSupplier">مورد</option>
+                                <option value="both" data-i18n="customers.typeBoth">عميل ومورد</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="customer-phone" data-i18n="customers.phone">رقم الهاتف</label>
+                            <input type="text" id="customer-phone" class="form-control" placeholder="أدخل رقم الهاتف" data-i18n-placeholder="customers.phonePlaceholder">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="customer-balance" data-i18n="customers.openingBalance">الرصيد الافتتاحي</label>
+                            <input type="number" id="customer-balance" class="form-control" value="0" step="0.01">
+                            <div class="balance-direction-row">
+                                <div class="balance-direction-toggle" id="customer-balance-direction-toggle">
+                                    <button type="button" class="balance-direction-btn active" data-direction="on" data-i18n="customers.balanceDirection.on">لينا (مدين)</button>
+                                    <button type="button" class="balance-direction-btn" data-direction="for" data-i18n="customers.balanceDirection.for">علينا (دائن)</button>
+                                </div>
+                                <div class="form-hint" id="customer-balance-hint"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="customer-address" data-i18n="customers.address">العنوان</label>
+                            <input type="text" id="customer-address" class="form-control" placeholder="أدخل العنوان" data-i18n-placeholder="customers.addressPlaceholder">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="customer-notes" data-i18n="customers.notes">ملاحظات</label>
+                            <input type="text" id="customer-notes" class="form-control" placeholder="ملاحظات إضافية" data-i18n-placeholder="customers.notesPlaceholder">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" id="cancel-modal" data-i18n="customers.cancelBtn">إلغاء</button>
+                <button type="button" class="btn btn-primary" id="save-customer-btn" data-i18n="customers.saveBtn">حفظ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 data-i18n="customers.deleteModalTitle">تأكيد الحذف</h3>
+                <button class="close-modal" id="close-delete-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 1.1rem; margin-bottom: 15px;" data-i18n="customers.deleteConfirmMessage">هل أنت متأكد من رغبتك في حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء.</p>
+                <p class="warning-text"><i class="fas fa-exclamation-triangle"></i> <span data-i18n="customers.deleteWarning">سيتم حذف جميع البيانات المتعلقة بهذا العميل/المورد.</span></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" id="cancel-delete-modal" data-i18n="customers.cancelBtn">إلغاء</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-btn" data-i18n="customers.deleteBtn">حذف</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../assets/js/i18n.js"></script>
+    <script src="../../assets/js/shared/navManager.js"></script>
+    <script src="../../assets/js/permissionManager.js"></script>
+    <script src="../../assets/js/globalSearch.bootstrap.js"></script>
+
+    <script src="../../assets/js/globalSearch.js"></script>
+    <script src="../../assets/js/globalSearch.details.bootstrap.js"></script>
+
+    <script src="../../assets/js/globalSearch.details.js"></script>
+    <script src="customers.bootstrap.js"></script>
+
+    <script src="customers.js"></script>
+</body>
+</html>

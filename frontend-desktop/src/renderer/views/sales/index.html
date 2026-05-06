@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فواتير المبيعات</title>
+    <link rel="stylesheet" href="../../assets/styles/main.css">
+    <link rel="stylesheet" href="../../css/navbar.css">
+    <link rel="stylesheet" href="../../assets/styles/autocomplete.css">
+    <link rel="stylesheet" href="sales.css">
+    <script src="../../assets/js/theme.js"></script>
+</head>
+<body  dir="rtl">
+    <div id="app"></div>
+
+    <script src="../../assets/js/i18n.js"></script>
+    <script src="../../assets/js/shared/navManager.js"></script>
+    <script src="../../assets/js/permissionManager.js"></script>
+    <script src="../../assets/js/fieldSystem.js"></script>
+    <script src="sales.state.js"></script>
+    <script src="sales.api.js"></script>
+    <script src="sales.render.js"></script>
+    <script src="sales.events.js"></script>
+    <script src="sales.bootstrap.js"></script>
+
+    <script src="sales.js"></script>
+    <script src="../../assets/js/autocomplete.js"></script>
+    <script src="../../assets/js/toast.js"></script>
+    <script src="../../assets/js/globalSearch.bootstrap.js"></script>
+
+    <script src="../../assets/js/globalSearch.js"></script>
+    <script src="../../assets/js/globalSearch.details.bootstrap.js"></script>
+
+    <script src="../../assets/js/globalSearch.details.js"></script>
+    <link rel="stylesheet" href="../../assets/styles/toast.css">
+
+    <!-- Print Template -->
+    <div id="printArea" class="print-shell" style="display: none;">
+        <div class="print-head">
+            <div class="print-header-top">
+                <div class="print-header-company">
+                    <h2 id="printCompanyName" class="print-company-name"></h2>
+                    <p id="printCompanyInfo" class="print-company-info"></p>
+                </div>
+            </div>
+            <div class="print-header-details">
+                <div class="print-detail"><span class="print-detail-label">رقم الفاتورة:</span> <span id="printInvoiceNumber"></span></div>
+                <div class="print-detail"><span class="print-detail-label">التاريخ:</span> <span id="printInvoiceDate"></span></div>
+                <div class="print-detail"><span class="print-detail-label">العميل:</span> <span id="printCustomerName"></span></div>
+            </div>
+            <h1>فاتورة مبيعات</h1>
+        </div>
+        <div class="print-body">
+            <table class="print-items-table">
+                <thead>
+                    <tr>
+                        <th>م</th>
+                        <th>الصنف</th>
+                        <th>الكمية</th>
+                        <th>السعر</th>
+                        <th>الإجمالي</th>
+                    </tr>
+                </thead>
+                <tbody id="printInvoiceItems">
+                </tbody>
+            </table>
+            <div class="print-summary">
+                <table class="print-summary-table">
+                    <tr><td>إجمالي الفاتورة:</td><td id="printInvoiceTotal">0.00</td></tr>
+                    <tr><td>المدفوع:</td><td id="printInvoicePaid">0.00</td></tr>
+                    <tr><td>المتبقي من الفاتورة:</td><td id="printInvoiceRemaining">0.00</td></tr>
+                    <tr class="print-highlight-row"><td>الرصيد السابق للعميل:</td><td id="printCustomerPreviousBalance">0.00</td></tr>
+                    <tr class="print-highlight-row"><td>إجمالي حساب العميل الحالي:</td><td id="printCustomerCurrentBalance">0.00</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="print-footer">
+            <p id="printFooterText"></p>
+        </div>
+    </div>
+</body>
+</html>

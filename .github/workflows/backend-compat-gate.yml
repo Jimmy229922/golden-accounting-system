@@ -1,0 +1,32 @@
+name: Backend Compatibility Gate
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Sync backend channel contract
+        run: npm run sync:contract
+
+      - name: Ensure contract is committed
+        run: git diff --exit-code -- backend/src/contracts/public-channels.json
+
+      - name: Run strict backend compatibility check
+        run: npm run backend:check

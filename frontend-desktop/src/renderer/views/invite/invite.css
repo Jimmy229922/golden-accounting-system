@@ -1,0 +1,164 @@
+        * { box-sizing: border-box; }
+        body {
+            background: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 12px;
+            font-family: 'Cairo', 'Segoe UI', sans-serif;
+        }
+        .invite-card {
+            background: #fff;
+            padding: clamp(18px, 4vw, 32px);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 400px;
+        }
+        .invite-card h1 {
+            margin: 0 0 8px;
+            color: #111827;
+            font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+        }
+        .invite-card p {
+            margin: 0 0 14px;
+            color: #4b5563;
+            line-height: 1.5;
+            font-size: clamp(0.82rem, 2vw, 0.95rem);
+        }
+        .form-group {
+            margin-bottom: 14px;
+        }
+        label { display: block; margin-bottom: 6px; color: #1f2937; font-weight: 600; font-size: 0.92rem; }
+        input[type="password"], input[type="text"] {
+            width: 100%;
+            padding: clamp(8px, 2vw, 12px);
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: clamp(0.88rem, 2vw, 1rem);
+        }
+        input:focus { border-color: #2563eb; outline: none; }
+        
+        .machine-id-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .machine-id-box label {
+            color: #475569;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+        .copy-group {
+            display: flex;
+            gap: 8px;
+        }
+        .copy-group input {
+            font-family: monospace;
+            background: #fff;
+            color: #0f172a;
+            text-align: center;
+            font-weight: bold;
+            flex: 1;
+        }
+        .btn-icon {
+            background: #cbd5e1;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 0 12px;
+            font-size: 1.1rem;
+            transition: background 0.2s;
+        }
+        .btn-icon:hover {
+            background: #94a3b8;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: clamp(9px, 2vw, 12px);
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: #fff;
+            font-size: clamp(0.88rem, 2vw, 1rem);
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.05s ease;
+        }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-primary:active { transform: translateY(1px); }
+        .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+        .status {
+            margin-top: 10px;
+            font-size: clamp(0.82rem, 2vw, 0.95rem);
+            color: #374151;
+            min-height: 20px;
+        }
+        .status.error { color: #b91c1c; }
+        .status.success { color: #15803d; }
+
+/* Professional UI consistency layer */
+:where(.invoice-form-container, .form-card, .reports-page, .settings-card, .metric-card, .summary-card, .table-card, .table-section) {
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--elevation-sm);
+}
+
+:where(.form-control, .autocomplete-input) {
+    min-height: var(--control-height);
+    border-radius: var(--radius-sm);
+}
+
+:where(.form-control, .autocomplete-input):focus,
+:where(.form-control, .autocomplete-input):focus-visible {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--input-focus-ring), 0 10px 24px rgba(37, 99, 235, 0.08);
+    outline: none;
+}
+
+[data-theme='dark'] :where(.form-control, .autocomplete-input):focus,
+[data-theme='dark'] :where(.form-control, .autocomplete-input):focus-visible {
+    box-shadow: 0 0 0 3px var(--input-focus-ring), 0 10px 24px rgba(112, 181, 255, 0.12);
+}
+
+:where(.btn, .btn-submit, .btn-action, .btn-primary, .btn-outline, .btn-success, .btn-danger, .btn-warning, .btn-refresh, .btn-icon) {
+    border-radius: var(--radius-md);
+    transition: transform 0.12s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+:where(.btn, .btn-submit, .btn-action, .btn-primary, .btn-outline, .btn-success, .btn-danger, .btn-warning, .btn-refresh, .btn-icon):hover {
+    transform: translateY(-1px);
+}
+
+:where(.btn, .btn-submit, .btn-action, .btn-primary, .btn-outline, .btn-success, .btn-danger, .btn-warning, .btn-refresh, .btn-icon):active {
+    transform: translateY(0);
+}
+
+:where(.table, .items-table, .entry-table) {
+    color: var(--text-color);
+}
+
+:where(.table th, .items-table th, .entry-table th) {
+    background-color: var(--table-header-bg);
+    color: var(--text-secondary);
+}
+
+:where(.table tbody tr:hover, .items-table tbody tr:hover, .entry-table tbody tr:hover) {
+    background-color: var(--table-hover-bg);
+}
+
+:where(.modal-content) {
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--elevation-lg);
+}
+
+@media (max-width: 768px) {
+    :where(.content, .sales-content, .reports-content) {
+        padding: 16px;
+    }
+}

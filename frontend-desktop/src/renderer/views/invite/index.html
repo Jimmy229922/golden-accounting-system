@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تفعيل البرنامج</title>
+    <link rel="stylesheet" href="../../assets/styles/main.css">
+    <link rel="stylesheet" href="invite.css">
+</head>
+<body  dir="rtl">
+    <div class="invite-card">
+        <h1>تفعيل البرنامج</h1>
+        <p>أدخل كود الدعوة لتفعيل النظام. تواصل مع المطور للحصول على الكود.</p>
+        
+        <div class="machine-id-box">
+            <label>رقم جهازك (أرسل هذا الرقم للمطور):</label>
+            <div class="copy-group">
+                <input type="text" id="machineIdDisplay" readonly>
+                <button type="button" id="copyMachineId" class="btn-icon" title="نسخ">📋</button>
+            </div>
+        </div>
+
+        <form id="inviteForm">
+            <div class="form-group">
+                <label for="inviteCode">كود الدعوة</label>
+                <input type="password" id="inviteCode" autocomplete="off" placeholder="أدخل كود الدعوة" required>
+            </div>
+            <button type="submit" class="btn-primary" id="submitBtn">تفعيل ودخول</button>
+            <div id="status" class="status"></div>
+        </form>
+    </div>
+    <script src="invite.js"></script>
+</body>
+</html>

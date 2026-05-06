@@ -1,0 +1,49 @@
+{
+  "name": "accounting-system-desktop",
+  "version": "1.1.5",
+  "description": "Professional Accounting System",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "check-backend": "node -e \"require('./src/main/backendClient').checkBackendHealth().then((r)=>console.log(JSON.stringify(r,null,2)))\""
+  },
+  "build": {
+    "appId": "com.accountingsystem.app",
+    "productName": "Accounting System",
+    "win": {
+      "target": "nsis",
+      "icon": "src/main/assets/icon.ico"
+    },
+    "nsis": {
+      "installerIcon": "src/main/assets/icon.ico",
+      "uninstallerIcon": "src/main/assets/icon.ico",
+      "installerHeaderIcon": "src/main/assets/icon.ico",
+      "include": "build/installer.nsh"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "SUPABASE_LOCAL_CREDENTIALS.md",
+      "package.json",
+      "node_modules/**/*",
+      "!node_modules/accounting-system-monorepo",
+      "!**/node_modules/accounting-system-monorepo/**"
+    ]
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.2",
+    "electron": "latest",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "accounting-system-monorepo": "file:..",
+    "better-sqlite3": "^12.5.0",
+    "pdf-lib": "^1.17.1"
+  }
+}
