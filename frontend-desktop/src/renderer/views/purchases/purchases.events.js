@@ -30,6 +30,31 @@
                     return;
                 }
 
+                if (action === 'open-weights') {
+                    handlers.onOpenWeights(actionEl);
+                    return;
+                }
+
+                if (action === 'add-weight') {
+                    handlers.onAddWeight();
+                    return;
+                }
+
+                if (action === 'remove-weight') {
+                    handlers.onRemoveWeight(actionEl);
+                    return;
+                }
+
+                if (action === 'save-weights') {
+                    handlers.onSaveWeights();
+                    return;
+                }
+
+                if (action === 'close-weights') {
+                    handlers.onCloseWeights();
+                    return;
+                }
+
                 if (action === 'remove-row') {
                     handlers.onRemoveRow(actionEl);
                 }

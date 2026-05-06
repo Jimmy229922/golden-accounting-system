@@ -240,12 +240,16 @@ function initDB() {
             invoice_id INTEGER,
             item_id INTEGER,
             quantity REAL,
+            raw_quantity REAL,
+            raw_weights TEXT,
             cost_price REAL,
             total_price REAL,
             FOREIGN KEY (invoice_id) REFERENCES purchase_invoices(id) ON DELETE CASCADE,
             FOREIGN KEY (item_id) REFERENCES items(id)
         )
     `);
+    runAddColumnMigration("ALTER TABLE purchase_invoice_details ADD COLUMN raw_quantity REAL DEFAULT 0", 'purchase_invoice_details', 'raw_quantity');
+    runAddColumnMigration("ALTER TABLE purchase_invoice_details ADD COLUMN raw_weights TEXT DEFAULT '[]'", 'purchase_invoice_details', 'raw_weights');
 
     // 7. Sales Invoices Table (جدول فواتير المبيعات)
     db.exec(`
@@ -311,6 +315,20 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN customer_id INTEGER REFERENCES customers(id)", 'treasury_transactions', 'customer_id');
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id)", 'treasury_transactions', 'supplier_id');
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN voucher_number TEXT", 'treasury_transactions', 'voucher_number');
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS petty_expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            expense_date TEXT DEFAULT CURRENT_DATE,
+            amount REAL NOT NULL DEFAULT 0,
+            statement TEXT NOT NULL,
+            notes TEXT,
+            treasury_transaction_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (treasury_transaction_id) REFERENCES treasury_transactions(id)
+        )
+    `);
 
     // 10. Sales Shift Closings Table (جدول إقفالات ورديات المبيعات)
     db.exec(`

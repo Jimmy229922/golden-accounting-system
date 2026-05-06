@@ -137,12 +137,18 @@ function buildTopNavItems(prefix) {
             key: 'common.nav.purchases',
             fallback: 'Purchases',
             children: [
-                { key: 'common.nav.purchaseInvoice', fallback: 'Purchase Invoice', href: withPrefix('purchases/index.html') },
-                { key: 'common.nav.purchaseReturns', fallback: 'Purchase Returns', href: withPrefix('purchase-returns/index.html') }
+                { key: 'common.nav.purchaseInvoice', fallback: 'Purchase Invoice', href: withPrefix('purchases/index.html') }
             ]
         },
         { key: 'common.nav.inventory', fallback: 'Inventory', href: withPrefix('inventory/index.html') },
-        { key: 'common.nav.finance', fallback: 'Finance', href: withPrefix('finance/index.html') },
+        {
+            key: '',
+            fallback: 'التعاملات المالية',
+            children: [
+                { key: 'common.nav.finance', fallback: 'المالية', href: withPrefix('finance/index.html') },
+                { key: '', fallback: 'النثريات', href: withPrefix('petty-expenses/index.html') }
+            ]
+        },
         { key: 'common.nav.receipt', fallback: 'Receipt', href: withPrefix('payments/receipt.html') },
         { key: 'common.nav.payment', fallback: 'Payment', href: withPrefix('payments/payment.html') },
         {

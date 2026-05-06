@@ -90,7 +90,8 @@
                                         <th style="width: 14%;">${t('items.barcode', 'الباركود')}</th>
                                         <th style="width: 24%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
                                         <th style="width: 10%;">${t('purchases.tableHeaders.unit', 'الوحدة')}</th>
-                                        <th style="width: 14%;">${t('purchases.tableHeaders.qty', 'الكمية')}</th>
+                                        <th style="width: 12%;">${t('purchases.raw_quantity', 'الكمية الخام')}</th>
+                                        <th style="width: 12%;">${t('purchases.net_quantity', 'الكمية الصافية')}</th>
                                         <th style="width: 14%;">${t('purchases.tableHeaders.price', 'سعر الشراء')}</th>
                                         <th style="width: 14%;">${t('purchases.tableHeaders.total', 'الإجمالي')}</th>
                                         <th style="width: 6%;"></th>
@@ -111,17 +112,6 @@
 
                         <div class="totals-panel">
                             <div class="invoice-financial-grid">
-                                <div class="form-group">
-                                    <label>${t('purchases.discountType', 'نوع الخصم')}</label>
-                                    <select id="discountType" class="form-control" data-fs-size="sm">
-                                        <option value="amount">${t('purchases.discountTypeAmount', 'مبلغ')}</option>
-                                        <option value="percent">${t('purchases.discountTypePercent', 'نسبة %')}</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label>${t('purchases.discountValue', 'قيمة الخصم')}</label>
-                                    <input type="text" id="discountValue" class="form-control" data-fs-size="sm" value="0" autocomplete="off" placeholder="0">
-                                </div>
                                 <div class="form-group">
                                     <label>${t('purchases.paidNow', 'المدفوع الآن')}</label>
                                     <input type="text" id="paidAmount" class="form-control" data-fs-size="sm" value="0" autocomplete="off" placeholder="0">
@@ -156,6 +146,43 @@
                 </div>
             </div>
         </div>
+
+        <div id="baskeelModal" class="baskeel-modal-overlay" aria-hidden="true">
+            <div class="baskeel-modal" role="dialog" aria-modal="true" aria-labelledby="baskeelModalTitle">
+                <div class="baskeel-modal-header">
+                    <h3 id="baskeelModalTitle">${t('purchases.baskeels_weights', 'أوزان البساكيل')}</h3>
+                    <button type="button" class="baskeel-modal-close" data-action="close-weights" aria-label="${t('common.actions.cancel', 'إلغاء')}">
+                        ×
+                    </button>
+                </div>
+                <div class="baskeel-modal-body">
+                    <div id="baskeelWeightsList" class="baskeel-weights-list"></div>
+                    <button class="btn btn-outline baskeel-add-btn" type="button" data-action="add-weight">
+                        ${t('purchases.add_weight', 'إضافة وزن')}
+                    </button>
+                </div>
+                <div class="baskeel-modal-footer">
+                    <div class="baskeel-summary">
+                        <div class="baskeel-summary-item">
+                            <span>${t('purchases.raw_quantity', 'الكمية الخام')}</span>
+                            <strong id="baskeelRawTotal">0</strong>
+                        </div>
+                        <div class="baskeel-summary-item">
+                            <span>خصم 1%</span>
+                            <strong id="baskeelDiscountTotal">0</strong>
+                        </div>
+                        <div class="baskeel-summary-item">
+                            <span>${t('purchases.net_quantity', 'الكمية الصافية')}</span>
+                            <strong id="baskeelNetTotal">0</strong>
+                        </div>
+                    </div>
+                    <div class="baskeel-actions">
+                        <button class="btn btn-secondary" type="button" data-action="close-weights">${t('common.actions.cancel', 'إلغاء')}</button>
+                        <button class="btn btn-success" type="button" data-action="save-weights">${t('common.actions.save', 'حفظ')}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
     }
 
@@ -174,6 +201,8 @@
         row.dataset.id = String(Date.now());
 
         const quantity = existingItem ? existingItem.quantity : '';
+        const rawQuantity = existingItem ? Number(existingItem.raw_quantity || 0) : 0;
+        const rawWeights = existingItem && typeof existingItem.raw_weights === 'string' ? existingItem.raw_weights : '';
         const price = existingItem ? existingItem.cost_price : 0;
         const total = existingItem ? existingItem.total_price : 0;
 
@@ -203,7 +232,13 @@
             <span class="unit-label">${unitName}</span>
         </td>
         <td>
-            <input type="text" autocomplete="off" class="form-control quantity-input" data-fs-size="sm" value="${quantity}" placeholder="0">
+            <button class="baskeel-btn" type="button" data-action="open-weights">
+                ${t('purchases.baskeels_weights', 'أوزان البساكيل')}
+            </button>
+            <div class="raw-qty-value">${Number.isFinite(rawQuantity) && rawQuantity > 0 ? rawQuantity : ''}</div>
+        </td>
+        <td>
+            <input type="text" autocomplete="off" class="form-control quantity-input" data-fs-size="sm" value="${quantity}" placeholder="0" readonly>
         </td>
         <td>
             <input type="text" autocomplete="off" class="form-control price-input" data-fs-size="sm" value="${price}">
@@ -218,6 +253,9 @@
             </button>
         </td>
     `;
+
+        row.dataset.rawQuantity = Number.isFinite(rawQuantity) ? String(rawQuantity) : '0';
+        row.dataset.rawWeights = rawWeights || '[]';
 
         return row;
     }

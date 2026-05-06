@@ -63,7 +63,12 @@ function initializeElements() {
             onSubmitInvoice: submitInvoice,
             onLoadPrevInvoice: () => navigateInvoice(-1),
             onLoadNextInvoice: () => navigateInvoice(1),
-            onRemoveRow: removeRow
+            onRemoveRow: removeRow,
+            onOpenWeights: openWeightsModal,
+            onAddWeight: addWeightRow,
+            onRemoveWeight: removeWeightRow,
+            onSaveWeights: saveWeightsFromModal,
+            onCloseWeights: closeWeightsModal
         }
     });
 
@@ -87,6 +92,25 @@ function initializeElements() {
     if (purchasesState.dom.paidAmountInput) {
         purchasesState.dom.paidAmountInput.addEventListener('input', () => calculateInvoiceTotal());
     }
+
+    if (purchasesState.dom.baskeelWeightsList) {
+        purchasesState.dom.baskeelWeightsList.addEventListener('input', onWeightsInputChange);
+        purchasesState.dom.baskeelWeightsList.addEventListener('keydown', onWeightsKeyDown);
+    }
+
+    if (purchasesState.dom.baskeelModal) {
+        purchasesState.dom.baskeelModal.addEventListener('click', (event) => {
+            if (event.target === purchasesState.dom.baskeelModal) {
+                closeWeightsModal();
+            }
+        });
+    }
+
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && purchasesState.dom.baskeelModal?.classList.contains('is-open')) {
+            closeWeightsModal();
+        }
+    });
 
     const invoiceNumberInput = document.getElementById('invoiceNumber');
     if (invoiceNumberInput) {
@@ -272,22 +296,7 @@ async function loadInvoiceForEdit(id) {
         const paymentTypeInput = document.getElementById('paymentType');
         if (paymentTypeInput) paymentTypeInput.value = invoice.payment_type || 'cash';
 
-        const subtotalFromDetails = (invoice.items || []).reduce((sum, item) => sum + (Number(item.total_price) || 0), 0);
-        const storedTotal = Number(invoice.total_amount) || 0;
-        const fallbackDiscountAmount = Math.max(subtotalFromDetails - storedTotal, 0);
-        const discountTypeInput = purchasesState.dom.discountTypeSelect;
-        const discountValueInput = purchasesState.dom.discountValueInput;
         const paidAmountInput = purchasesState.dom.paidAmountInput;
-
-        if (discountTypeInput) {
-            discountTypeInput.value = invoice.discount_type === 'percent' ? 'percent' : 'amount';
-        }
-
-        if (discountValueInput) {
-            const sourceDiscountValue = Number(invoice.discount_value);
-            const valueToUse = Number.isFinite(sourceDiscountValue) ? sourceDiscountValue : fallbackDiscountAmount;
-            discountValueInput.value = valueToUse.toFixed(2);
-        }
 
         if (paidAmountInput) {
             const paid = Number(invoice.paid_amount) || 0;
@@ -698,6 +707,213 @@ function updateSelectedItemAvailability(row) {
     purchasesState.dom.selectedItemAvailability.textContent = `المتاح الحالي: ${formatQty(availableQty)}`;
 }
 
+function renderWeightsRows(weights) {
+    const list = purchasesState.dom.baskeelWeightsList;
+    if (!list) return;
+
+    list.innerHTML = '';
+    const safeWeights = Array.isArray(weights) && weights.length > 0 ? weights : [''];
+
+    safeWeights.forEach((value) => {
+        const row = document.createElement('div');
+        row.className = 'baskeel-weight-row';
+        row.innerHTML = `
+            <input type="text" class="form-control baskeel-weight-input" autocomplete="off" value="${Number.isFinite(Number(value)) && Number(value) > 0 ? value : ''}" placeholder="0">
+            <button type="button" class="baskeel-remove-btn" data-action="remove-weight">×</button>
+        `;
+        list.appendChild(row);
+    });
+}
+
+function updateBaskeelSummary() {
+    if (!purchasesState.dom.baskeelRawTotal || !purchasesState.dom.baskeelNetTotal || !purchasesState.dom.baskeelDiscountTotal) return;
+
+    const weights = collectWeightsFromModal();
+    const rawTotal = sumWeights(weights);
+    const discountTotal = rawTotal * PURCHASE_WASTE_RATE;
+    const netTotal = rawTotal - discountTotal;
+
+    purchasesState.dom.baskeelRawTotal.textContent = rawTotal > 0 ? formatBaskeelNumber(rawTotal) : '0';
+    purchasesState.dom.baskeelDiscountTotal.textContent = discountTotal > 0 ? formatBaskeelNumber(discountTotal) : '0';
+    purchasesState.dom.baskeelNetTotal.textContent = netTotal > 0 ? formatBaskeelNumber(netTotal) : '0';
+}
+
+function onWeightsInputChange(event) {
+    if (!event?.target?.classList?.contains('baskeel-weight-input')) return;
+    maybeAddNextWeightRow(event.target);
+    updateBaskeelSummary();
+}
+
+function onWeightsKeyDown(event) {
+    if (!event?.target?.classList?.contains('baskeel-weight-input')) return;
+    if (event.key !== 'Enter') return;
+
+    event.preventDefault();
+    maybeAddNextWeightRow(event.target);
+
+    const inputs = Array.from(purchasesState.dom.baskeelWeightsList?.querySelectorAll('.baskeel-weight-input') || []);
+    const currentIndex = inputs.indexOf(event.target);
+    const nextInput = inputs[currentIndex + 1];
+    if (nextInput) nextInput.focus();
+}
+
+function maybeAddNextWeightRow(input) {
+    const list = purchasesState.dom.baskeelWeightsList;
+    if (!list || !input) return;
+
+    const value = parseLocaleFloat(input.value);
+    if (!Number.isFinite(value) || value <= 0) return;
+
+    const rows = Array.from(list.querySelectorAll('.baskeel-weight-row'));
+    const row = input.closest('.baskeel-weight-row');
+    if (!row || rows[rows.length - 1] !== row) return;
+
+    addWeightRow({ focus: false });
+}
+
+function openWeightsModal(actionEl) {
+    if (isEditLocked()) {
+        if (window.showToast) window.showToast('اضغط على زر "تعديل الفاتورة" أولاً', 'warning');
+        return;
+    }
+
+    const row = actionEl?.closest('tr');
+    if (!row) return;
+
+    purchasesState.activeWeightsRow = row;
+
+    let weights = parseWeightsFromRow(row);
+    if (!weights.length) {
+        const rawQuantity = getRowRawQuantity(row);
+        if (rawQuantity > 0) {
+            weights = [rawQuantity];
+        }
+    }
+
+    renderWeightsRows(weights);
+    updateBaskeelSummary();
+
+    if (purchasesState.dom.baskeelModal) {
+        purchasesState.dom.baskeelModal.classList.add('is-open');
+        purchasesState.dom.baskeelModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+    }
+}
+
+function closeWeightsModal() {
+    if (!purchasesState.dom.baskeelModal) return;
+    purchasesState.dom.baskeelModal.classList.remove('is-open');
+    purchasesState.dom.baskeelModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+    purchasesState.activeWeightsRow = null;
+}
+
+function addWeightRow(options = {}) {
+    const list = purchasesState.dom.baskeelWeightsList;
+    if (!list) return;
+
+    const row = document.createElement('div');
+    row.className = 'baskeel-weight-row';
+    row.innerHTML = `
+        <input type="text" class="form-control baskeel-weight-input" autocomplete="off" value="" placeholder="0">
+        <button type="button" class="baskeel-remove-btn" data-action="remove-weight">×</button>
+    `;
+    list.appendChild(row);
+
+    const input = row.querySelector('.baskeel-weight-input');
+    if (input && options.focus !== false) input.focus();
+
+    updateBaskeelSummary();
+}
+
+function removeWeightRow(actionEl) {
+    const row = actionEl?.closest('.baskeel-weight-row');
+    if (!row) return;
+
+    row.remove();
+
+    if (purchasesState.dom.baskeelWeightsList?.children.length === 0) {
+        addWeightRow();
+        return;
+    }
+
+    updateBaskeelSummary();
+}
+
+function collectWeightsFromModal() {
+    const list = purchasesState.dom.baskeelWeightsList;
+    if (!list) return [];
+
+    const weights = [];
+    list.querySelectorAll('.baskeel-weight-input').forEach((input) => {
+        const value = parseLocaleFloat(input.value);
+        if (Number.isFinite(value) && value > 0) {
+            weights.push(value);
+        }
+    });
+
+    return weights;
+}
+
+function saveWeightsFromModal() {
+    const row = purchasesState.activeWeightsRow;
+    if (!row) return;
+
+    const weights = collectWeightsFromModal();
+    if (!weights.length) {
+        if (window.showToast) window.showToast(t('purchases.enterQuantity', 'الرجاء إدخال الكمية'), 'error');
+        return;
+    }
+
+    const rawQuantity = sumWeights(weights);
+    setRowBaskeelData(row, { rawQuantity, rawWeights: weights });
+    closeWeightsModal();
+}
+
+function hydrateRowBaskeel(row, existingItem) {
+    if (!row) return;
+
+    if (!existingItem) {
+        setRowBaskeelData(row, { rawQuantity: 0, rawWeights: [] }, { skipAutoAdd: true });
+        return;
+    }
+
+    let rawWeights = [];
+    if (typeof existingItem.raw_weights === 'string' && existingItem.raw_weights.trim()) {
+        try {
+            const parsed = JSON.parse(existingItem.raw_weights);
+            if (Array.isArray(parsed)) {
+                rawWeights = parsed
+                    .map((entry) => Number(entry))
+                    .filter((entry) => Number.isFinite(entry) && entry > 0);
+            }
+        } catch (_error) {
+            rawWeights = [];
+        }
+    }
+
+    let rawQuantity = Number(existingItem.raw_quantity);
+    if (!Number.isFinite(rawQuantity) || rawQuantity <= 0) {
+        if (rawWeights.length) {
+            rawQuantity = sumWeights(rawWeights);
+        } else {
+            const fallbackNet = Number(existingItem.quantity);
+            if (Number.isFinite(fallbackNet) && fallbackNet > 0) {
+                rawQuantity = fallbackNet / PURCHASE_NET_FACTOR;
+                rawWeights = [rawQuantity];
+            } else {
+                rawQuantity = 0;
+            }
+        }
+    }
+
+    if (!rawWeights.length && rawQuantity > 0) {
+        rawWeights = [rawQuantity];
+    }
+
+    setRowBaskeelData(row, { rawQuantity, rawWeights }, { skipAutoAdd: true });
+}
+
 function addInvoiceRow(existingItem = null) {
     if (!existingItem && isEditLocked()) {
         if (window.showToast) window.showToast('اضغط على زر "تعديل الفاتورة" أولاً', 'warning');
@@ -729,6 +945,8 @@ function addInvoiceRow(existingItem = null) {
     if (selectElement) {
         selectElement.addEventListener('change', () => onItemSelect(selectElement));
     }
+
+    hydrateRowBaskeel(row, existingItem);
 }
 
 function removeRow(removeBtnEl) {
@@ -918,15 +1136,20 @@ function handleRowArrowNavigation(event) {
     focusRowField(rows[nextIndex], fieldKey);
 }
 
-function calculateRowTotal(input) {
-    if (!input) return;
+function calculateRowTotal(target) {
+    if (!target) return;
 
-    const row = input.closest('tr');
-    const quantity = parseLocaleFloat(row.querySelector('.quantity-input').value);
-    const price = parseLocaleFloat(row.querySelector('.price-input').value);
+    const row = target.tagName === 'TR' ? target : target.closest('tr');
+    if (!row) return;
+
+    const quantityInput = row.querySelector('.quantity-input');
+    const priceInput = row.querySelector('.price-input');
+    const quantity = parseLocaleFloat(quantityInput?.value);
+    const price = parseLocaleFloat(priceInput?.value);
     const total = (Number.isFinite(quantity) ? quantity : 0) * (Number.isFinite(price) ? price : 0);
 
-    row.querySelector('.row-total').textContent = total.toFixed(2);
+    const totalEl = row.querySelector('.row-total');
+    if (totalEl) totalEl.textContent = total.toFixed(2);
     calculateInvoiceTotal();
 }
 
@@ -951,52 +1174,116 @@ function parseLocaleFloat(value) {
     return Number.isFinite(num) ? num : NaN;
 }
 
+const PURCHASE_WASTE_RATE = 0.01;
+const PURCHASE_NET_FACTOR = 1 - PURCHASE_WASTE_RATE;
+
+function formatBaskeelNumber(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '0';
+    const text = String(n);
+    return text.replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1');
+}
+
+function parseWeightsFromRow(row) {
+    if (!row) return [];
+    const raw = row.dataset.rawWeights || '';
+    if (!raw) return [];
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            return parsed
+                .map((entry) => Number(entry))
+                .filter((entry) => Number.isFinite(entry) && entry > 0);
+        }
+    } catch (_error) {
+        return [];
+    }
+
+    return [];
+}
+
+function sumWeights(weights) {
+    return weights.reduce((sum, value) => sum + value, 0);
+}
+
+function getRowRawQuantity(row) {
+    if (!row) return 0;
+    const raw = Number(row.dataset.rawQuantity);
+    return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+function setRowBaskeelData(row, { rawQuantity, rawWeights }, options = {}) {
+    if (!row) return;
+    const safeRaw = Number.isFinite(Number(rawQuantity)) && Number(rawQuantity) > 0 ? Number(rawQuantity) : 0;
+    const weightsArray = Array.isArray(rawWeights)
+        ? rawWeights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0)
+        : [];
+
+    row.dataset.rawQuantity = String(safeRaw || 0);
+    row.dataset.rawWeights = JSON.stringify(weightsArray);
+
+    const rawValueEl = row.querySelector('.raw-qty-value');
+    if (rawValueEl) {
+        rawValueEl.textContent = safeRaw > 0 ? formatBaskeelNumber(safeRaw) : '';
+    }
+
+    const netQuantity = safeRaw > 0 ? safeRaw * PURCHASE_NET_FACTOR : 0;
+    const qtyInput = row.querySelector('.quantity-input');
+    if (qtyInput) {
+        qtyInput.value = netQuantity > 0 ? formatBaskeelNumber(netQuantity) : '';
+    }
+
+    calculateRowTotal(row);
+    updateSelectedItemAvailability(row);
+    if (!options.skipAutoAdd && safeRaw > 0) {
+        maybeAutoAddRow(row);
+    }
+}
+
 function roundMoney(value) {
     const n = Number(value) || 0;
     return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-function getInvoiceFinancials(subtotal) {
-    const safeSubtotal = Number.isFinite(subtotal) ? Math.max(subtotal, 0) : 0;
-    const discountType = purchasesState.dom.discountTypeSelect?.value === 'percent' ? 'percent' : 'amount';
-
-    const discountValueRaw = parseLocaleFloat(purchasesState.dom.discountValueInput?.value || '0');
-    const discountValue = Number.isFinite(discountValueRaw) && discountValueRaw > 0 ? discountValueRaw : 0;
-
-    let discountAmount = discountType === 'percent'
-        ? safeSubtotal * (discountValue / 100)
-        : discountValue;
-
-    if (!Number.isFinite(discountAmount) || discountAmount < 0) discountAmount = 0;
-    discountAmount = Math.min(discountAmount, safeSubtotal);
-
-    const netTotal = Math.max(safeSubtotal - discountAmount, 0);
+function getInvoiceFinancials(rawSubtotal, netSubtotal) {
+    const safeRawSubtotal = Number.isFinite(rawSubtotal) ? Math.max(rawSubtotal, 0) : 0;
+    const safeNetSubtotal = Number.isFinite(netSubtotal) ? Math.max(netSubtotal, 0) : 0;
+    const discountAmount = Math.max(safeRawSubtotal - safeNetSubtotal, 0);
 
     const paidAmountRaw = parseLocaleFloat(purchasesState.dom.paidAmountInput?.value || '0');
     const paidAmount = Number.isFinite(paidAmountRaw) && paidAmountRaw > 0 ? paidAmountRaw : 0;
-    const supplierRemaining = netTotal - paidAmount;
+    const supplierRemaining = safeNetSubtotal - paidAmount;
 
     return {
-        discountType,
-        discountValue: roundMoney(discountValue),
+        discountType: 'percent',
+        discountValue: PURCHASE_WASTE_RATE * 100,
         discountAmount: roundMoney(discountAmount),
-        netTotal: roundMoney(netTotal),
+        netTotal: roundMoney(safeNetSubtotal),
         paidAmount: roundMoney(paidAmount),
-        supplierRemaining: roundMoney(supplierRemaining)
+        supplierRemaining: roundMoney(supplierRemaining),
+        rawSubtotal: roundMoney(safeRawSubtotal)
     };
 }
 
 function calculateInvoiceTotal() {
-    let subtotal = 0;
+    let rawSubtotal = 0;
+    let netSubtotal = 0;
     purchasesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
-        const rowTotal = parseFloat(row.querySelector('.row-total').textContent) || 0;
-        subtotal += rowTotal;
+        const rowTotal = parseFloat(row.querySelector('.row-total')?.textContent) || 0;
+        netSubtotal += rowTotal;
+
+        const rawQty = getRowRawQuantity(row);
+        const price = parseLocaleFloat(row.querySelector('.price-input')?.value);
+        if (rawQty > 0 && Number.isFinite(price)) {
+            rawSubtotal += rawQty * price;
+        }
     });
 
-    const financials = getInvoiceFinancials(subtotal);
+    const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
 
     if (purchasesState.dom.invoiceSubtotalSpan) {
-        purchasesState.dom.invoiceSubtotalSpan.textContent = subtotal.toFixed(2);
+        purchasesState.dom.invoiceSubtotalSpan.textContent = financials.rawSubtotal.toFixed(2);
     }
 
     if (purchasesState.dom.invoiceDiscountAmountSpan) {
@@ -1029,24 +1316,34 @@ function collectInvoiceItemsFromForm() {
 
     purchasesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
         const item_id = parseInt(row.querySelector('.item-select').value, 10);
-        const quantity = parseLocaleFloat(row.querySelector('.quantity-input').value);
+        const quantityInput = row.querySelector('.quantity-input');
+        const rawQuantity = getRowRawQuantity(row);
+        const rawWeights = parseWeightsFromRow(row);
+        let quantity = parseLocaleFloat(quantityInput?.value);
         const cost_price = parseLocaleFloat(row.querySelector('.price-input').value);
+
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            quantity = rawQuantity > 0 ? rawQuantity * PURCHASE_NET_FACTOR : NaN;
+        }
 
         const quantityOk = Number.isFinite(quantity) && quantity > 0;
         const priceOk = Number.isFinite(cost_price) && cost_price >= 0;
         const itemOk = Number.isFinite(item_id) && item_id > 0;
+        const rawOk = Number.isFinite(rawQuantity) && rawQuantity > 0;
 
         if (!itemOk && !quantityOk && (!priceOk || cost_price === 0)) {
             return;
         }
 
-        if (!itemOk || !quantityOk || !priceOk) {
+        if (!itemOk || !quantityOk || !priceOk || !rawOk) {
             isValid = false;
             return;
         }
 
         items.push({
             item_id,
+            raw_quantity: rawQuantity,
+            raw_weights: rawWeights,
             quantity,
             cost_price,
             total_price: quantity * cost_price
@@ -1063,8 +1360,8 @@ function buildInvoicePayload(financials) {
         invoice_date: purchasesState.dom.invoiceDateInput.value || new Date().toISOString().slice(0, 10),
         payment_type: document.getElementById('paymentType').value,
         notes: document.getElementById('invoiceNotes').value,
-        discount_type: financials.discountType,
-        discount_value: financials.discountValue,
+        discount_type: 'percent',
+        discount_value: PURCHASE_WASTE_RATE * 100,
         paid_amount: financials.paidAmount,
         total_amount: financials.netTotal
     };
@@ -1082,7 +1379,9 @@ async function saveInvoice() {
         return;
     }
 
-    const financials = getInvoiceFinancials(parseFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
+    const rawSubtotal = parseFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
+    const netSubtotal = parseFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
+    const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
 
     const invoiceData = {
         ...buildInvoicePayload(financials),
@@ -1114,7 +1413,9 @@ async function updateInvoice() {
         return;
     }
 
-    const financials = getInvoiceFinancials(parseFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
+    const rawSubtotal = parseFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
+    const netSubtotal = parseFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
+    const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
 
     const invoiceData = {
         ...buildInvoicePayload(financials),
@@ -1149,8 +1450,6 @@ async function resetForm() {
     if (invoiceNumberInput) invoiceNumberInput.value = '';
     if (notesInput) notesInput.value = '';
     if (paymentTypeInput) paymentTypeInput.value = 'credit';
-    if (purchasesState.dom.discountTypeSelect) purchasesState.dom.discountTypeSelect.value = 'amount';
-    if (purchasesState.dom.discountValueInput) purchasesState.dom.discountValueInput.value = '0';
     if (purchasesState.dom.paidAmountInput) purchasesState.dom.paidAmountInput.value = '0';
 
     purchasesState.dom.invoiceItemsBody.innerHTML = '';

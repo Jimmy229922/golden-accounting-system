@@ -764,8 +764,6 @@
             target = `${basePath}/purchases/index.html?editId=${id}`;
         } else if (type === 'sales-return') {
             target = `${basePath}/sales-returns/index.html?editId=${id}`;
-        } else if (type === 'purchase-return') {
-            target = `${basePath}/purchase-returns/index.html?editId=${id}`;
         }
 
         if (!target) {

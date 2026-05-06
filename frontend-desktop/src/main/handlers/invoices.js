@@ -201,7 +201,7 @@ function register() {
             } else {
                 const purchaseBalanceDelta = (Number(invoice.total_amount) || 0) - (Number(invoice.paid_amount) || 0);
                 if (purchaseBalanceDelta !== 0) {
-                    db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(purchaseBalanceDelta, invoice[personIdField]);
+                    db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(purchaseBalanceDelta, invoice[personIdField]);
                 }
             }
 

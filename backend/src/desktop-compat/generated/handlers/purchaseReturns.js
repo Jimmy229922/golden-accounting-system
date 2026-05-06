@@ -79,7 +79,7 @@ function register() {
 
         // Reduce supplier balance (we owe less)
         const updateSupplierBalance = db.prepare(`
-            UPDATE customers SET balance = balance - @amount WHERE id = @id
+            UPDATE customers SET balance = balance + @amount WHERE id = @id
         `);
 
         // Treasury income for cash purchases
@@ -217,8 +217,8 @@ function register() {
         const addToStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity + @quantity WHERE id = @item_id');
         const subtractFromStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity - @quantity WHERE id = @item_id');
 
-        const increaseSupplierBalance = db.prepare('UPDATE customers SET balance = balance + @amount WHERE id = @id');
-        const decreaseSupplierBalance = db.prepare('UPDATE customers SET balance = balance - @amount WHERE id = @id');
+        const increaseSupplierBalance = db.prepare('UPDATE customers SET balance = balance - @amount WHERE id = @id');
+        const decreaseSupplierBalance = db.prepare('UPDATE customers SET balance = balance + @amount WHERE id = @id');
 
         const deleteTreasuryTransaction = db.prepare("DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = 'purchase_return'");
         const insertTreasuryTransaction = db.prepare(`
@@ -317,7 +317,7 @@ function register() {
                 if (originalInvoice && originalInvoice.payment_type === 'cash') {
                     db.prepare("DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = 'purchase_return'").run(returnId);
                 } else {
-                    db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(returnRecord.total_amount, returnRecord.supplier_id);
+                    db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(returnRecord.total_amount, returnRecord.supplier_id);
                 }
 
                 // Delete return and its details

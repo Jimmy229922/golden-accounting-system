@@ -317,7 +317,7 @@ function register() {
                 if (originalInvoice && originalInvoice.payment_type === 'cash') {
                     db.prepare("DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = 'purchase_return'").run(returnId);
                 } else {
-                    db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(returnRecord.total_amount, returnRecord.supplier_id);
+                    db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(returnRecord.total_amount, returnRecord.supplier_id);
                 }
 
                 // Delete return and its details

@@ -890,22 +890,6 @@ class GlobalSearch {
                 });
             });
             
-            // البحث في مرتجعات المشتريات
-            const purchaseReturns = await window.electronAPI.getPurchaseReturns();
-            const filteredPurchaseReturns = purchaseReturns.filter(ret => 
-                ret.return_number && ret.return_number.includes(query)
-            ).slice(0, 5);
-            
-            filteredPurchaseReturns.forEach(purchaseReturn => {
-                this.results.push({
-                    type: 'purchase-return',
-                    id: purchaseReturn.id,
-                    title: purchaseReturn.return_number,
-                    subtitle: `${this.t('globalSearch.supplier', 'المورد')}: ${purchaseReturn.supplier_name || '-'} | ${this.t('globalSearch.amount', 'المبلغ')}: ${(purchaseReturn.total_amount || 0).toLocaleString()} | ${purchaseReturn.return_date}`,
-                    data: purchaseReturn
-                });
-            });
-            
             // البحث في سندات التحصيل والسداد
             const transactions = await window.electronAPI.getTreasuryTransactions();
             const filteredTransactions = transactions.filter(tr => 
@@ -978,7 +962,6 @@ class GlobalSearch {
         const salesResults = this.results.filter(r => r.type === 'sales');
         const purchaseResults = this.results.filter(r => r.type === 'purchase');
         const salesReturnResults = this.results.filter(r => r.type === 'sales-return');
-        const purchaseReturnResults = this.results.filter(r => r.type === 'purchase-return');
         const receiptResults = this.results.filter(r => r.type === 'receipt');
         const paymentResults = this.results.filter(r => r.type === 'payment');
         const customerResults = this.results.filter(r => r.type === 'customer');
@@ -1015,17 +998,6 @@ class GlobalSearch {
                         <i class="fas fa-undo-alt"></i> ${this.t('globalSearch.sections.salesReturns', 'مردودات المبيعات')}
                     </div>
                     ${salesReturnResults.map((r, i) => this.renderResultItem(r, this.results.indexOf(r))).join('')}
-                </div>
-            `;
-        }
-        
-        if (purchaseReturnResults.length) {
-            html += `
-                <div class="gsearch-section">
-                    <div class="gsearch-section-title">
-                        <i class="fas fa-undo"></i> ${this.t('globalSearch.sections.purchaseReturns', 'مردودات المشتريات')}
-                    </div>
-                    ${purchaseReturnResults.map((r, i) => this.renderResultItem(r, this.results.indexOf(r))).join('')}
                 </div>
             `;
         }
@@ -1144,9 +1116,6 @@ class GlobalSearch {
         } else if (type === 'sales-return') {
             // عرض تفاصيل مرتجع بيع في Modal
             await this.showSalesReturnDetails(id);
-        } else if (type === 'purchase-return') {
-            // عرض تفاصيل مرتجع شراء في Modal
-            await this.showPurchaseReturnDetails(id);
         } else {
             // للعملاء والموردين - الانتقال للصفحة المناسبة
             this.close();

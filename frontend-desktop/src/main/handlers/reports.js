@@ -553,7 +553,7 @@ function register() {
                 `).all(id);
             } else if (type === 'purchase') {
                 details = db.prepare(`
-                    SELECT pid.quantity, pid.cost_price as price, pid.total_price,
+                    SELECT pid.raw_quantity, pid.quantity, pid.cost_price as price, pid.total_price,
                            i.name as item_name, u.name as unit_name
                     FROM purchase_invoice_details pid
                     JOIN items i ON pid.item_id = i.id

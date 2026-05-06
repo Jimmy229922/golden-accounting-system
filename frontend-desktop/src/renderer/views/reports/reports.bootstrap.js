@@ -438,7 +438,6 @@ function handleTableAction(event) {
         if (type === 'sales') page = '../sales/index.html';
         else if (type === 'purchase') page = '../purchases/index.html';
         else if (type === 'sales_return') page = '../sales-returns/index.html';
-        else if (type === 'purchase_return') page = '../purchase-returns/index.html';
         else if (type === 'receipt') page = '../payments/receipt.html';
         else if (type === 'payment') page = '../payments/payment.html';
 

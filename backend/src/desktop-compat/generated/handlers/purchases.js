@@ -12,6 +12,82 @@ function roundMoney(value) {
     return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+const PURCHASE_WASTE_RATE = 0.01;
+const PURCHASE_NET_FACTOR = 1 - PURCHASE_WASTE_RATE;
+
+function normalizeWeightsList(value) {
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => Number(entry))
+            .filter((entry) => Number.isFinite(entry) && entry > 0);
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return [];
+
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+                return parsed
+                    .map((entry) => Number(entry))
+                    .filter((entry) => Number.isFinite(entry) && entry > 0);
+            }
+        } catch (_error) {
+            return [];
+        }
+    }
+
+    return [];
+}
+
+function sumWeights(weights) {
+    return weights.reduce((sum, value) => sum + value, 0);
+}
+
+function normalizeCostPrice(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function normalizeRawQuantity(rawQuantity, fallbackNetQuantity) {
+    const n = Number(rawQuantity);
+    if (Number.isFinite(n) && n > 0) return n;
+
+    const fallback = Number(fallbackNetQuantity);
+    if (Number.isFinite(fallback) && fallback > 0) return fallback;
+
+    return 0;
+}
+
+function calculateNetQuantity(rawQuantity) {
+    return rawQuantity * PURCHASE_NET_FACTOR;
+}
+
+function normalizePurchaseItems(items) {
+    const safeItems = Array.isArray(items) ? items : [];
+
+    return safeItems.map((item) => {
+        const weights = normalizeWeightsList(item.raw_weights);
+        const rawFromWeights = sumWeights(weights);
+        const rawQuantity = normalizeRawQuantity(rawFromWeights || item.raw_quantity, item.quantity);
+        const netQuantity = rawQuantity > 0 ? calculateNetQuantity(rawQuantity) : 0;
+        const costPrice = normalizeCostPrice(item.cost_price);
+        const rawTotal = rawQuantity * costPrice;
+        const totalPrice = netQuantity * costPrice;
+
+        return {
+            item_id: item.item_id,
+            raw_quantity: rawQuantity,
+            raw_weights: JSON.stringify(weights),
+            quantity: netQuantity,
+            cost_price: costPrice,
+            total_price: totalPrice,
+            raw_total_price: rawTotal
+        };
+    });
+}
+
 function calculateInvoiceFinancials({ subtotalAmount, discountType, discountValue, paidAmount }) {
     const subtotal = roundMoney(Math.max(Number(subtotalAmount) || 0, 0));
     const normalizedDiscountType = discountType === 'percent' ? 'percent' : 'amount';
@@ -62,17 +138,18 @@ function register() {
     ipcMain.handle('save-purchase-invoice', (event, invoiceData) => {
         const denied = requirePermission('purchases', 'add');
         if (denied) return denied;
-        const { supplier_id, invoice_number, invoice_date, notes, items, payment_type, discount_type, discount_value, paid_amount } = invoiceData;
+        const { supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount } = invoiceData;
 
-        let subtotalAmount = 0;
-        for (const item of items) {
-            subtotalAmount += Number(item.total_price) || 0;
+        const normalizedItems = normalizePurchaseItems(items);
+        let rawSubtotalAmount = 0;
+        for (const item of normalizedItems) {
+            rawSubtotalAmount += Number(item.raw_total_price) || 0;
         }
 
         const financials = calculateInvoiceFinancials({
-            subtotalAmount,
-            discountType: discount_type,
-            discountValue: discount_value,
+            subtotalAmount: rawSubtotalAmount,
+            discountType: 'percent',
+            discountValue: PURCHASE_WASTE_RATE * 100,
             paidAmount: paid_amount
         });
 
@@ -82,8 +159,8 @@ function register() {
         `);
 
         const insertDetail = db.prepare(`
-            INSERT INTO purchase_invoice_details (invoice_id, item_id, quantity, cost_price, total_price)
-            VALUES (@invoice_id, @item_id, @quantity, @cost_price, @total_price)
+            INSERT INTO purchase_invoice_details (invoice_id, item_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
+            VALUES (@invoice_id, @item_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
         `);
 
         const updateItemStock = db.prepare(`
@@ -120,10 +197,12 @@ function register() {
             });
             const invoiceId = info.lastInsertRowid;
 
-            for (const item of data.items) {
+            for (const item of normalizedItems) {
                 insertDetail.run({
                     invoice_id: invoiceId,
                     item_id: item.item_id,
+                    raw_quantity: item.raw_quantity,
+                    raw_weights: item.raw_weights,
                     quantity: item.quantity,
                     cost_price: item.cost_price,
                     total_price: item.total_price
@@ -169,20 +248,21 @@ function register() {
     ipcMain.handle('update-purchase-invoice', (event, invoiceData) => {
         const denied = requirePermission('purchases', 'edit');
         if (denied) return denied;
-        const { id, supplier_id, invoice_number, invoice_date, notes, items, payment_type, discount_type, discount_value, paid_amount } = invoiceData;
+        const { id, supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount } = invoiceData;
         
         const oldInvoice = db.prepare('SELECT * FROM purchase_invoices WHERE id = ?').get(id);
         const oldDetails = db.prepare('SELECT * FROM purchase_invoice_details WHERE invoice_id = ?').all(id);
 
         if (!oldInvoice) return { success: false, error: 'Invoice not found' };
 
-        let subtotalAmount = 0;
-        for (const item of items) subtotalAmount += Number(item.total_price) || 0;
+        const normalizedItems = normalizePurchaseItems(items);
+        let rawSubtotalAmount = 0;
+        for (const item of normalizedItems) rawSubtotalAmount += Number(item.raw_total_price) || 0;
 
         const financials = calculateInvoiceFinancials({
-            subtotalAmount,
-            discountType: discount_type,
-            discountValue: discount_value,
+            subtotalAmount: rawSubtotalAmount,
+            discountType: 'percent',
+            discountValue: PURCHASE_WASTE_RATE * 100,
             paidAmount: paid_amount
         });
 
@@ -194,7 +274,7 @@ function register() {
             }
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
+                db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
             }
             // Delete Treasury
             if (oldInvoice.paid_amount > 0) {
@@ -227,15 +307,17 @@ function register() {
             });
 
             const insertDetail = db.prepare(`
-                INSERT INTO purchase_invoice_details (invoice_id, item_id, quantity, cost_price, total_price)
-                VALUES (@invoice_id, @item_id, @quantity, @cost_price, @total_price)
+                INSERT INTO purchase_invoice_details (invoice_id, item_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
+                VALUES (@invoice_id, @item_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
             `);
             const updateItemStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity + @quantity, cost_price = @cost_price WHERE id = @item_id');
 
-            for (const item of items) {
+            for (const item of normalizedItems) {
                 insertDetail.run({
                     invoice_id: id,
                     item_id: item.item_id,
+                    raw_quantity: item.raw_quantity,
+                    raw_weights: item.raw_weights,
                     quantity: item.quantity,
                     cost_price: item.cost_price,
                     total_price: item.total_price
@@ -244,7 +326,7 @@ function register() {
             }
 
             if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(financials.balance_delta, supplier_id);
+                db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
             }
 
             if (financials.paid_amount > 0) {

@@ -294,6 +294,41 @@
     background: rgba(37, 99, 235, 0.08);
 }
 
+.baskeel-btn {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px dashed var(--input-border);
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--accent-color);
+    font-weight: 700;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.baskeel-btn:hover {
+    background: rgba(37, 99, 235, 0.14);
+}
+
+.raw-qty-value {
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--table-border);
+    background: rgba(15, 23, 42, 0.04);
+    font-weight: 800;
+    color: var(--text-color);
+    font-size: 0.9rem;
+}
+
+.quantity-input[readonly] {
+    background: rgba(148, 163, 184, 0.12);
+    cursor: not-allowed;
+}
+
 .items-table .form-control:not(.fs-control),
 .items-table .autocomplete-input:not(.fs-control) {
     min-height: 40px;
@@ -449,7 +484,7 @@
 
 .invoice-financial-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     gap: 10px;
     margin-bottom: 12px;
 }
@@ -588,6 +623,128 @@
     border-color: var(--accent-color);
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
     outline: none;
+}
+
+.baskeel-modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 200000;
+}
+
+.baskeel-modal-overlay.is-open {
+    display: flex;
+}
+
+.baskeel-modal {
+    width: min(620px, 96vw);
+    background: var(--card-bg);
+    border-radius: 16px;
+    border: 1px solid var(--card-border);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+}
+
+.baskeel-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.baskeel-modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text-color);
+}
+
+.baskeel-modal-close {
+    background: transparent;
+    border: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.baskeel-modal-body {
+    padding: 16px 18px;
+    display: grid;
+    gap: 12px;
+}
+
+.baskeel-weights-list {
+    display: grid;
+    gap: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.baskeel-weight-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.baskeel-remove-btn {
+    border: 1px solid var(--card-border);
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--danger-color);
+    font-weight: 800;
+    border-radius: 10px;
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+}
+
+.baskeel-add-btn {
+    width: fit-content;
+}
+
+.baskeel-modal-footer {
+    padding: 14px 18px 18px;
+    border-top: 1px solid var(--card-border);
+    display: grid;
+    gap: 14px;
+}
+
+.baskeel-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.baskeel-summary-item {
+    border-radius: 12px;
+    border: 1px solid var(--table-border);
+    background: rgba(37, 99, 235, 0.06);
+    padding: 10px 12px;
+    text-align: center;
+}
+
+.baskeel-summary-item span {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.baskeel-summary-item strong {
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+.baskeel-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
 }
 
 [data-theme="dark"] .invoice-shell {

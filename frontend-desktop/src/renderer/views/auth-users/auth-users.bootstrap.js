@@ -402,7 +402,7 @@ async function submitResetPassword(event) {
 
 const PERMISSION_PAGES = [
     'dashboard', 'customers', 'items', 'sales', 'purchases',
-    'sales-returns', 'purchase-returns', 'treasury', 'reports',
+    'sales-returns', 'treasury', 'reports',
     'customer-reports', 'inventory', 'opening-balance', 'settings', 'finance'
 ];
 

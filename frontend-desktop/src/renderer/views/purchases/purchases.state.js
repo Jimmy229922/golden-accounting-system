@@ -7,6 +7,7 @@
             originalInvoiceItemTotalsByItemId: {},
             supplierAutocomplete: null,
             isSubmitting: false,
+            activeWeightsRow: null,
             ar: {},
             dom: {
                 app: null,
@@ -22,7 +23,12 @@
                 invoiceTotalSpan: null,
                 invoicePaidDisplaySpan: null,
                 invoiceRemainingSpan: null,
-                invoiceForm: null
+                invoiceForm: null,
+                baskeelModal: null,
+                baskeelWeightsList: null,
+                baskeelRawTotal: null,
+                baskeelDiscountTotal: null,
+                baskeelNetTotal: null
             }
         };
     }
@@ -42,6 +48,11 @@
         state.dom.invoicePaidDisplaySpan = document.getElementById('invoicePaidDisplay');
         state.dom.invoiceRemainingSpan = document.getElementById('invoiceRemaining');
         state.dom.invoiceForm = document.getElementById('invoiceForm');
+        state.dom.baskeelModal = document.getElementById('baskeelModal');
+        state.dom.baskeelWeightsList = document.getElementById('baskeelWeightsList');
+        state.dom.baskeelRawTotal = document.getElementById('baskeelRawTotal');
+        state.dom.baskeelDiscountTotal = document.getElementById('baskeelDiscountTotal');
+        state.dom.baskeelNetTotal = document.getElementById('baskeelNetTotal');
         return state.dom;
     }
 

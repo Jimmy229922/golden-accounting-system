@@ -36,11 +36,16 @@
                     <a href="#">${t('common.nav.purchases')}</a>
                     <div class="dropdown-content">
                         <a href="../purchases/index.html">${t('common.nav.purchaseInvoice')}</a>
-                        <a href="../purchase-returns/index.html">${t('common.nav.purchaseReturns')}</a>
                     </div>
                 </li>
                 <li><a href="../inventory/index.html">${t('common.nav.inventory')}</a></li>
-                <li><a href="../finance/index.html">${t('common.nav.finance')}</a></li>
+                <li class="dropdown">
+                    <a href="#">التعاملات المالية</a>
+                    <div class="dropdown-content">
+                        <a href="../finance/index.html">${t('common.nav.finance')}</a>
+                        <a href="../petty-expenses/index.html">النثريات</a>
+                    </div>
+                </li>
                 <li><a href="../payments/receipt.html">${t('common.nav.receipt')}</a></li>
                 <li><a href="../payments/payment.html">${t('common.nav.payment')}</a></li>
                 <li class="dropdown">

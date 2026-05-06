@@ -553,6 +553,10 @@
     }
   },
   "purchases": {
+    "baskeels_weights": "أوزان البساكيل",
+    "add_weight": "إضافة وزن",
+    "raw_quantity": "الكمية الخام",
+    "net_quantity": "الكمية الصافية",
     "title": "فاتورة المشتريات",
     "pageTitle": "فواتير المشتريات",
     "formTitle": "تسجيل فاتورة شراء جديدة",

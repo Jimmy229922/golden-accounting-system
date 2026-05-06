@@ -234,6 +234,46 @@
    - حقل `الصنف` (إضافة + تعديل) أصبح يدعم البحث بالكتابة والاختيار من قائمة `Autocomplete` بدل الاكتفاء بقائمة select التقليدية.
    - تم التفعيل عبر `item-select` + `autocomplete-show-all-on-click` مع `refresh()` عند تحديث خيارات الأصناف.
 
+### Petty Expenses Modal UI (2026-05-06)
+
+- تم إعادة بناء مودال `إضافة مستند نثريات` داخل `views/petty-expenses` بدون تغيير في منطق الحفظ.
+- CSS Classes المستخدمة:
+   - `.petty-modal-overlay`
+   - `.petty-modal-card`
+   - `.petty-modal-header`
+   - `.petty-modal-title`
+   - `.petty-modal-close`
+   - `.petty-modal-body`
+   - `.petty-modal-grid`
+   - `.petty-modal-row`
+   - `.petty-modal-footer`
+   - `.required-asterisk`
+   - `.text-icon`
+   - `.input-with-currency`
+   - `.currency-badge`
+   - `.amount-input`
+   - `.uneditable`
+   - `.submit-btn`
+
+### Petty Expenses Hero & Summary (2026-05-06)
+
+- تم إضافة هيدر احترافي وبطاقات ملخص أعلى صفحة `views/petty-expenses`.
+- بطاقات الملخص تعرض:
+   - إجمالي مبلغ النثريات للفترة المحددة (أو لكل البيانات عند عدم تحديد فترة).
+   - عدد المستندات لنفس الفترة.
+- قناة IPC `get-petty-expenses` أصبحت تُرجع الحقل `totalAmount` بجانب `total` لاستخدامهما في البطاقات.
+- CSS Classes المستخدمة:
+   - `.petty-hero`
+   - `.petty-hero-actions`
+   - `.stats-container`
+   - `.stat-card`
+   - `.stat-icon`
+   - `.stat-info`
+   - `.stat-title`
+   - `.stat-value`
+   - `.stat-expense`
+   - `.stat-count`
+
 ### Invoice/Return Previous-Next Navigation (2026-04-16)
 
 - تم إضافة زرين `السابق` و`التالي` داخل نموذج المستند في الصفحات:
@@ -365,6 +405,7 @@
 - `handlers/invoices.js`: تفاصيل الفواتير/المرتجعات + الترقيم + الحذف.
 - `handlers/settings.js`: الإعدادات + إحصائيات الداشبورد.
 - `handlers/backup.js`: النسخ الاحتياطي المحلي + النسخ السحابي (Supabase Storage) + عرض النسخ السحابية + الاسترجاع المحلي/السحابي + إعادة التشغيل.
+- `handlers/pettyExpenses.js`: النثريات (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
 
 ---
 

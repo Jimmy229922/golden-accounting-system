@@ -119,6 +119,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteTreasuryTransaction: (id) => invokeChannel('delete-treasury-transaction', id),
     searchTreasuryByVoucher: (voucherNumber) => invokeChannel('search-treasury-by-voucher', voucherNumber),
 
+    // Petty Expenses API
+    getNextPettyExpenseNumber: () => invokeChannel('get-next-petty-expense-number'),
+    getPettyExpenses: (params = {}) => invokeChannel('get-petty-expenses', params),
+    savePettyExpense: (data) => invokeChannel('save-petty-expense', data),
+    updatePettyExpense: (data) => invokeChannel('update-petty-expense', data),
+    deletePettyExpense: (id) => invokeChannel('delete-petty-expense', id),
+    savePettyExpensesPdf: (options) => invokeChannel('save-petty-expenses-pdf', options),
+
     // Inventory API
     getItemTransactions: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-transactions', { itemId, startDate, endDate }),
     getDamagedStockEntries: (filters = {}) => invokeChannel('get-damaged-stock-entries', filters),
