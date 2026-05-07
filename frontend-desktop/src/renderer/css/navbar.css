@@ -382,6 +382,13 @@ body {
     background-color: rgba(148, 163, 184, 0.16);
 }
 
+.dropdown-separator {
+    display: block;
+    height: 1px;
+    margin: 8px 4px;
+    background: rgba(148, 163, 184, 0.32);
+}
+
 /* Main Content Adjustment */
 .content {
     padding: 20px;

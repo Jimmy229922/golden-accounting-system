@@ -44,6 +44,13 @@
                     <div class="dropdown-content">
                         <a href="../finance/index.html">${t('common.nav.finance')}</a>
                         <a href="../petty-expenses/index.html">النثريات</a>
+                        <a href="../petty-bags/index.html">الشكاير</a>
+                        <a href="../petty-inspection/index.html">الفحص</a>
+                        <a href="../petty-shipping-clearance/index.html">الشحن و التخليص</a>
+                        <a href="../petty-operation/index.html">التشغيل</a>
+                        <span class="dropdown-separator" aria-hidden="true"></span>
+                        <a href="../under-collection/index.html">تحت التحصيل</a>
+                        <a href="../remaining-under-collection/index.html">بيان المتبقي من تحت التحصيل</a>
                     </div>
                 </li>
                 <li><a href="../payments/receipt.html">${t('common.nav.receipt')}</a></li>

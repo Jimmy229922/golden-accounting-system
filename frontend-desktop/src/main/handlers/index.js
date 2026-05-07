@@ -18,6 +18,11 @@ const backup = require('./backup');
 const salesReturns = require('./salesReturns');
 const purchaseReturns = require('./purchaseReturns');
 const pettyExpenses = require('./pettyExpenses');
+const pettyBags = require('./pettyBags');
+const pettyInspection = require('./pettyInspection');
+const pettyShippingClearance = require('./pettyShippingClearance');
+const pettyOperation = require('./pettyOperation');
+const underCollection = require('./underCollection');
 
 function setupIPC() {
     repairWarehouseNamesEncoding();
@@ -43,6 +48,11 @@ function setupIPC() {
     salesReturns.register();
     purchaseReturns.register();
     pettyExpenses.register();
+    pettyBags.register();
+    pettyInspection.register();
+    pettyShippingClearance.register();
+    pettyOperation.register();
+    underCollection.register();
 }
 
 module.exports = { setupIPC };

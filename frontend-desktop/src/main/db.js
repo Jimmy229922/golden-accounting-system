@@ -330,6 +330,86 @@ function initDB() {
         )
     `);
 
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS petty_expenses_bags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            expense_date TEXT DEFAULT CURRENT_DATE,
+            amount REAL NOT NULL DEFAULT 0,
+            statement TEXT NOT NULL,
+            notes TEXT,
+            treasury_transaction_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (treasury_transaction_id) REFERENCES treasury_transactions(id)
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS petty_expenses_inspection (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            expense_date TEXT DEFAULT CURRENT_DATE,
+            amount REAL NOT NULL DEFAULT 0,
+            statement TEXT NOT NULL,
+            notes TEXT,
+            treasury_transaction_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (treasury_transaction_id) REFERENCES treasury_transactions(id)
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS petty_expenses_shipping_clearance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            expense_date TEXT DEFAULT CURRENT_DATE,
+            amount REAL NOT NULL DEFAULT 0,
+            statement TEXT NOT NULL,
+            notes TEXT,
+            treasury_transaction_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (treasury_transaction_id) REFERENCES treasury_transactions(id)
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS petty_expenses_operation (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            expense_date TEXT DEFAULT CURRENT_DATE,
+            amount REAL NOT NULL DEFAULT 0,
+            statement TEXT NOT NULL,
+            notes TEXT,
+            treasury_transaction_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (treasury_transaction_id) REFERENCES treasury_transactions(id)
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS under_collection_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            record_date TEXT DEFAULT CURRENT_DATE,
+            container_count INTEGER NOT NULL DEFAULT 0,
+            container_20 INTEGER DEFAULT 0,
+            container_40 INTEGER DEFAULT 0,
+            statement TEXT NOT NULL,
+            invoice_number TEXT NOT NULL,
+            tons_count REAL NOT NULL DEFAULT 0,
+            ton_price REAL NOT NULL DEFAULT 0,
+            total_usd REAL NOT NULL DEFAULT 0,
+            remaining_type TEXT DEFAULT 'percent',
+            remaining_value REAL NOT NULL DEFAULT 0,
+            remaining_usd REAL NOT NULL DEFAULT 0,
+            is_collected INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN remaining_type TEXT DEFAULT 'percent'", 'under_collection_records', 'remaining_type');
+    runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN remaining_value REAL NOT NULL DEFAULT 0", 'under_collection_records', 'remaining_value');
+    runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN remaining_usd REAL NOT NULL DEFAULT 0", 'under_collection_records', 'remaining_usd');
+
     // 10. Sales Shift Closings Table (جدول إقفالات ورديات المبيعات)
     db.exec(`
         CREATE TABLE IF NOT EXISTS sales_shift_closings (
@@ -520,6 +600,8 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_date ON treasury_transactions(transaction_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_type ON treasury_transactions(type)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_customer_id ON treasury_transactions(customer_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_date ON under_collection_records(record_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_invoice_number ON under_collection_records(invoice_number)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_period_end_at ON sales_shift_closings(period_end_at)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_created_at ON sales_shift_closings(created_at)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_returns_customer_id ON sales_returns(customer_id)`);

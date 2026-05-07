@@ -72,6 +72,11 @@
 | Opening Balance | `../opening-balance/index.html` | `opening-balance/index.html`, `opening-balance.css`, `opening-balance.js`, `opening-balance.bootstrap.js`, `opening-balance.render.js`, `opening-balance.utils.js` | `getWarehouses`, `getItems`, `getOpeningBalances`, `addOpeningBalanceGroup`, `updateOpeningBalance`, `deleteOpeningBalance`, `addWarehouse`, `updateWarehouse`, `deleteWarehouse` | `handlers/openingBalances.js`, `handlers/warehouses.js`, `handlers/items.js` | `opening-balance` |
 | Inventory | `../inventory/index.html` | `inventory/index.html`, `inventory.css`, `inventory.js` | `getItems`, `getItemMovements`, `getWarehouses`, `getDamagedStockEntries`, `addDamagedStockEntry`, `updateDamagedStockEntry`, `deleteDamagedStockEntry`, `getMyPermissions` | `handlers/items.js`, `handlers/warehouses.js`, `handlers/auth.js` | `inventory` |
 | Finance | `../finance/index.html` | `finance/index.html`, `finance.css`, `finance.js` | `getTreasuryBalance`, `getTreasuryTransactions`, `addTreasuryTransaction`, `updateTreasuryTransaction`, `deleteTreasuryTransaction` | `handlers/treasury.js` | `finance` |
+| Petty Expenses | `../petty-expenses/index.html` | `petty-expenses/index.html`, `petty-expenses.css`, `petty-expenses.js` | `getNextPettyExpenseNumber`, `getPettyExpenses`, `savePettyExpense`, `updatePettyExpense`, `deletePettyExpense`, `savePettyExpensesPdf` | `handlers/pettyExpenses.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
+| Petty Bags | `../petty-bags/index.html` | `petty-bags/index.html`, `petty-bags.css`, `petty-bags.js` | `getNextBagsExpenseNumber`, `getBagsExpenses`, `saveBagsExpense`, `updateBagsExpense`, `deleteBagsExpense`, `saveBagsExpensesPdf` | `handlers/pettyBags.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
+| Petty Inspection | `../petty-inspection/index.html` | `petty-inspection/index.html`, `petty-inspection.css`, `petty-inspection.js` | `getNextInspectionExpenseNumber`, `getInspectionExpenses`, `saveInspectionExpense`, `updateInspectionExpense`, `deleteInspectionExpense`, `saveInspectionExpensesPdf` | `handlers/pettyInspection.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
+| Petty Shipping & Clearance | `../petty-shipping-clearance/index.html` | `petty-shipping-clearance/index.html`, `petty-shipping-clearance.css`, `petty-shipping-clearance.js` | `getNextShippingClearanceExpenseNumber`, `getShippingClearanceExpenses`, `saveShippingClearanceExpense`, `updateShippingClearanceExpense`, `deleteShippingClearanceExpense`, `saveShippingClearanceExpensesPdf` | `handlers/pettyShippingClearance.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
+| Petty Operation | `../petty-operation/index.html` | `petty-operation/index.html`, `petty-operation.css`, `petty-operation.js` | `getNextOperationExpenseNumber`, `getOperationExpenses`, `saveOperationExpense`, `updateOperationExpense`, `deleteOperationExpense`, `saveOperationExpensesPdf` | `handlers/pettyOperation.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
 | Receipt | `../payments/receipt.html` | `payments/receipt.html`, `payments.css`, `receipt.js`, `treasury-page.shared.js`, `treasury-page.renderer.js` | `getCustomers`, `getTreasuryTransactions`, `getNextTreasuryVoucherNumber`, `addTreasuryTransaction`, `searchTreasuryByVoucher` | `handlers/treasury.js`, `handlers/customers.js` | `treasury` |
 | Payment | `../payments/payment.html` | `payments/payment.html`, `payments.css`, `payment.js`, `treasury-page.shared.js`, `treasury-page.renderer.js` | `getCustomers`, `getTreasuryTransactions`, `getNextTreasuryVoucherNumber`, `addTreasuryTransaction`, `searchTreasuryByVoucher` | `handlers/treasury.js`, `handlers/customers.js` | `treasury` |
 | Reports | `../reports/index.html` | `reports/index.html`, `reports.css`, `reports.js`, `reports.bootstrap.js`, `reports.render.js`, `reports.voucher.js` | `getAllReports`, `getCustomers`, `deleteInvoice`, `getTreasuryTransactions` | `handlers/reports.js`, `handlers/invoices.js`, `handlers/treasury.js` | `reports` |
@@ -366,7 +371,7 @@
 
 ### جداول `db.js`
 
-`units`, `items`, `customers`, `suppliers`, `purchase_invoices`, `purchase_invoice_details`, `sales_invoices`, `sales_invoice_details`, `treasury_transactions`, `sales_shift_closings`, `settings`, `warehouses`, `opening_balances`, `opening_balance_groups`, `sales_returns`, `sales_return_details`, `purchase_returns`, `purchase_return_details`, `damaged_stock_logs`, `user_permissions`
+`units`, `items`, `customers`, `suppliers`, `purchase_invoices`, `purchase_invoice_details`, `sales_invoices`, `sales_invoice_details`, `treasury_transactions`, `petty_expenses`, `petty_expenses_bags`, `petty_expenses_inspection`, `petty_expenses_shipping_clearance`, `petty_expenses_operation`, `sales_shift_closings`, `settings`, `warehouses`, `opening_balances`, `opening_balance_groups`, `sales_returns`, `sales_return_details`, `purchase_returns`, `purchase_return_details`, `damaged_stock_logs`, `user_permissions`
 
 ### جداول تُنشأ من `handlers/auth.js`
 
@@ -406,6 +411,10 @@
 - `handlers/settings.js`: الإعدادات + إحصائيات الداشبورد.
 - `handlers/backup.js`: النسخ الاحتياطي المحلي + النسخ السحابي (Supabase Storage) + عرض النسخ السحابية + الاسترجاع المحلي/السحابي + إعادة التشغيل.
 - `handlers/pettyExpenses.js`: النثريات (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
+- `handlers/pettyBags.js`: الشكاير (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
+- `handlers/pettyInspection.js`: الفحص (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
+- `handlers/pettyShippingClearance.js`: الشحن و التخليص (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
+- `handlers/pettyOperation.js`: التشغيل (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
 
 ---
 

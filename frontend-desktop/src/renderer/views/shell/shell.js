@@ -21,6 +21,8 @@ const SHELL_HREF_TO_PERMISSION = [
     { pattern: 'opening-balance/', page: 'opening-balance' },
     { pattern: 'inventory/', page: 'inventory' },
     { pattern: 'finance/', page: 'finance' },
+    { pattern: 'under-collection/', page: 'finance' },
+    { pattern: 'remaining-under-collection/', page: 'finance' },
     { pattern: 'payments/receipt', page: 'treasury' },
     { pattern: 'payments/payment', page: 'treasury' },
     { pattern: 'reports/debtor-creditor', page: 'reports' },
@@ -226,6 +228,10 @@ function buildTopNavDropdown(item) {
 
     const childrenHtml = item.children
         .map((child) => {
+            if (child.divider) {
+                return '<span class="dropdown-separator" aria-hidden="true"></span>';
+            }
+
             const childActive = isItemActive(child.href) ? ' class="active"' : '';
             return `<a href="${child.href}" data-shell-href="${child.href}"${childActive}>${t(child.key, child.fallback)}</a>`;
         })
@@ -501,4 +507,3 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('[shell] initialization failed:', error);
     }
 });
-

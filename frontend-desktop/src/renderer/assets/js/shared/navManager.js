@@ -146,7 +146,14 @@ function buildTopNavItems(prefix) {
             fallback: 'التعاملات المالية',
             children: [
                 { key: 'common.nav.finance', fallback: 'المالية', href: withPrefix('finance/index.html') },
-                { key: '', fallback: 'النثريات', href: withPrefix('petty-expenses/index.html') }
+                { key: '', fallback: 'النثريات', href: withPrefix('petty-expenses/index.html') },
+                { key: '', fallback: 'الشكاير', href: withPrefix('petty-bags/index.html') },
+                { key: '', fallback: 'الفحص', href: withPrefix('petty-inspection/index.html') },
+                { key: '', fallback: 'الشحن و التخليص', href: withPrefix('petty-shipping-clearance/index.html') },
+                { key: '', fallback: 'التشغيل', href: withPrefix('petty-operation/index.html') },
+                { divider: true },
+                { key: '', fallback: 'تحت التحصيل', href: withPrefix('under-collection/index.html') },
+                { key: '', fallback: 'بيان المتبقي من تحت التحصيل', href: withPrefix('remaining-under-collection/index.html') }
             ]
         },
         { key: 'common.nav.receipt', fallback: 'Receipt', href: withPrefix('payments/receipt.html') },
@@ -1278,6 +1285,10 @@ function buildTopNavDropdown(item, t) {
     const activeClass = hasActiveChild ? ' class="active"' : '';
     const childrenHtml = item.children
         .map((child) => {
+            if (child.divider) {
+                return '<span class="dropdown-separator" aria-hidden="true"></span>';
+            }
+
             const childActive = isTopNavLinkActive(child.href) ? ' class="active"' : '';
             return `<a href="${child.href}"${childActive}>${t(child.key, child.fallback)}</a>`;
         })

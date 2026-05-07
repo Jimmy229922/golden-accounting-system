@@ -1,0 +1,726 @@
+.petty-page {
+    --primary-color: #f97316;
+
+    padding: 28px;
+    max-width: 1440px;
+    margin: 0 auto 40px;
+}
+
+/* Petty Hero */
+.petty-hero {
+    background:
+        radial-gradient(140px 140px at 8% 18%, rgba(255, 255, 255, 0.18), transparent 60%),
+        radial-gradient(220px 180px at 92% 0%, rgba(255, 255, 255, 0.12), transparent 65%),
+        linear-gradient(135deg, #0f766e 0%, #14b8a6 52%, #f59e0b 140%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 24px;
+    padding: 36px 40px 24px;
+    margin-bottom: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 24px 50px rgba(249, 115, 22, 0.25);
+    gap: 10px;
+}
+
+.petty-hero .hero-shapes {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.petty-hero .hero-shape {
+    position: absolute;
+    border-radius: 50%;
+    opacity: 0.18;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.petty-hero .shape-1 {
+    width: 180px;
+    height: 180px;
+    top: -40px;
+    right: -30px;
+    animation: heroFloat 8s ease-in-out infinite;
+}
+
+.petty-hero .shape-2 {
+    width: 110px;
+    height: 110px;
+    bottom: -24px;
+    left: 10%;
+    animation: heroFloat 6s ease-in-out infinite reverse;
+}
+
+.petty-hero .shape-3 {
+    width: 54px;
+    height: 54px;
+    top: 26%;
+    left: 6%;
+    border-radius: 12px;
+    transform: rotate(45deg);
+    animation: heroFloat 7s ease-in-out infinite 1s;
+}
+
+@keyframes heroFloat {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-12px) rotate(6deg); }
+}
+
+.petty-hero .hero-content {
+    position: relative;
+    z-index: 1;
+}
+
+.petty-hero .hero-bottom {
+    position: relative;
+    z-index: 1;
+    margin-top: 6px;
+}
+
+.petty-hero h1 {
+    font-size: 2.35rem;
+    font-weight: 800;
+    margin: 0 0 8px 0;
+    color: #fff;
+    letter-spacing: -0.4px;
+}
+
+.petty-hero p {
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 1.05rem;
+    margin: 0;
+}
+
+.petty-hero-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+
+[data-theme="dark"] .petty-page {
+    --primary-color: #fdba74;
+}
+
+[data-theme="dark"] .petty-hero {
+    background: linear-gradient(135deg, #2f1b0f 0%, #2f2410 48%, #1b2f10 100%);
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .petty-hero .hero-shape {
+    opacity: 0;
+}
+
+[data-theme="dark"] .petty-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 300px 200px at 15% 20%, rgba(245, 158, 11, 0.18), transparent),
+        radial-gradient(ellipse 250px 180px at 85% 80%, rgba(132, 204, 22, 0.14), transparent);
+    pointer-events: none;
+    z-index: 0;
+}
+
+[data-theme="dark"] .petty-hero::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.7), rgba(132, 204, 22, 0.6), transparent);
+    pointer-events: none;
+    z-index: 1;
+}
+
+[data-theme="dark"] .petty-hero h1 {
+    color: transparent;
+    background: linear-gradient(135deg, #e2e8f0, #ffffff, #fef08a);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+[data-theme="dark"] .petty-hero p { color: #94a3b8; }
+
+/* Summary Cards */
+.stats-container {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    padding: 20px 22px;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px var(--shadow-color);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 3px;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px var(--shadow-color);
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.stat-expense .stat-icon { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+.stat-expense::before { background: linear-gradient(135deg, #ef4444, #f87171); }
+.stat-count .stat-icon { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+.stat-count::before { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+
+.stat-info { min-width: 0; }
+.stat-title { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 6px; font-weight: 600; }
+.stat-value { font-size: 1.6rem; font-weight: 800; color: var(--text-color); direction: ltr; text-align: right; }
+
+.petty-header {
+    margin-bottom: 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.petty-title {
+    display: grid;
+    gap: 8px;
+}
+
+.petty-title h1 {
+    margin: 0;
+    font-size: 1.85rem;
+    color: var(--primary-color);
+    font-weight: 800;
+}
+
+.petty-title p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.96rem;
+}
+
+.petty-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.invoice-form-container {
+    display: block;
+    padding: 0;
+    border-radius: 18px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.invoice-shell {
+    display: grid;
+    gap: 22px;
+    padding: 22px;
+    background:
+        radial-gradient(circle at 8% 4%, rgba(249, 115, 22, 0.08), transparent 25%),
+        radial-gradient(circle at 92% 0%, rgba(132, 204, 22, 0.07), transparent 20%),
+        var(--card-bg);
+}
+
+.form-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.form-title {
+    margin: 0;
+    color: var(--primary-color);
+    font-size: 1.35rem;
+    font-weight: 800;
+}
+
+.invoice-top-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    padding: 18px;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--bg-color);
+}
+
+.invoice-top-grid.filter-grid {
+    grid-template-columns: 200px 200px auto;
+    align-items: flex-end;
+}
+
+.form-group {
+    margin: 0;
+}
+
+.form-group.wide {
+    grid-column: span 2;
+}
+
+.form-group label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 8px;
+    color: var(--text-color);
+    font-weight: 700;
+    font-size: 0.92rem;
+}
+
+.petty-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.petty-filter-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Custom Table Styles */
+.petty-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--bg-color);
+}
+
+.petty-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.petty-table th,
+.petty-table td {
+    padding: 16px;
+    border-bottom: 1px solid var(--table-border);
+    text-align: right;
+    color: var(--text-color);
+    font-size: 0.95rem;
+}
+
+.petty-table th {
+    background: rgba(249, 115, 22, 0.04);
+    font-weight: 800;
+    color: var(--primary-color);
+    white-space: nowrap;
+}
+
+.petty-table td.statement-cell {
+    font-weight: 600;
+}
+
+.petty-table td.notes-cell {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+.petty-empty {
+    text-align: center !important;
+    color: var(--text-muted) !important;
+    padding: 40px !important;
+    font-size: 1.1rem;
+}
+
+.petty-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.petty-pagination span {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.petty-print-title {
+    display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1000px) {
+    .invoice-top-grid, .invoice-top-grid.filter-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .petty-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .stats-container {
+        grid-template-columns: 1fr;
+    }
+    .invoice-top-grid, .invoice-top-grid.filter-grid {
+        grid-template-columns: 1fr;
+    }
+    .form-group.wide {
+        grid-column: span 1;
+    }
+}
+
+/* Print mode adjustments */
+body.petty-pdf-mode {
+    background: #fff !important;
+}
+
+body.petty-pdf-mode nav,
+body.petty-pdf-mode .top-nav,
+body.petty-pdf-mode .petty-hero,
+body.petty-pdf-mode .petty-stats,
+body.petty-pdf-mode .invoice-form-container:not(.print-container),
+body.petty-pdf-mode .petty-header,
+body.petty-pdf-mode .petty-pagination,
+body.petty-pdf-mode .petty-filter-actions {
+    display: none !important;
+}
+
+body.petty-pdf-mode .petty-page {
+    max-width: none;
+    padding: 20px;
+    margin: 0;
+}
+
+body.petty-pdf-mode .invoice-form-container {
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    margin-bottom: 0;
+}
+
+body.petty-pdf-mode .invoice-shell {
+    background: transparent;
+    padding: 0;
+    gap: 0;
+}
+
+body.petty-pdf-mode .petty-print-title {
+    display: block;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+body.petty-pdf-mode .petty-print-title h2 {
+    font-size: 24px;
+    color: #000;
+    margin: 0 0 8px 0;
+}
+
+body.petty-pdf-mode .petty-print-title p {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+}
+
+body.petty-pdf-mode .petty-table-wrap {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    overflow: visible;
+}
+
+body.petty-pdf-mode .petty-table th,
+body.petty-pdf-mode .petty-table td {
+    border-bottom: 1px solid #eee;
+    color: #000;
+    padding: 12px;
+    text-align: right;
+}
+
+body.petty-pdf-mode .petty-table th {
+    background: #f8f9fa;
+    color: #000;
+}
+
+/* Petty modal */
+.petty-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.petty-modal-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.petty-modal-card {
+    width: min(92vw, 760px);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(0) scale(1);
+    transition: transform 0.25s ease;
+}
+
+.petty-modal-overlay.hidden .petty-modal-card {
+    transform: translateY(18px) scale(0.98);
+}
+
+.petty-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 26px;
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--card-border);
+}
+
+.petty-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.petty-modal-title h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--text-color);
+}
+
+.petty-modal-title i {
+    color: var(--primary-color);
+}
+
+.petty-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.petty-modal-close:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.petty-modal-body {
+    padding: 22px 26px 26px;
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+}
+
+.petty-modal-grid {
+    display: grid;
+    gap: 18px;
+}
+
+.petty-modal-row {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.petty-modal-row.wide-right {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+}
+
+.petty-modal-body .form-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.petty-modal-body .form-group label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    color: var(--text-color);
+    font-weight: 800;
+    font-size: 0.94rem;
+}
+
+.petty-modal-body .form-control {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    background: var(--input-bg, var(--card-bg));
+    color: var(--text-color);
+    box-sizing: border-box;
+}
+
+.petty-modal-body .form-control:focus,
+.petty-modal-body .form-control:focus-visible {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(132, 204, 22, 0.14);
+    outline: none;
+}
+
+.petty-modal-body .form-control::placeholder {
+    color: var(--text-muted);
+    opacity: 0.78;
+}
+
+.petty-modal-body textarea.form-control {
+    min-height: 90px;
+    resize: vertical;
+    line-height: 1.6;
+}
+
+.text-icon {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.required-asterisk {
+    color: #ef4444;
+    margin-inline-start: 4px;
+}
+
+.input-with-currency {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.amount-input {
+    font-size: 1.1rem !important;
+    font-weight: 800 !important;
+    color: var(--primary-color) !important;
+    text-align: right;
+    padding-inline-end: 64px !important;
+}
+
+.statement-input {
+    font-size: 1.02rem !important;
+}
+
+.currency-badge {
+    position: absolute;
+    inset-inline-end: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    padding: 4px 8px;
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.uneditable {
+    background: rgba(100, 116, 139, 0.08) !important;
+    border: 1px dashed var(--card-border) !important;
+    color: var(--text-muted);
+    font-weight: 700;
+    pointer-events: none;
+}
+
+[data-theme="dark"] .uneditable {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.petty-modal-footer {
+    padding: 16px 26px 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    border-top: 1px solid var(--card-border);
+    background: var(--bg-color);
+}
+
+.submit-btn {
+    padding: 12px 34px !important;
+    font-weight: 800 !important;
+    font-size: 1.02rem !important;
+    border-radius: 12px !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.28);
+}
+
+@media (max-width: 760px) {
+    .petty-modal-card {
+        width: calc(100vw - 26px);
+    }
+
+    .petty-modal-header,
+    .petty-modal-body,
+    .petty-modal-footer {
+        padding-inline: 18px;
+    }
+
+    .petty-modal-row,
+    .petty-modal-row.wide-right {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
