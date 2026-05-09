@@ -730,12 +730,12 @@ function updateBaskeelSummary() {
 
     const weights = collectWeightsFromModal();
     const rawTotal = sumWeights(weights);
-    const discountTotal = rawTotal * PURCHASE_WASTE_RATE;
+    const discountTotal = applyBaskeelDiscountRounding(rawTotal * PURCHASE_WASTE_RATE);
     const netTotal = rawTotal - discountTotal;
 
     purchasesState.dom.baskeelRawTotal.textContent = rawTotal > 0 ? formatBaskeelNumber(rawTotal) : '0';
-    purchasesState.dom.baskeelDiscountTotal.textContent = discountTotal > 0 ? formatBaskeelNumber(discountTotal) : '0';
-    purchasesState.dom.baskeelNetTotal.textContent = netTotal > 0 ? formatBaskeelNumber(netTotal) : '0';
+    purchasesState.dom.baskeelDiscountTotal.textContent = discountTotal > 0 ? discountTotal.toFixed(2) : '0.00';
+    purchasesState.dom.baskeelNetTotal.textContent = netTotal > 0 ? netTotal.toFixed(2) : '0.00';
 }
 
 function onWeightsInputChange(event) {
@@ -1246,20 +1246,30 @@ function roundMoney(value) {
     return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+function applyBaskeelDiscountRounding(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    const base = Math.floor(n);
+    const fraction = n - base;
+    return base + (fraction >= 0.5 ? 0.5 : 0);
+}
+
 function getInvoiceFinancials(rawSubtotal, netSubtotal) {
     const safeRawSubtotal = Number.isFinite(rawSubtotal) ? Math.max(rawSubtotal, 0) : 0;
     const safeNetSubtotal = Number.isFinite(netSubtotal) ? Math.max(netSubtotal, 0) : 0;
-    const discountAmount = Math.max(safeRawSubtotal - safeNetSubtotal, 0);
+    const discountAmountRaw = Math.max(safeRawSubtotal - safeNetSubtotal, 0);
+    const discountAmount = applyBaskeelDiscountRounding(discountAmountRaw);
 
     const paidAmountRaw = parseLocaleFloat(purchasesState.dom.paidAmountInput?.value || '0');
     const paidAmount = Number.isFinite(paidAmountRaw) && paidAmountRaw > 0 ? paidAmountRaw : 0;
-    const supplierRemaining = safeNetSubtotal - paidAmount;
+    const netTotal = Math.max(safeRawSubtotal - discountAmount, 0);
+    const supplierRemaining = netTotal - paidAmount;
 
     return {
         discountType: 'percent',
         discountValue: PURCHASE_WASTE_RATE * 100,
         discountAmount: roundMoney(discountAmount),
-        netTotal: roundMoney(safeNetSubtotal),
+        netTotal: roundMoney(netTotal),
         paidAmount: roundMoney(paidAmount),
         supplierRemaining: roundMoney(supplierRemaining),
         rawSubtotal: roundMoney(safeRawSubtotal)

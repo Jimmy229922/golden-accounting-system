@@ -12,6 +12,14 @@ function roundMoney(value) {
     return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+function applyBaskeelDiscountRounding(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    const base = Math.floor(n);
+    const fraction = n - base;
+    return base + (fraction >= 0.5 ? 0.5 : 0);
+}
+
 const PURCHASE_WASTE_RATE = 0.01;
 const PURCHASE_NET_FACTOR = 1 - PURCHASE_WASTE_RATE;
 
@@ -99,7 +107,11 @@ function calculateInvoiceFinancials({ subtotalAmount, discountType, discountValu
     let discountAmount = normalizedDiscountType === 'percent'
         ? subtotal * (normalizedDiscountValue / 100)
         : normalizedDiscountValue;
-    discountAmount = roundMoney(Math.min(Math.max(discountAmount, 0), subtotal));
+    discountAmount = Math.min(Math.max(discountAmount, 0), subtotal);
+    if (normalizedDiscountType === 'percent' && normalizedDiscountValue === PURCHASE_WASTE_RATE * 100) {
+        discountAmount = applyBaskeelDiscountRounding(discountAmount);
+    }
+    discountAmount = roundMoney(discountAmount);
 
     const totalAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
     const paid = roundMoney(toPositiveNumber(paidAmount));

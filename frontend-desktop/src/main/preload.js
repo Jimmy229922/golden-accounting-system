@@ -157,6 +157,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateUnderCollectionCollected: (data) => invokeChannel('update-under-collection-collected', data),
     deleteUnderCollectionRecord: (id) => invokeChannel('delete-under-collection-record', id),
     saveUnderCollectionPdf: (options) => invokeChannel('save-under-collection-pdf', options),
+    getNextRemainingUnderCollectionNumber: () => invokeChannel('get-next-remaining-under-collection-number'),
+    getRemainingUnderCollectionRecords: (params = {}) => invokeChannel('get-remaining-under-collection-records', params),
+    saveRemainingUnderCollectionRecord: (data) => invokeChannel('save-remaining-under-collection-record', data),
+    updateRemainingUnderCollectionRecord: (data) => invokeChannel('update-remaining-under-collection-record', data),
+    updateRemainingUnderCollectionCollected: (data) => invokeChannel('update-remaining-under-collection-collected', data),
+    deleteRemainingUnderCollectionRecord: (id) => invokeChannel('delete-remaining-under-collection-record', id),
+    saveRemainingUnderCollectionPdf: (options) => invokeChannel('save-remaining-under-collection-pdf', options),
 
     // Inventory API
     getItemTransactions: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-transactions', { itemId, startDate, endDate }),
