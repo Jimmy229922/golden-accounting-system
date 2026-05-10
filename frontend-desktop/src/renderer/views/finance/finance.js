@@ -22,6 +22,11 @@ function buildTopNavHTML() {
     return '';
 }
 
+function formatNumberWithCommas(value) {
+    const n = Number(value) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function showFinanceToast(message, type = 'info') {
     if (!message) return;
 
@@ -234,7 +239,7 @@ async function loadFinanceData() {
         ? transactions.filter((tr) => !isExcludedCustomerCollectionTransaction(tr))
         : [];
     
-    treasuryBalanceEl.textContent = balance.toFixed(2);
+    treasuryBalanceEl.textContent = formatNumberWithCommas(balance);
     if (balance >= 0) {
         treasuryBalanceEl.className = 'stat-value positive';
     } else {
@@ -258,11 +263,11 @@ async function loadFinanceData() {
         }
     });
 
-    document.getElementById('totalIncome').textContent = totalIncome.toFixed(2);
-    document.getElementById('totalExpense').textContent = totalExpense.toFixed(2);
+    document.getElementById('totalIncome').textContent = formatNumberWithCommas(totalIncome);
+    document.getElementById('totalExpense').textContent = formatNumberWithCommas(totalExpense);
     document.getElementById('transCount').textContent = financialTransactions.length;
-    document.getElementById('todayIncome').textContent = todayIncome.toFixed(2);
-    document.getElementById('todayExpense').textContent = todayExpense.toFixed(2);
+    document.getElementById('todayIncome').textContent = formatNumberWithCommas(todayIncome);
+    document.getElementById('todayExpense').textContent = formatNumberWithCommas(todayExpense);
 
     renderTransactions(financialTransactions);
 }
@@ -303,7 +308,7 @@ function renderTransactions(transactions) {
             <td>${voucherCell}</td>
             <td>${tr.transaction_date}</td>
             <td>${typeBadge}</td>
-            <td style="font-weight: bold; direction: ltr;">${tr.amount.toFixed(2)}</td>
+            <td style="font-weight: bold; direction: ltr;">${formatNumberWithCommas(tr.amount)}</td>
             <td>${tr.description}</td>
             <td>${relatedText}</td>
             <td>${actions}</td>

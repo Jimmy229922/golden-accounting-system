@@ -164,6 +164,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateRemainingUnderCollectionCollected: (data) => invokeChannel('update-remaining-under-collection-collected', data),
     deleteRemainingUnderCollectionRecord: (id) => invokeChannel('delete-remaining-under-collection-record', id),
     saveRemainingUnderCollectionPdf: (options) => invokeChannel('save-remaining-under-collection-pdf', options),
+    getNextExportRevenueNumber: () => invokeChannel('get-next-export-revenue-number'),
+    getExportRevenues: (params = {}) => invokeChannel('get-export-revenues', params),
+    saveExportRevenue: (data) => invokeChannel('save-export-revenue', data),
+    updateExportRevenue: (data) => invokeChannel('update-export-revenue', data),
+    deleteExportRevenue: (id) => invokeChannel('delete-export-revenue', id),
+    saveExportRevenuesPdf: (options) => invokeChannel('save-export-revenues-pdf', options),
+    getNextLocalSaleNumber: () => invokeChannel('get-next-local-sale-number'),
+    getLocalSales: (params = {}) => invokeChannel('get-local-sales', params),
+    saveLocalSale: (data) => invokeChannel('save-local-sale', data),
+    updateLocalSale: (data) => invokeChannel('update-local-sale', data),
+    deleteLocalSale: (id) => invokeChannel('delete-local-sale', id),
+    saveLocalSalesPdf: (options) => invokeChannel('save-local-sales-pdf', options),
 
     // Inventory API
     getItemTransactions: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-transactions', { itemId, startDate, endDate }),

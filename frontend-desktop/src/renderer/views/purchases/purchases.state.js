@@ -28,7 +28,9 @@
                 baskeelWeightsList: null,
                 baskeelRawTotal: null,
                 baskeelDiscountTotal: null,
-                baskeelNetTotal: null
+                baskeelNetTotal: null,
+                quickRawModal: null,
+                quickRawInput: null
             }
         };
     }
@@ -53,6 +55,8 @@
         state.dom.baskeelRawTotal = document.getElementById('baskeelRawTotal');
         state.dom.baskeelDiscountTotal = document.getElementById('baskeelDiscountTotal');
         state.dom.baskeelNetTotal = document.getElementById('baskeelNetTotal');
+        state.dom.quickRawModal = document.getElementById('quickRawModal');
+        state.dom.quickRawInput = document.getElementById('quickRawInput');
         return state.dom;
     }
 

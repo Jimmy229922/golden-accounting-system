@@ -133,13 +133,7 @@ function buildTopNavItems(prefix) {
                 { key: '', fallback: 'إقفال وردية', href: withPrefix('sales/index.html?openShiftClose=1') }
             ]
         },
-        {
-            key: 'common.nav.purchases',
-            fallback: 'Purchases',
-            children: [
-                { key: 'common.nav.purchaseInvoice', fallback: 'Purchase Invoice', href: withPrefix('purchases/index.html') }
-            ]
-        },
+        { key: 'common.nav.purchases', fallback: 'Purchases', href: withPrefix('purchases/index.html') },
         { key: 'common.nav.inventory', fallback: 'Inventory', href: withPrefix('inventory/index.html') },
         {
             key: '',
@@ -151,9 +145,11 @@ function buildTopNavItems(prefix) {
                 { key: '', fallback: 'الفحص', href: withPrefix('petty-inspection/index.html') },
                 { key: '', fallback: 'الشحن و التخليص', href: withPrefix('petty-shipping-clearance/index.html') },
                 { key: '', fallback: 'التشغيل', href: withPrefix('petty-operation/index.html') },
-                { divider: true },
                 { key: '', fallback: 'تحت التحصيل', href: withPrefix('under-collection/index.html') },
-                { key: '', fallback: 'بيان المتبقي من تحت التحصيل', href: withPrefix('remaining-under-collection/index.html') }
+                { key: '', fallback: 'بيان المتبقي من تحت التحصيل', href: withPrefix('remaining-under-collection/index.html') },
+                { divider: true },
+                { key: '', fallback: 'إيرادات التصدير', href: withPrefix('export-revenues/index.html') },
+                { key: '', fallback: 'المبيعات المحلية', href: withPrefix('local-sales/index.html') }
             ]
         },
         { key: 'common.nav.receipt', fallback: 'Receipt', href: withPrefix('payments/receipt.html') },

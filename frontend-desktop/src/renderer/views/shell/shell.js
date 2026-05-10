@@ -23,6 +23,8 @@ const SHELL_HREF_TO_PERMISSION = [
     { pattern: 'finance/', page: 'finance' },
     { pattern: 'under-collection/', page: 'finance' },
     { pattern: 'remaining-under-collection/', page: 'finance' },
+    { pattern: 'export-revenues/', page: 'finance' },
+    { pattern: 'local-sales/', page: 'finance' },
     { pattern: 'payments/receipt', page: 'treasury' },
     { pattern: 'payments/payment', page: 'treasury' },
     { pattern: 'reports/debtor-creditor', page: 'reports' },

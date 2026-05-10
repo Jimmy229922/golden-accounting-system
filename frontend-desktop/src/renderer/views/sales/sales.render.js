@@ -325,7 +325,7 @@
             <input type="text" autocomplete="off" class="form-control price-input" data-fs-size="sm" value="${price}">
         </td>
         <td>
-            <span class="row-total">${total.toFixed(2)}</span>
+            <span class="row-total">${(Number(total) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </td>
         <td style="text-align: center;">
             <button class="remove-row" type="button" data-action="remove-row" title="${t('sales.removeRow', 'حذف الصنف')}">

@@ -1,0 +1,52 @@
+.export-revenues-page {
+    --primary-color: #0ea5e9;
+}
+
+.export-revenues-page .petty-hero {
+    background:
+        radial-gradient(140px 140px at 8% 18%, rgba(255, 255, 255, 0.18), transparent 60%),
+        radial-gradient(220px 180px at 92% 0%, rgba(255, 255, 255, 0.12), transparent 65%),
+        linear-gradient(135deg, #0284c7 0%, #0ea5e9 52%, #22c55e 140%);
+    box-shadow: 0 24px 50px rgba(14, 165, 233, 0.25);
+}
+
+[data-theme="dark"] .export-revenues-page .petty-hero {
+    background: linear-gradient(135deg, #082f49 0%, #0f2a33 48%, #10291c 100%);
+}
+
+.export-revenues-page .stat-amount .stat-icon { background: rgba(14, 165, 233, 0.12); color: #0ea5e9; }
+.export-revenues-page .stat-amount::before { background: linear-gradient(135deg, #0ea5e9, #38bdf8); }
+.export-revenues-page .stat-egp .stat-icon { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+.export-revenues-page .stat-egp::before { background: linear-gradient(135deg, #22c55e, #86efac); }
+
+.export-revenues-page .petty-table {
+    min-width: 1120px;
+}
+
+.export-revenues-page .petty-table td.amount-cell,
+.export-revenues-page .petty-table td.rate-cell,
+.export-revenues-page .petty-table td.egp-cell {
+    direction: ltr;
+    text-align: right;
+    font-weight: 700;
+}
+
+.export-revenues-page .petty-table td.currency-cell {
+    font-weight: 700;
+}
+
+.number-input {
+    direction: ltr;
+    text-align: right;
+    font-weight: 700;
+}
+
+.petty-modal-row.three-cols {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+    .petty-modal-row.three-cols {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

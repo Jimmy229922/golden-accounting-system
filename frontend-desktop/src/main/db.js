@@ -425,6 +425,35 @@ function initDB() {
         )
     `);
 
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS export_revenues (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            record_date TEXT DEFAULT CURRENT_DATE,
+            amount REAL NOT NULL DEFAULT 0,
+            currency TEXT,
+            exchange_rate REAL NOT NULL DEFAULT 0,
+            amount_egp REAL NOT NULL DEFAULT 0,
+            statement TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS local_sales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_number TEXT UNIQUE,
+            record_date TEXT DEFAULT CURRENT_DATE,
+            customer_id INTEGER NOT NULL,
+            quantity REAL NOT NULL DEFAULT 0,
+            price REAL NOT NULL DEFAULT 0,
+            total REAL NOT NULL DEFAULT 0,
+            statement TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (customer_id) REFERENCES customers(id)
+        )
+    `);
+
     // 10. Sales Shift Closings Table (جدول إقفالات ورديات المبيعات)
     db.exec(`
         CREATE TABLE IF NOT EXISTS sales_shift_closings (
@@ -619,6 +648,11 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_invoice_number ON under_collection_records(invoice_number)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_remaining_under_collection_records_date ON remaining_under_collection_records(record_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_remaining_under_collection_records_document_number ON remaining_under_collection_records(document_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_export_revenues_date ON export_revenues(record_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_export_revenues_document_number ON export_revenues(document_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_date ON local_sales(record_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_document_number ON local_sales(document_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_customer_id ON local_sales(customer_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_period_end_at ON sales_shift_closings(period_end_at)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_created_at ON sales_shift_closings(created_at)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_returns_customer_id ON sales_returns(customer_id)`);

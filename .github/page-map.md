@@ -1,7 +1,7 @@
 # Page Map — خريطة الصفحات الفعلية (نسخة تشغيلية)
 
 > **الغرض:** مرجع عملي سريع يربط كل صفحة بملفاتها الفعلية وواجهات `electronAPI` والـ handlers المسؤولة.
-> **آخر تحديث:** 2026-04-21
+> **آخر تحديث:** 2026-05-10
 > **مصدر الحقيقة:** الملفات داخل `frontend-desktop/src/main` و `frontend-desktop/src/renderer/views`.
 
 ---
@@ -50,6 +50,10 @@
 | `opening-balance/` | `opening-balance` |
 | `inventory/` | `inventory` |
 | `finance/` | `finance` |
+| `under-collection/` | `finance` |
+| `remaining-under-collection/` | `finance` |
+| `export-revenues/` | `finance` |
+| `local-sales/` | `finance` |
 | `payments/payment` + `payments/receipt` | `treasury` |
 | `reports/` + `reports/debtor-creditor` | `reports` |
 | `customer-reports/` | `customer-reports` |
@@ -73,6 +77,8 @@
 | Inventory | `../inventory/index.html` | `inventory/index.html`, `inventory.css`, `inventory.js` | `getItems`, `getItemMovements`, `getWarehouses`, `getDamagedStockEntries`, `addDamagedStockEntry`, `updateDamagedStockEntry`, `deleteDamagedStockEntry`, `getMyPermissions` | `handlers/items.js`, `handlers/warehouses.js`, `handlers/auth.js` | `inventory` |
 | Finance | `../finance/index.html` | `finance/index.html`, `finance.css`, `finance.js` | `getTreasuryBalance`, `getTreasuryTransactions`, `addTreasuryTransaction`, `updateTreasuryTransaction`, `deleteTreasuryTransaction` | `handlers/treasury.js` | `finance` |
 | Remaining Under Collection | `../remaining-under-collection/index.html` | `remaining-under-collection/index.html`, `remaining-under-collection.js`, `under-collection.css` | `getNextRemainingUnderCollectionNumber`, `getRemainingUnderCollectionRecords`, `saveRemainingUnderCollectionRecord`, `updateRemainingUnderCollectionRecord`, `updateRemainingUnderCollectionCollected`, `deleteRemainingUnderCollectionRecord`, `saveRemainingUnderCollectionPdf` | `handlers/remainingUnderCollection.js` | `finance` |
+| Export Revenues | `../export-revenues/index.html` | `export-revenues/index.html`, `export-revenues.css`, `export-revenues.js` | `getNextExportRevenueNumber`, `getExportRevenues`, `saveExportRevenue`, `updateExportRevenue`, `deleteExportRevenue`, `saveExportRevenuesPdf` | `handlers/exportRevenues.js` | `finance` |
+| Local Sales | `../local-sales/index.html` | `local-sales/index.html`, `local-sales.css`, `local-sales.js` | `getNextLocalSaleNumber`, `getLocalSales`, `saveLocalSale`, `updateLocalSale`, `deleteLocalSale`, `saveLocalSalesPdf`, `getCustomers` | `handlers/localSales.js`, `handlers/customers.js` | `finance` |
 | Petty Expenses | `../petty-expenses/index.html` | `petty-expenses/index.html`, `petty-expenses.css`, `petty-expenses.js` | `getNextPettyExpenseNumber`, `getPettyExpenses`, `savePettyExpense`, `updatePettyExpense`, `deletePettyExpense`, `savePettyExpensesPdf` | `handlers/pettyExpenses.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
 | Petty Bags | `../petty-bags/index.html` | `petty-bags/index.html`, `petty-bags.css`, `petty-bags.js` | `getNextBagsExpenseNumber`, `getBagsExpenses`, `saveBagsExpense`, `updateBagsExpense`, `deleteBagsExpense`, `saveBagsExpensesPdf` | `handlers/pettyBags.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
 | Petty Inspection | `../petty-inspection/index.html` | `petty-inspection/index.html`, `petty-inspection.css`, `petty-inspection.js` | `getNextInspectionExpenseNumber`, `getInspectionExpenses`, `saveInspectionExpense`, `updateInspectionExpense`, `deleteInspectionExpense`, `saveInspectionExpensesPdf` | `handlers/pettyInspection.js` | غير مربوط في `SHELL_HREF_TO_PERMISSION` |
@@ -366,13 +372,22 @@
    - وراثة حجم الحقل تلقائيًا لمدخل `autocomplete-input` من الحقل المصدر (مثل `select[data-fs-size]`).
    - التعامل المباشر مع العناصر الديناميكية `autocomplete-list` و`autocomplete-item` أثناء الـ `MutationObserver`.
 
+### Export Revenues & Local Sales (2026-05-10)
+
+- تمت إضافة صفحتي `إيرادات التصدير` و`المبيعات المحلية` تحت قائمة التعاملات المالية.
+- صفحة `إيرادات التصدير` تعتمد على بطاقتي إجماليات وتنسيق أرقام أثناء الإدخال والعرض.
+- صفحة `المبيعات المحلية` تعتمد على اختيار العملاء المسجلين فقط مع إجمالي الكمية والإجمالي الكلي.
+- CSS Classes المضافة:
+   - `export-revenues-page`, `stat-amount`, `stat-egp`, `number-input`, `amount-cell`, `rate-cell`, `egp-cell`, `currency-cell`.
+   - `local-sales-page`, `stat-qty`, `stat-total`, `qty-cell`, `price-cell`, `total-cell`, `customer-cell`, `day-cell`.
+
 ---
 
 ## 7) جداول قاعدة البيانات (الحالي)
 
 ### جداول `db.js`
 
-`units`, `items`, `customers`, `suppliers`, `purchase_invoices`, `purchase_invoice_details`, `sales_invoices`, `sales_invoice_details`, `treasury_transactions`, `petty_expenses`, `petty_expenses_bags`, `petty_expenses_inspection`, `petty_expenses_shipping_clearance`, `petty_expenses_operation`, `remaining_under_collection_records`, `sales_shift_closings`, `settings`, `warehouses`, `opening_balances`, `opening_balance_groups`, `sales_returns`, `sales_return_details`, `purchase_returns`, `purchase_return_details`, `damaged_stock_logs`, `user_permissions`
+`units`, `items`, `customers`, `suppliers`, `purchase_invoices`, `purchase_invoice_details`, `sales_invoices`, `sales_invoice_details`, `treasury_transactions`, `petty_expenses`, `petty_expenses_bags`, `petty_expenses_inspection`, `petty_expenses_shipping_clearance`, `petty_expenses_operation`, `remaining_under_collection_records`, `export_revenues`, `local_sales`, `sales_shift_closings`, `settings`, `warehouses`, `opening_balances`, `opening_balance_groups`, `sales_returns`, `sales_return_details`, `purchase_returns`, `purchase_return_details`, `damaged_stock_logs`, `user_permissions`
 
 ### جداول تُنشأ من `handlers/auth.js`
 
@@ -416,6 +431,8 @@
 - `handlers/pettyInspection.js`: الفحص (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
 - `handlers/pettyShippingClearance.js`: الشحن و التخليص (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
 - `handlers/pettyOperation.js`: التشغيل (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
+- `handlers/exportRevenues.js`: إيرادات التصدير (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
+- `handlers/localSales.js`: المبيعات المحلية (الترقيم + العرض + الحفظ + التعديل + الحذف + PDF).
 
 ---
 

@@ -65,10 +65,13 @@ function initializeElements() {
             onLoadNextInvoice: () => navigateInvoice(1),
             onRemoveRow: removeRow,
             onOpenWeights: openWeightsModal,
+            onOpenQuickRaw: openQuickRawModal,
             onAddWeight: addWeightRow,
             onRemoveWeight: removeWeightRow,
             onSaveWeights: saveWeightsFromModal,
-            onCloseWeights: closeWeightsModal
+            onSaveQuickRaw: saveQuickRawModal,
+            onCloseWeights: closeWeightsModal,
+            onCloseQuickRaw: closeQuickRawModal
         }
     });
 
@@ -90,7 +93,7 @@ function initializeElements() {
     }
 
     if (purchasesState.dom.paidAmountInput) {
-        purchasesState.dom.paidAmountInput.addEventListener('input', () => calculateInvoiceTotal());
+        purchasesState.dom.paidAmountInput.addEventListener('input', handlePaidAmountInput);
     }
 
     if (purchasesState.dom.baskeelWeightsList) {
@@ -106,9 +109,30 @@ function initializeElements() {
         });
     }
 
+    if (purchasesState.dom.quickRawModal) {
+        purchasesState.dom.quickRawModal.addEventListener('click', (event) => {
+            if (event.target === purchasesState.dom.quickRawModal) {
+                closeQuickRawModal();
+            }
+        });
+    }
+
+    if (purchasesState.dom.quickRawInput) {
+        purchasesState.dom.quickRawInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveQuickRawModal();
+            }
+        });
+    }
+
     window.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && purchasesState.dom.baskeelModal?.classList.contains('is-open')) {
-            closeWeightsModal();
+        if (event.key === 'Escape') {
+            if (purchasesState.dom.baskeelModal?.classList.contains('is-open')) {
+                closeWeightsModal();
+            } else if (purchasesState.dom.quickRawModal?.classList.contains('is-open')) {
+                closeQuickRawModal();
+            }
         }
     });
 
@@ -300,7 +324,7 @@ async function loadInvoiceForEdit(id) {
 
         if (paidAmountInput) {
             const paid = Number(invoice.paid_amount) || 0;
-            paidAmountInput.value = paid.toFixed(2);
+            paidAmountInput.value = formatMoneyInputValue(paid.toFixed(2));
         }
 
         purchasesState.dom.invoiceItemsBody.innerHTML = '';
@@ -730,6 +754,7 @@ function updateBaskeelSummary() {
 
     const weights = collectWeightsFromModal();
     const rawTotal = sumWeights(weights);
+    
     const discountTotal = applyBaskeelDiscountRounding(rawTotal * PURCHASE_WASTE_RATE);
     const netTotal = rawTotal - discountTotal;
 
@@ -782,7 +807,9 @@ function openWeightsModal(actionEl) {
 
     purchasesState.activeWeightsRow = row;
 
-    let weights = parseWeightsFromRow(row);
+    const baskeelData = getBaskeelDataFromRow(row);
+    let weights = baskeelData.weights;
+
     if (!weights.length) {
         const rawQuantity = getRowRawQuantity(row);
         if (rawQuantity > 0) {
@@ -806,6 +833,67 @@ function closeWeightsModal() {
     purchasesState.dom.baskeelModal.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('modal-open');
     purchasesState.activeWeightsRow = null;
+}
+
+function openQuickRawModal(actionEl) {
+    if (isEditLocked()) {
+        if (window.showToast) window.showToast('اضغط على زر "تعديل الفاتورة" أولاً', 'warning');
+        return;
+    }
+
+    const row = actionEl?.closest('tr');
+    if (!row) return;
+
+    purchasesState.activeWeightsRow = row;
+
+    const rawQuantity = getRowRawQuantity(row);
+
+    if (purchasesState.dom.quickRawInput) {
+        purchasesState.dom.quickRawInput.value = rawQuantity > 0 ? rawQuantity : '';
+    }
+
+    if (purchasesState.dom.quickRawModal) {
+        purchasesState.dom.quickRawModal.classList.add('is-open');
+        purchasesState.dom.quickRawModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+        
+        setTimeout(() => {
+            if (purchasesState.dom.quickRawInput) purchasesState.dom.quickRawInput.focus();
+        }, 100);
+    }
+}
+
+function closeQuickRawModal() {
+    if (!purchasesState.dom.quickRawModal) return;
+    purchasesState.dom.quickRawModal.classList.remove('is-open');
+    purchasesState.dom.quickRawModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+    purchasesState.activeWeightsRow = null;
+}
+
+function saveQuickRawModal() {
+    const row = purchasesState.activeWeightsRow;
+    if (!row) return;
+
+    const val = parseLocaleFloat(purchasesState.dom.quickRawInput?.value);
+    if (!Number.isFinite(val) || val <= 0) {
+        if (window.showToast) window.showToast(t('purchases.enterQuantity', 'الرجاء إدخال الكمية'), 'error');
+        return;
+    }
+
+    const rawQuantity = val;
+    
+    // Maintain the existing rate method
+    const existingBaskeelData = getBaskeelDataFromRow(row);
+    const method = existingBaskeelData.method || 'normal';
+    const rateValue = existingBaskeelData.rate || 0;
+    
+    // We just store a single fake weight entry that represents the total, or just empty array
+    // Since we want it to be considered as raw quantity but skipping individual weights
+    const newWeightsData = { weights: [rawQuantity], method, rate: rateValue };
+    
+    setRowBaskeelData(row, { rawQuantity, rawWeights: newWeightsData });
+    closeQuickRawModal();
 }
 
 function addWeightRow(options = {}) {
@@ -866,7 +954,13 @@ function saveWeightsFromModal() {
     }
 
     const rawQuantity = sumWeights(weights);
-    setRowBaskeelData(row, { rawQuantity, rawWeights: weights });
+    
+    // We retrieve the existing rate if any, so we don't overwrite it when saving weights
+    const existingBaskeelData = getBaskeelDataFromRow(row);
+    const method = existingBaskeelData.method || 'normal';
+    const rateValue = existingBaskeelData.rate || 0;
+    
+    setRowBaskeelData(row, { rawQuantity, rawWeights: { weights, method, rate: rateValue } });
     closeWeightsModal();
 }
 
@@ -879,6 +973,9 @@ function hydrateRowBaskeel(row, existingItem) {
     }
 
     let rawWeights = [];
+    let method = 'normal';
+    let rate = 0;
+    
     if (typeof existingItem.raw_weights === 'string' && existingItem.raw_weights.trim()) {
         try {
             const parsed = JSON.parse(existingItem.raw_weights);
@@ -886,6 +983,10 @@ function hydrateRowBaskeel(row, existingItem) {
                 rawWeights = parsed
                     .map((entry) => Number(entry))
                     .filter((entry) => Number.isFinite(entry) && entry > 0);
+            } else if (parsed && typeof parsed === 'object') {
+                rawWeights = Array.isArray(parsed.weights) ? parsed.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [];
+                method = parsed.method || 'normal';
+                rate = parsed.rate || 0;
             }
         } catch (_error) {
             rawWeights = [];
@@ -911,7 +1012,8 @@ function hydrateRowBaskeel(row, existingItem) {
         rawWeights = [rawQuantity];
     }
 
-    setRowBaskeelData(row, { rawQuantity, rawWeights }, { skipAutoAdd: true });
+    const weightsDataToSave = method === 'normal' ? rawWeights : { weights: rawWeights, method, rate };
+    setRowBaskeelData(row, { rawQuantity, rawWeights: weightsDataToSave }, { skipAutoAdd: true });
 }
 
 function addInvoiceRow(existingItem = null) {
@@ -944,6 +1046,18 @@ function addInvoiceRow(existingItem = null) {
     }
     if (selectElement) {
         selectElement.addEventListener('change', () => onItemSelect(selectElement));
+    }
+    const rateInput = row.querySelector('.rate-percent-input');
+    if (rateInput) {
+        rateInput.addEventListener('input', () => {
+            const currentBaskeelData = getBaskeelDataFromRow(row);
+            const rawQuantity = getRowRawQuantity(row);
+            const val = parseLocaleFloat(rateInput.value);
+            const rateValue = Number.isFinite(val) && val > 0 ? val : 0;
+            const method = rateValue > 0 ? 'rate' : 'normal';
+            
+            setRowBaskeelData(row, { rawQuantity, rawWeights: { weights: currentBaskeelData.weights, method, rate: rateValue } }, { skipAutoAdd: true });
+        });
     }
 
     hydrateRowBaskeel(row, existingItem);
@@ -1149,7 +1263,7 @@ function calculateRowTotal(target) {
     const total = (Number.isFinite(quantity) ? quantity : 0) * (Number.isFinite(price) ? price : 0);
 
     const totalEl = row.querySelector('.row-total');
-    if (totalEl) totalEl.textContent = total.toFixed(2);
+    if (totalEl) totalEl.textContent = formatMoneyWithCommas(total);
     calculateInvoiceTotal();
 }
 
@@ -1164,6 +1278,7 @@ function normalizeNumberString(value) {
     s = s.replace(/[٠-٩]/g, (d) => String(arabicIndic.indexOf(d)));
     s = s.replace(/[۰-۹]/g, (d) => String(easternArabicIndic.indexOf(d)));
     s = s.replace(/[٬،]/g, '.');
+    s = s.replace(/,/g, '');
     s = s.replace(/\s+/g, '');
     return s;
 }
@@ -1172,6 +1287,30 @@ function parseLocaleFloat(value) {
     const normalized = normalizeNumberString(value);
     const num = parseFloat(normalized);
     return Number.isFinite(num) ? num : NaN;
+}
+
+function formatMoneyInputValue(value) {
+    const normalized = normalizeNumberString(value);
+    if (!normalized) return '';
+
+    const parts = normalized.split('.');
+    const integerPart = (parts.shift() || '').replace(/[^0-9]/g, '');
+    const decimalPart = parts.join('').replace(/[^0-9]/g, '');
+    const formattedInteger = (integerPart ? Number(integerPart) : 0).toLocaleString('en-US');
+    const hasDot = normalized.includes('.');
+
+    if (hasDot) {
+        return `${formattedInteger}.${decimalPart}`;
+    }
+
+    return formattedInteger;
+}
+
+function handlePaidAmountInput(event) {
+    const input = event?.target;
+    if (!input) return;
+    input.value = formatMoneyInputValue(input.value);
+    calculateInvoiceTotal();
 }
 
 const PURCHASE_WASTE_RATE = 0.01;
@@ -1184,23 +1323,39 @@ function formatBaskeelNumber(value) {
     return text.replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1');
 }
 
-function parseWeightsFromRow(row) {
-    if (!row) return [];
+function formatMoneyWithCommas(value) {
+    const n = Number(value) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getBaskeelDataFromRow(row) {
+    if (!row) return { weights: [], method: 'normal', rate: 0 };
     const raw = row.dataset.rawWeights || '';
-    if (!raw) return [];
+    if (!raw) return { weights: [], method: 'normal', rate: 0 };
 
     try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-            return parsed
-                .map((entry) => Number(entry))
-                .filter((entry) => Number.isFinite(entry) && entry > 0);
+            return {
+                weights: parsed.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0),
+                method: 'normal',
+                rate: 0
+            };
+        } else if (parsed && typeof parsed === 'object') {
+            return {
+                weights: Array.isArray(parsed.weights) ? parsed.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [],
+                method: parsed.method === 'rate' ? 'rate' : 'normal',
+                rate: Number.isFinite(Number(parsed.rate)) ? Number(parsed.rate) : 0
+            };
         }
     } catch (_error) {
-        return [];
+        return { weights: [], method: 'normal', rate: 0 };
     }
+    return { weights: [], method: 'normal', rate: 0 };
+}
 
-    return [];
+function parseWeightsFromRow(row) {
+    return getBaskeelDataFromRow(row).weights;
 }
 
 function sumWeights(weights) {
@@ -1216,22 +1371,42 @@ function getRowRawQuantity(row) {
 function setRowBaskeelData(row, { rawQuantity, rawWeights }, options = {}) {
     if (!row) return;
     const safeRaw = Number.isFinite(Number(rawQuantity)) && Number(rawQuantity) > 0 ? Number(rawQuantity) : 0;
-    const weightsArray = Array.isArray(rawWeights)
-        ? rawWeights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0)
-        : [];
+    
+    let method = 'normal';
+    let rateValue = 0;
+    let weightsArray = [];
+
+    if (Array.isArray(rawWeights)) {
+        weightsArray = rawWeights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0);
+    } else if (rawWeights && typeof rawWeights === 'object') {
+        weightsArray = Array.isArray(rawWeights.weights) ? rawWeights.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [];
+        method = rawWeights.method || 'normal';
+        rateValue = rawWeights.rate || 0;
+    }
 
     row.dataset.rawQuantity = String(safeRaw || 0);
-    row.dataset.rawWeights = JSON.stringify(weightsArray);
+    row.dataset.rawWeights = JSON.stringify(method === 'normal' ? weightsArray : { weights: weightsArray, method, rate: rateValue });
 
     const rawValueEl = row.querySelector('.raw-qty-value');
     if (rawValueEl) {
         rawValueEl.textContent = safeRaw > 0 ? formatBaskeelNumber(safeRaw) : '';
     }
 
-    const netQuantity = safeRaw > 0 ? safeRaw * PURCHASE_NET_FACTOR : 0;
-    const qtyInput = row.querySelector('.quantity-input');
+    const net1Quantity = safeRaw > 0 ? safeRaw * PURCHASE_NET_FACTOR : 0;
+    const net1Input = row.querySelector('.net1-input');
+    if (net1Input) {
+        net1Input.value = net1Quantity > 0 ? formatBaskeelNumber(net1Quantity) : '';
+    }
+    
+    let finalNetQuantity = net1Quantity;
+    if (method === 'rate' && rateValue > 0) {
+        const roundedNet1Quantity = Math.round(net1Quantity);
+        finalNetQuantity = roundedNet1Quantity * (rateValue / 100);
+    }
+    
+    const qtyInput = row.querySelector('.quantity-input.final-net-input');
     if (qtyInput) {
-        qtyInput.value = netQuantity > 0 ? formatBaskeelNumber(netQuantity) : '';
+        qtyInput.value = finalNetQuantity > 0 ? formatBaskeelNumber(finalNetQuantity) : '';
     }
 
     calculateRowTotal(row);
@@ -1254,6 +1429,15 @@ function applyBaskeelDiscountRounding(value) {
     return base + (fraction >= 0.5 ? 0.5 : 0);
 }
 
+function applyIntegerFiftyRounding(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    const whole = Math.floor(n);
+    const baseHundred = Math.floor(whole / 100) * 100;
+    const tail = whole % 100;
+    return baseHundred + (tail >= 50 ? 50 : 0);
+}
+
 function getInvoiceFinancials(rawSubtotal, netSubtotal) {
     const safeRawSubtotal = Number.isFinite(rawSubtotal) ? Math.max(rawSubtotal, 0) : 0;
     const safeNetSubtotal = Number.isFinite(netSubtotal) ? Math.max(netSubtotal, 0) : 0;
@@ -1262,7 +1446,8 @@ function getInvoiceFinancials(rawSubtotal, netSubtotal) {
 
     const paidAmountRaw = parseLocaleFloat(purchasesState.dom.paidAmountInput?.value || '0');
     const paidAmount = Number.isFinite(paidAmountRaw) && paidAmountRaw > 0 ? paidAmountRaw : 0;
-    const netTotal = Math.max(safeRawSubtotal - discountAmount, 0);
+    const netTotalRaw = Math.max(safeRawSubtotal - discountAmount, 0);
+    const netTotal = applyIntegerFiftyRounding(netTotalRaw);
     const supplierRemaining = netTotal - paidAmount;
 
     return {
@@ -1280,7 +1465,7 @@ function calculateInvoiceTotal() {
     let rawSubtotal = 0;
     let netSubtotal = 0;
     purchasesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
-        const rowTotal = parseFloat(row.querySelector('.row-total')?.textContent) || 0;
+        const rowTotal = parseLocaleFloat(row.querySelector('.row-total')?.textContent) || 0;
         netSubtotal += rowTotal;
 
         const rawQty = getRowRawQuantity(row);
@@ -1293,28 +1478,28 @@ function calculateInvoiceTotal() {
     const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
 
     if (purchasesState.dom.invoiceSubtotalSpan) {
-        purchasesState.dom.invoiceSubtotalSpan.textContent = financials.rawSubtotal.toFixed(2);
+        purchasesState.dom.invoiceSubtotalSpan.textContent = formatMoneyWithCommas(financials.rawSubtotal);
     }
 
     if (purchasesState.dom.invoiceDiscountAmountSpan) {
-        purchasesState.dom.invoiceDiscountAmountSpan.textContent = financials.discountAmount.toFixed(2);
+        purchasesState.dom.invoiceDiscountAmountSpan.textContent = formatMoneyWithCommas(financials.discountAmount);
     }
 
-    purchasesState.dom.invoiceTotalSpan.textContent = financials.netTotal.toFixed(2);
+    purchasesState.dom.invoiceTotalSpan.textContent = formatMoneyWithCommas(financials.netTotal);
 
     if (purchasesState.dom.invoicePaidDisplaySpan) {
-        purchasesState.dom.invoicePaidDisplaySpan.textContent = financials.paidAmount.toFixed(2);
+        purchasesState.dom.invoicePaidDisplaySpan.textContent = formatMoneyWithCommas(financials.paidAmount);
     }
 
     if (purchasesState.dom.invoiceRemainingSpan) {
         if (financials.supplierRemaining > 0) {
-            purchasesState.dom.invoiceRemainingSpan.textContent = fmt(t('purchases.supplierDuePositive', 'علينا (دائن) {amount}'), { amount: financials.supplierRemaining.toFixed(2) });
+            purchasesState.dom.invoiceRemainingSpan.textContent = fmt(t('purchases.supplierDuePositive', 'علينا (دائن) {amount}'), { amount: formatMoneyWithCommas(financials.supplierRemaining) });
             purchasesState.dom.invoiceRemainingSpan.className = 'customer-due-value due-positive';
         } else if (financials.supplierRemaining < 0) {
-            purchasesState.dom.invoiceRemainingSpan.textContent = fmt(t('purchases.supplierDueNegative', 'لينا (مدين) {amount}'), { amount: Math.abs(financials.supplierRemaining).toFixed(2) });
+            purchasesState.dom.invoiceRemainingSpan.textContent = fmt(t('purchases.supplierDueNegative', 'لينا (مدين) {amount}'), { amount: formatMoneyWithCommas(Math.abs(financials.supplierRemaining)) });
             purchasesState.dom.invoiceRemainingSpan.className = 'customer-due-value due-negative';
         } else {
-            purchasesState.dom.invoiceRemainingSpan.textContent = '0.00';
+            purchasesState.dom.invoiceRemainingSpan.textContent = formatMoneyWithCommas(0);
             purchasesState.dom.invoiceRemainingSpan.className = 'customer-due-value';
         }
     }
@@ -1328,7 +1513,10 @@ function collectInvoiceItemsFromForm() {
         const item_id = parseInt(row.querySelector('.item-select').value, 10);
         const quantityInput = row.querySelector('.quantity-input');
         const rawQuantity = getRowRawQuantity(row);
-        const rawWeights = parseWeightsFromRow(row);
+        
+        const baskeelData = getBaskeelDataFromRow(row);
+        const rawWeightsStr = baskeelData.method === 'normal' ? JSON.stringify(baskeelData.weights) : JSON.stringify(baskeelData);
+        
         let quantity = parseLocaleFloat(quantityInput?.value);
         const cost_price = parseLocaleFloat(row.querySelector('.price-input').value);
 
@@ -1353,7 +1541,7 @@ function collectInvoiceItemsFromForm() {
         items.push({
             item_id,
             raw_quantity: rawQuantity,
-            raw_weights: rawWeights,
+            raw_weights: rawWeightsStr,
             quantity,
             cost_price,
             total_price: quantity * cost_price

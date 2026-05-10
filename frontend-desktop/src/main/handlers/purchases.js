@@ -20,36 +20,64 @@ function applyBaskeelDiscountRounding(value) {
     return base + (fraction >= 0.5 ? 0.5 : 0);
 }
 
+function applyIntegerFiftyRounding(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    const whole = Math.floor(n);
+    const baseHundred = Math.floor(whole / 100) * 100;
+    const tail = whole % 100;
+    return baseHundred + (tail >= 50 ? 50 : 0);
+}
+
 const PURCHASE_WASTE_RATE = 0.01;
 const PURCHASE_NET_FACTOR = 1 - PURCHASE_WASTE_RATE;
 
 function normalizeWeightsList(value) {
-    if (Array.isArray(value)) {
-        return value
-            .map((entry) => Number(entry))
-            .filter((entry) => Number.isFinite(entry) && entry > 0);
-    }
-
     if (typeof value === 'string') {
         const trimmed = value.trim();
-        if (!trimmed) return [];
+        if (!trimmed) return { weights: [], method: 'normal', rate: 0 };
 
         try {
             const parsed = JSON.parse(trimmed);
             if (Array.isArray(parsed)) {
-                return parsed
-                    .map((entry) => Number(entry))
-                    .filter((entry) => Number.isFinite(entry) && entry > 0);
+                return {
+                    weights: parsed.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0),
+                    method: 'normal',
+                    rate: 0
+                };
+            } else if (parsed && typeof parsed === 'object') {
+                return {
+                    weights: Array.isArray(parsed.weights) ? parsed.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [],
+                    method: parsed.method === 'rate' ? 'rate' : 'normal',
+                    rate: Number.isFinite(Number(parsed.rate)) ? Number(parsed.rate) : 0
+                };
             }
         } catch (_error) {
-            return [];
+            return { weights: [], method: 'normal', rate: 0 };
         }
     }
 
-    return [];
+    if (Array.isArray(value)) {
+        return {
+            weights: value.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0),
+            method: 'normal',
+            rate: 0
+        };
+    }
+    
+    if (value && typeof value === 'object') {
+        return {
+            weights: Array.isArray(value.weights) ? value.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [],
+            method: value.method === 'rate' ? 'rate' : 'normal',
+            rate: Number.isFinite(Number(value.rate)) ? Number(value.rate) : 0
+        };
+    }
+
+    return { weights: [], method: 'normal', rate: 0 };
 }
 
 function sumWeights(weights) {
+    if (!Array.isArray(weights)) return 0;
     return weights.reduce((sum, value) => sum + value, 0);
 }
 
@@ -68,18 +96,23 @@ function normalizeRawQuantity(rawQuantity, fallbackNetQuantity) {
     return 0;
 }
 
-function calculateNetQuantity(rawQuantity) {
-    return rawQuantity * PURCHASE_NET_FACTOR;
+function calculateNetQuantity(rawQuantity, method = 'normal', rate = 0) {
+    const net1Quantity = rawQuantity * PURCHASE_NET_FACTOR;
+    if (method === 'rate') {
+        const roundedNet1Quantity = Math.round(net1Quantity);
+        return roundedNet1Quantity * (rate / 100);
+    }
+    return net1Quantity;
 }
 
 function normalizePurchaseItems(items) {
     const safeItems = Array.isArray(items) ? items : [];
 
     return safeItems.map((item) => {
-        const weights = normalizeWeightsList(item.raw_weights);
-        const rawFromWeights = sumWeights(weights);
+        const weightsData = normalizeWeightsList(item.raw_weights);
+        const rawFromWeights = sumWeights(weightsData.weights);
         const rawQuantity = normalizeRawQuantity(rawFromWeights || item.raw_quantity, item.quantity);
-        const netQuantity = rawQuantity > 0 ? calculateNetQuantity(rawQuantity) : 0;
+        const netQuantity = rawQuantity > 0 ? calculateNetQuantity(rawQuantity, weightsData.method, weightsData.rate) : 0;
         const costPrice = normalizeCostPrice(item.cost_price);
         const rawTotal = rawQuantity * costPrice;
         const totalPrice = netQuantity * costPrice;
@@ -87,7 +120,7 @@ function normalizePurchaseItems(items) {
         return {
             item_id: item.item_id,
             raw_quantity: rawQuantity,
-            raw_weights: JSON.stringify(weights),
+            raw_weights: weightsData.method === 'normal' ? JSON.stringify(weightsData.weights) : JSON.stringify(weightsData),
             quantity: netQuantity,
             cost_price: costPrice,
             total_price: totalPrice,
@@ -96,7 +129,7 @@ function normalizePurchaseItems(items) {
     });
 }
 
-function calculateInvoiceFinancials({ subtotalAmount, discountType, discountValue, paidAmount }) {
+function calculateInvoiceFinancials({ subtotalAmount, discountType, discountValue, paidAmount, finalAmount }) {
     const subtotal = roundMoney(Math.max(Number(subtotalAmount) || 0, 0));
     const normalizedDiscountType = discountType === 'percent' ? 'percent' : 'amount';
     const rawDiscountValue = toPositiveNumber(discountValue);
@@ -113,7 +146,15 @@ function calculateInvoiceFinancials({ subtotalAmount, discountType, discountValu
     }
     discountAmount = roundMoney(discountAmount);
 
-    const totalAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
+    const parsedFinalAmount = Number(finalAmount);
+    const hasFinalAmount = Number.isFinite(parsedFinalAmount) && parsedFinalAmount >= 0;
+    const totalAmountRaw = hasFinalAmount
+        ? roundMoney(Math.max(parsedFinalAmount, 0))
+        : roundMoney(Math.max(subtotal - discountAmount, 0));
+    const totalAmount = applyIntegerFiftyRounding(totalAmountRaw);
+    if (hasFinalAmount) {
+        discountAmount = roundMoney(Math.max(subtotal - totalAmount, 0));
+    }
     const paid = roundMoney(toPositiveNumber(paidAmount));
     const remaining = roundMoney(Math.max(totalAmount - paid, 0));
     const balanceDelta = roundMoney(totalAmount - paid);
@@ -154,15 +195,18 @@ function register() {
 
         const normalizedItems = normalizePurchaseItems(items);
         let rawSubtotalAmount = 0;
+        let netSubtotalAmount = 0;
         for (const item of normalizedItems) {
             rawSubtotalAmount += Number(item.raw_total_price) || 0;
+            netSubtotalAmount += Number(item.total_price) || 0;
         }
 
         const financials = calculateInvoiceFinancials({
             subtotalAmount: rawSubtotalAmount,
             discountType: 'percent',
             discountValue: PURCHASE_WASTE_RATE * 100,
-            paidAmount: paid_amount
+            paidAmount: paid_amount,
+            finalAmount: netSubtotalAmount
         });
 
         const insertInvoice = db.prepare(`
@@ -269,13 +313,18 @@ function register() {
 
         const normalizedItems = normalizePurchaseItems(items);
         let rawSubtotalAmount = 0;
-        for (const item of normalizedItems) rawSubtotalAmount += Number(item.raw_total_price) || 0;
+        let netSubtotalAmount = 0;
+        for (const item of normalizedItems) {
+            rawSubtotalAmount += Number(item.raw_total_price) || 0;
+            netSubtotalAmount += Number(item.total_price) || 0;
+        }
 
         const financials = calculateInvoiceFinancials({
             subtotalAmount: rawSubtotalAmount,
             discountType: 'percent',
             discountValue: PURCHASE_WASTE_RATE * 100,
-            paidAmount: paid_amount
+            paidAmount: paid_amount,
+            finalAmount: netSubtotalAmount
         });
 
         const transaction = db.transaction(() => {

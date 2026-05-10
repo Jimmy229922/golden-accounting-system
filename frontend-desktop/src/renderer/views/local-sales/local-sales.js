@@ -8,8 +8,12 @@ const state = {
     rows: [],
     editingId: null,
     totalAmount: 0,
+    totalQuantity: 0,
     totalCount: 0
 };
+
+let customers = [];
+let customerAutocomplete = null;
 
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
@@ -45,44 +49,162 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
-function formatMoney(value) {
-    return (Number(value) || 0).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
+function normalizeNumberString(value) {
+    if (value === null || value === undefined) return '';
+    let s = String(value).trim();
+    if (!s) return '';
+
+    const arabicIndic = '٠١٢٣٤٥٦٧٨٩';
+    const easternArabicIndic = '۰۱۲۳۴۵۶۷۸۹';
+
+    s = s.replace(/[٠-٩]/g, (d) => String(arabicIndic.indexOf(d)));
+    s = s.replace(/[۰-۹]/g, (d) => String(easternArabicIndic.indexOf(d)));
+    s = s.replace(/[٬,]/g, '');
+    s = s.replace(/[٫]/g, '.');
+    s = s.replace(/[^0-9.]/g, '');
+
+    const parts = s.split('.');
+    if (parts.length > 2) {
+        s = `${parts.shift()}.${parts.join('')}`;
+    }
+
+    return s;
+}
+
+function parseNumberInput(value) {
+    const normalized = normalizeNumberString(value);
+    if (!normalized) return NaN;
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : NaN;
+}
+
+function formatNumber(value, options = {}) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '';
+
+    const min = Number.isFinite(options.min) ? options.min : 0;
+    const max = Number.isFinite(options.max) ? options.max : 2;
+
+    return num.toLocaleString('en-US', {
+        minimumFractionDigits: min,
+        maximumFractionDigits: max
+    });
+}
+
+function formatInputValue(rawValue) {
+    const normalized = normalizeNumberString(rawValue);
+    if (!normalized) return '';
+
+    const hasTrailingDot = normalized.endsWith('.');
+    const decimals = normalized.includes('.') ? normalized.split('.')[1] : '';
+    const num = Number(normalized);
+
+    if (!Number.isFinite(num)) return '';
+
+    const fractionLength = Math.min(decimals.length, 2);
+    const formatted = num.toLocaleString('en-US', {
+        minimumFractionDigits: fractionLength,
         maximumFractionDigits: 2
+    });
+
+    return hasTrailingDot ? `${formatted}.` : formatted;
+}
+
+function formatWeekday(dateValue) {
+    if (!dateValue) return '-';
+    const date = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('ar-EG', { weekday: 'long' });
+}
+
+function normalizeCustomerName(value) {
+    return String(value || '').trim();
+}
+
+function resolveCustomerByName(name) {
+    const normalized = normalizeCustomerName(name);
+    if (!normalized) return null;
+    return customers.find((customer) => normalizeCustomerName(customer?.name) === normalized) || null;
+}
+
+function buildCustomersList() {
+    const select = document.getElementById('customerSelect');
+    if (!select) return;
+
+    const selected = select.value;
+    select.innerHTML = [
+        '<option value="">اختر العميل</option>',
+        ...customers.map((customer) => `<option value="${customer.id}">${escapeHtml(customer.name || '')}</option>`)
+    ].join('');
+
+    if (selected && customers.some((customer) => String(customer.id) === String(selected))) {
+        select.value = selected;
+    } else {
+        select.value = '';
+    }
+
+    ensureCustomerAutocomplete();
+}
+
+function ensureCustomerAutocomplete() {
+    const select = document.getElementById('customerSelect');
+    if (!select || typeof Autocomplete === 'undefined') return;
+
+    select.classList.add('item-select', 'autocomplete-show-all-on-click');
+    if (customerAutocomplete) {
+        customerAutocomplete.refresh();
+    } else {
+        customerAutocomplete = new Autocomplete(select);
+    }
+}
+
+function setCustomerSelection(value) {
+    const select = document.getElementById('customerSelect');
+    if (!select) return;
+    select.value = value ? String(value) : '';
+    ensureCustomerAutocomplete();
+}
+
+async function loadCustomers() {
+    const result = await window.electronAPI.getCustomers();
+    if (Array.isArray(result)) {
+        customers = result;
+        buildCustomersList();
+        return;
+    }
+
+    if (!result || !result.success) {
+        showMessage((result && result.error) || 'تعذر تحميل العملاء', 'error');
+        return;
+    }
+
+    customers = Array.isArray(result.customers) ? result.customers : [];
+    buildCustomersList();
+}
+
+function updateTotal() {
+    const quantity = parseNumberInput(document.getElementById('quantityInput').value);
+    const price = parseNumberInput(document.getElementById('priceInput').value);
+    const totalInput = document.getElementById('totalInput');
+
+    if (!Number.isFinite(quantity) || !Number.isFinite(price)) {
+        totalInput.value = '';
+        return;
+    }
+
+    totalInput.value = formatNumber(quantity * price);
+}
+
+function attachNumberFormatting(input) {
+    input.addEventListener('input', () => {
+        const formatted = formatInputValue(input.value);
+        input.value = formatted;
+        updateTotal();
     });
 }
 
 function getRowById(id) {
     return state.rows.find((row) => String(row.id) === String(id));
-}
-
-function getContainerText(row) {
-    const sizes = [];
-    if (Number(row.container_20)) sizes.push('20');
-    if (Number(row.container_40)) sizes.push('40');
-    return `${row.container_count || 0} × ${sizes.join(' / ')}`;
-}
-
-function updateTotalPreview() {
-    const tons = Number(document.getElementById('tonsCount')?.value) || 0;
-    const price = Number(document.getElementById('tonPrice')?.value) || 0;
-    const total = tons * price;
-    const totalInput = document.getElementById('totalUsd');
-    if (totalInput) {
-        totalInput.value = Number.isFinite(total) ? total.toFixed(2) : '0.00';
-    }
-}
-
-function formatRemainingText(row) {
-    const value = Number(row.remaining_value) || 0;
-    const amount = Number(row.remaining_usd) || 0;
-    if (value <= 0 && amount <= 0) return '';
-
-    if (String(row.remaining_type || 'percent') === 'usd') {
-        return `المتبقي ${formatMoney(amount)} $`;
-    }
-
-    return `المتبقي ${formatMoney(value)}% = ${formatMoney(amount)} $`;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -93,6 +215,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderPage();
     bindEvents();
     document.getElementById('recordDate').value = today();
+    await loadCustomers();
     await refreshDocumentNumber();
     await loadRecords();
 });
@@ -100,7 +223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function renderPage() {
     document.getElementById('app').innerHTML = `
         ${buildTopNavHTML()}
-        <main class="petty-page under-collection-page">
+        <main class="petty-page local-sales-page">
             <section class="petty-hero">
                 <div class="hero-shapes">
                     <span class="hero-shape shape-1"></span>
@@ -108,14 +231,14 @@ function renderPage() {
                     <span class="hero-shape shape-3"></span>
                 </div>
                 <div class="hero-content">
-                    <h1>تحت التحصيل</h1>
-                    <p>تسجيل ومتابعة الفواتير التي لم يتم تحصيلها بعد</p>
+                    <h1>المبيعات المحلية</h1>
+                    <p>تسجيل ومتابعة المبيعات المحلية اليومية</p>
                 </div>
                 <div class="hero-bottom">
                     <div class="petty-hero-actions">
                         <button type="button" class="btn btn-primary" id="openAddModalBtn" style="padding: 10px 24px; font-weight: bold; border-radius: 8px;">
                             <i class="fas fa-plus"></i>
-                            تسجيل تحت التحصيل
+                            تسجيل مبيعات محلية
                         </button>
                         <button type="button" class="btn btn-outline" id="exportPdfBtn">
                             <i class="fas fa-file-pdf"></i>
@@ -126,18 +249,18 @@ function renderPage() {
             </section>
 
             <section class="stats-container petty-stats">
-                <div class="stat-card stat-total">
-                    <div class="stat-icon"><i class="fas fa-dollar-sign"></i></div>
+                <div class="stat-card stat-qty">
+                    <div class="stat-icon"><i class="fas fa-scale-balanced"></i></div>
                     <div class="stat-info">
-                        <div class="stat-title">إجمالي الفواتير بالدولار</div>
-                        <div class="stat-value" id="underCollectionTotalAmount">0.00</div>
+                        <div class="stat-title">إجمالي الكمية</div>
+                        <div class="stat-value" id="localSalesTotalQty">0</div>
                     </div>
                 </div>
-                <div class="stat-card stat-count">
-                    <div class="stat-icon"><i class="fas fa-file-invoice"></i></div>
+                <div class="stat-card stat-total">
+                    <div class="stat-icon"><i class="fas fa-cash-register"></i></div>
                     <div class="stat-info">
-                        <div class="stat-title">عدد السجلات</div>
-                        <div class="stat-value" id="underCollectionTotalCount">0</div>
+                        <div class="stat-title">إجمالي الإجمالي</div>
+                        <div class="stat-value" id="localSalesTotalAmount">0</div>
                     </div>
                 </div>
             </section>
@@ -169,11 +292,11 @@ function renderPage() {
             <section class="invoice-form-container print-container">
                 <div class="invoice-shell" style="padding-bottom: 10px;">
                     <div class="form-title-row" style="border-bottom: none; padding-bottom: 0;">
-                        <h2 class="form-title">كشف تحت التحصيل</h2>
+                        <h2 class="form-title">كشف المبيعات المحلية</h2>
                     </div>
 
                     <div class="petty-print-title">
-                        <h2>كشف تحت التحصيل</h2>
+                        <h2>كشف المبيعات المحلية</h2>
                         <p id="printRange"></p>
                     </div>
 
@@ -182,14 +305,14 @@ function renderPage() {
                             <thead>
                                 <tr>
                                     <th>التسلسل</th>
+                                    <th>العميل</th>
+                                    <th>اليوم</th>
                                     <th>التاريخ</th>
-                                    <th>نوع الحاوية</th>
+                                    <th>الكمية</th>
+                                    <th>السعر</th>
+                                    <th>الإجمالي</th>
                                     <th>البيان</th>
-                                    <th>رقم الفاتورة</th>
-                                    <th>عدد الأطنان * السعر</th>
-                                    <th>إجمالي الفاتورة بالدولار</th>
                                     <th>إجراءات</th>
-                                    <th>تم التحصيل</th>
                                 </tr>
                             </thead>
                             <tbody id="recordsBody"></tbody>
@@ -201,73 +324,52 @@ function renderPage() {
         </main>
 
         <div id="addRecordModal" class="petty-modal-overlay hidden">
-            <div class="petty-modal-card" role="dialog" aria-modal="true" aria-labelledby="underCollectionModalTitle">
+            <div class="petty-modal-card" role="dialog" aria-modal="true" aria-labelledby="localSalesModalTitle">
                 <div class="petty-modal-header">
                     <div class="petty-modal-title">
                         <i class="fas fa-file-invoice-dollar"></i>
-                        <h2 id="underCollectionModalTitle">إضافة سجل تحت التحصيل</h2>
+                        <h2 id="localSalesModalTitle">إضافة مبيعات محلية</h2>
                     </div>
                     <button type="button" class="petty-modal-close" id="closeModalBtn" aria-label="إغلاق">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <form id="underCollectionForm">
+                <form id="localSalesForm">
                     <div class="petty-modal-body">
                         <div class="petty-modal-grid">
-                            <div class="petty-modal-row">
+                            <div class="petty-modal-row three-cols">
                                 <div class="form-group">
-                                    <label><i class="fas fa-hashtag text-icon"></i> التسلسل</label>
+                                    <label><i class="fas fa-hashtag text-icon"></i> رقم المسلسل</label>
                                     <input type="text" id="documentNumber" class="form-control uneditable" readonly>
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-calendar-alt text-icon"></i> التاريخ</label>
                                     <input type="date" id="recordDate" class="form-control" required>
                                 </div>
-                            </div>
-
-                            <div class="petty-modal-row">
                                 <div class="form-group">
-                                    <label><i class="fas fa-box text-icon"></i> نوع الحاوية <span class="required-asterisk">*</span></label>
-                                    <div class="container-type-box">
-                                        <input type="number" id="containerCount" class="form-control" min="1" step="1" placeholder="عدد الحاويات" required>
-                                        <div class="container-size-options">
-                                            <label class="check-pill"><input type="checkbox" id="container20"> 20</label>
-                                            <label class="check-pill"><input type="checkbox" id="container40"> 40</label>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label><i class="fas fa-pen text-icon"></i> البيان <span class="required-asterisk">*</span></label>
-                                    <input type="text" id="statement" class="form-control statement-input" placeholder="اكتب البيان..." required>
+                                    <label><i class="fas fa-user text-icon"></i> العميل <span class="required-asterisk">*</span></label>
+                                    <select id="customerSelect" class="form-control" required></select>
                                 </div>
                             </div>
 
                             <div class="petty-modal-row three-cols">
                                 <div class="form-group">
-                                    <label><i class="fas fa-file-invoice text-icon"></i> رقم الفاتورة <span class="required-asterisk">*</span></label>
-                                    <input type="text" id="invoiceNumber" class="form-control" placeholder="رقم الفاتورة" required>
+                                    <label><i class="fas fa-sort-numeric-up text-icon"></i> الكمية <span class="required-asterisk">*</span></label>
+                                    <input type="text" id="quantityInput" class="form-control number-input" placeholder="0" required>
                                 </div>
                                 <div class="form-group">
-                                    <label><i class="fas fa-weight-hanging text-icon"></i> عدد الأطنان * السعر <span class="required-asterisk">*</span></label>
-                                    <div class="tons-price-box">
-                                        <div class="input-with-unit">
-                                            <input type="number" id="tonsCount" class="form-control" min="0" step="0.01" placeholder="0.00" required>
-                                            <span class="unit-badge">طن</span>
-                                        </div>
-                                        <input type="number" id="tonPrice" class="form-control" min="0" step="0.01" placeholder="السعر" required>
-                                    </div>
+                                    <label><i class="fas fa-tag text-icon"></i> السعر <span class="required-asterisk">*</span></label>
+                                    <input type="text" id="priceInput" class="form-control number-input" placeholder="0" required>
                                 </div>
                                 <div class="form-group">
-                                    <label><i class="fas fa-dollar-sign text-icon"></i> إجمالي الفاتورة بالدولار</label>
-                                    <input type="text" id="totalUsd" class="form-control uneditable" value="0.00" readonly>
-                                    <div class="remaining-alert-box">
-                                        <select id="remainingType" class="form-control">
-                                            <option value="percent" selected>%</option>
-                                            <option value="usd">دولار</option>
-                                        </select>
-                                        <input type="number" id="remainingValue" class="form-control" min="0" step="0.01" placeholder="المتبقي">
-                                    </div>
+                                    <label><i class="fas fa-calculator text-icon"></i> الإجمالي</label>
+                                    <input type="text" id="totalInput" class="form-control uneditable number-input" readonly>
                                 </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label><i class="fas fa-pen text-icon"></i> البيان</label>
+                                <input type="text" id="statementInput" class="form-control" placeholder="اكتب البيان (اختياري)">
                             </div>
                         </div>
                     </div>
@@ -284,7 +386,7 @@ function renderPage() {
 }
 
 function bindEvents() {
-    document.getElementById('underCollectionForm').addEventListener('submit', saveRecord);
+    document.getElementById('localSalesForm').addEventListener('submit', saveRecord);
     document.getElementById('filterBtn').addEventListener('click', () => {
         state.page = 1;
         loadRecords();
@@ -296,16 +398,14 @@ function bindEvents() {
         loadRecords();
     });
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
-    document.getElementById('tonsCount').addEventListener('input', updateTotalPreview);
-    document.getElementById('tonPrice').addEventListener('input', updateTotalPreview);
 
     const modal = document.getElementById('addRecordModal');
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
         state.editingId = null;
-        document.getElementById('underCollectionForm').reset();
+        document.getElementById('localSalesForm').reset();
         document.getElementById('recordDate').value = today();
-        document.getElementById('remainingType').value = 'percent';
-        updateTotalPreview();
+        document.getElementById('totalInput').value = '';
+        setCustomerSelection('');
         await refreshDocumentNumber();
         modal.classList.remove('hidden');
     });
@@ -319,10 +419,13 @@ function bindEvents() {
     modal.addEventListener('click', (e) => {
         if (e.target === modal) closeModal();
     });
+
+    attachNumberFormatting(document.getElementById('quantityInput'));
+    attachNumberFormatting(document.getElementById('priceInput'));
 }
 
 async function refreshDocumentNumber() {
-    const result = await window.electronAPI.getNextUnderCollectionNumber();
+    const result = await window.electronAPI.getNextLocalSaleNumber();
     if (result && result.success) {
         document.getElementById('documentNumber').value = result.documentNumber;
     }
@@ -338,15 +441,16 @@ function getFilters() {
 }
 
 async function loadRecords() {
-    const result = await window.electronAPI.getUnderCollectionRecords(getFilters());
+    const result = await window.electronAPI.getLocalSales(getFilters());
     if (!result || !result.success) {
-        showMessage((result && result.error) || 'تعذر تحميل تحت التحصيل', 'error');
+        showMessage((result && result.error) || 'تعذر تحميل المبيعات المحلية', 'error');
         return;
     }
 
     state.rows = Array.isArray(result.rows) ? result.rows : [];
     state.totalPages = Number(result.totalPages) || 1;
     state.totalAmount = Number(result.totalAmount) || 0;
+    state.totalQuantity = Number(result.totalQuantity) || 0;
     state.totalCount = Number(result.total) || 0;
     renderRows();
     renderPagination();
@@ -354,22 +458,22 @@ async function loadRecords() {
 }
 
 function renderSummary() {
-    const totalAmountEl = document.getElementById('underCollectionTotalAmount');
-    const totalCountEl = document.getElementById('underCollectionTotalCount');
+    const totalQtyEl = document.getElementById('localSalesTotalQty');
+    const totalAmountEl = document.getElementById('localSalesTotalAmount');
 
-    if (totalAmountEl) {
-        totalAmountEl.textContent = formatMoney(state.totalAmount);
+    if (totalQtyEl) {
+        totalQtyEl.textContent = formatNumber(state.totalQuantity);
     }
 
-    if (totalCountEl) {
-        totalCountEl.textContent = (Number(state.totalCount) || 0).toLocaleString('en-US');
+    if (totalAmountEl) {
+        totalAmountEl.textContent = formatNumber(state.totalAmount);
     }
 }
 
 function renderRows() {
     const body = document.getElementById('recordsBody');
     if (!state.rows.length) {
-        body.innerHTML = `<tr><td colspan="9" class="petty-empty">لا توجد سجلات تحت التحصيل</td></tr>`;
+        body.innerHTML = `<tr><td colspan="9" class="petty-empty">لا توجد مبيعات محلية مسجلة</td></tr>`;
         return;
     }
 
@@ -377,17 +481,13 @@ function renderRows() {
     body.innerHTML = state.rows.map((row, index) => `
         <tr>
             <td>${escapeHtml(row.document_number || startIndex + index + 1)}</td>
+            <td class="customer-cell">${escapeHtml(row.customer_name || '')}</td>
+            <td class="day-cell">${escapeHtml(formatWeekday(row.record_date))}</td>
             <td>${escapeHtml(row.record_date || '')}</td>
-            <td>${escapeHtml(getContainerText(row))}</td>
+            <td class="qty-cell">${formatNumber(row.quantity)}</td>
+            <td class="price-cell">${formatNumber(row.price)}</td>
+            <td class="total-cell">${formatNumber(row.total)}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
-            <td>${escapeHtml(row.invoice_number || '')}</td>
-            <td>${formatMoney(row.tons_count)} طن × ${formatMoney(row.ton_price)}</td>
-            <td>
-                <div class="invoice-total-cell">
-                    <strong>${formatMoney(row.total_usd)}</strong>
-                    ${formatRemainingText(row) ? `<span>${escapeHtml(formatRemainingText(row))}</span>` : ''}
-                </div>
-            </td>
             <td>
                 <button type="button" class="btn btn-outline" data-action="edit-record" data-id="${row.id}">
                     <i class="fas fa-pen"></i> تعديل
@@ -395,9 +495,6 @@ function renderRows() {
                 <button type="button" class="btn btn-outline" data-action="delete-record" data-id="${row.id}">
                     <i class="fas fa-trash"></i> حذف
                 </button>
-            </td>
-            <td>
-                <input type="checkbox" class="collected-checkbox" data-action="toggle-collected" data-id="${row.id}" ${Number(row.is_collected) ? 'checked' : ''}>
             </td>
         </tr>
     `).join('');
@@ -408,10 +505,6 @@ function renderRows() {
 
     body.querySelectorAll('[data-action="delete-record"]').forEach((button) => {
         button.addEventListener('click', () => deleteRecord(button.dataset.id));
-    });
-
-    body.querySelectorAll('[data-action="toggle-collected"]').forEach((checkbox) => {
-        checkbox.addEventListener('change', () => toggleCollected(checkbox.dataset.id, checkbox.checked));
     });
 }
 
@@ -450,16 +543,11 @@ async function openEditModal(id) {
     state.editingId = row.id;
     document.getElementById('documentNumber').value = row.document_number || '';
     document.getElementById('recordDate').value = row.record_date || today();
-    document.getElementById('containerCount').value = row.container_count ?? '';
-    document.getElementById('container20').checked = Boolean(Number(row.container_20));
-    document.getElementById('container40').checked = Boolean(Number(row.container_40));
-    document.getElementById('statement').value = row.statement || '';
-    document.getElementById('invoiceNumber').value = row.invoice_number || '';
-    document.getElementById('tonsCount').value = row.tons_count ?? '';
-    document.getElementById('tonPrice').value = row.ton_price ?? '';
-    document.getElementById('remainingType').value = row.remaining_type || 'percent';
-    document.getElementById('remainingValue').value = row.remaining_value ?? '';
-    updateTotalPreview();
+    setCustomerSelection(row.customer_id);
+    document.getElementById('quantityInput').value = formatNumber(row.quantity);
+    document.getElementById('priceInput').value = formatNumber(row.price);
+    document.getElementById('totalInput').value = formatNumber(row.total);
+    document.getElementById('statementInput').value = row.statement || '';
     document.getElementById('addRecordModal').classList.remove('hidden');
 }
 
@@ -469,12 +557,12 @@ async function deleteRecord(id) {
         return;
     }
 
-    const confirmed = await window.showConfirmDialog('هل تريد حذف سجل تحت التحصيل؟');
+    const confirmed = await window.showConfirmDialog('هل تريد حذف سجل المبيعات المحلية؟');
     if (!confirmed) {
         return;
     }
 
-    const result = await window.electronAPI.deleteUnderCollectionRecord(Number(id));
+    const result = await window.electronAPI.deleteLocalSale(Number(id));
     if (!result || !result.success) {
         showMessage((result && result.error) || 'تعذر حذف السجل', 'error');
         return;
@@ -484,36 +572,27 @@ async function deleteRecord(id) {
     await loadRecords();
 }
 
-async function toggleCollected(id, isCollected) {
-    const result = await window.electronAPI.updateUnderCollectionCollected({
-        id: Number(id),
-        is_collected: isCollected ? 1 : 0
-    });
-
-    if (!result || !result.success) {
-        showMessage((result && result.error) || 'تعذر تحديث حالة التحصيل', 'error');
-        await loadRecords();
-    }
-}
-
 async function saveRecord(event) {
     event.preventDefault();
+    const customerSelect = document.getElementById('customerSelect');
+    const customerId = Number(customerSelect?.value || 0);
+
+    if (!customerId) {
+        showMessage('اسم العميل غير موجود', 'error');
+        return;
+    }
+
     const payload = {
         record_date: document.getElementById('recordDate').value || today(),
-        container_count: document.getElementById('containerCount').value,
-        container_20: document.getElementById('container20').checked ? 1 : 0,
-        container_40: document.getElementById('container40').checked ? 1 : 0,
-        statement: document.getElementById('statement').value,
-        invoice_number: document.getElementById('invoiceNumber').value,
-        tons_count: document.getElementById('tonsCount').value,
-        ton_price: document.getElementById('tonPrice').value,
-        remaining_type: document.getElementById('remainingType').value,
-        remaining_value: document.getElementById('remainingValue').value
+        customer_id: customerId,
+        quantity: parseNumberInput(document.getElementById('quantityInput').value),
+        price: parseNumberInput(document.getElementById('priceInput').value),
+        statement: document.getElementById('statementInput').value
     };
 
     if (state.editingId) {
         payload.id = state.editingId;
-        const result = await window.electronAPI.updateUnderCollectionRecord(payload);
+        const result = await window.electronAPI.updateLocalSale(payload);
         if (!result || !result.success) {
             showMessage((result && result.error) || 'تعذر تعديل السجل', 'error');
             return;
@@ -522,12 +601,12 @@ async function saveRecord(event) {
         showMessage('تم تعديل السجل بنجاح', 'success');
         state.editingId = null;
         document.getElementById('addRecordModal').classList.add('hidden');
-        document.getElementById('underCollectionForm').reset();
+        document.getElementById('localSalesForm').reset();
         await loadRecords();
         return;
     }
 
-    const result = await window.electronAPI.saveUnderCollectionRecord(payload);
+    const result = await window.electronAPI.saveLocalSale(payload);
     if (!result || !result.success) {
         showMessage((result && result.error) || 'تعذر حفظ السجل', 'error');
         return;
@@ -535,10 +614,9 @@ async function saveRecord(event) {
 
     showMessage('تم حفظ السجل بنجاح', 'success');
     document.getElementById('addRecordModal').classList.add('hidden');
-    document.getElementById('underCollectionForm').reset();
+    document.getElementById('localSalesForm').reset();
     document.getElementById('recordDate').value = today();
-    document.getElementById('remainingType').value = 'percent';
-    updateTotalPreview();
+    document.getElementById('totalInput').value = '';
     await refreshDocumentNumber();
     state.page = 1;
     await loadRecords();
@@ -552,7 +630,7 @@ async function exportPdf() {
         ? `الفترة: ${startDate || 'البداية'} إلى ${endDate || 'اليوم'}`
         : '';
 
-    const exportResult = await window.electronAPI.getUnderCollectionRecords({
+    const exportResult = await window.electronAPI.getLocalSales({
         page: 1,
         pageSize: 100000,
         startDate,
@@ -569,7 +647,7 @@ async function exportPdf() {
 
     try {
         const date = today();
-        const result = await window.electronAPI.saveUnderCollectionPdf({ defaultName: `Under_Collection_${date}.pdf` });
+        const result = await window.electronAPI.saveLocalSalesPdf({ defaultName: `Local_Sales_${date}.pdf` });
         if (result && result.success) {
             showMessage('تم حفظ ملف PDF بنجاح', 'success');
         } else if (result && !result.canceled) {

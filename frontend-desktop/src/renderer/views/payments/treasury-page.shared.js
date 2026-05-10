@@ -73,7 +73,7 @@
                     handleEntityChange();
                 }
 
-                document.getElementById('amount').value = Number(target.amount || 0).toFixed(2);
+                document.getElementById('amount').value = formatMoneyInput(Number(target.amount || 0).toFixed(2));
                 document.getElementById('description').value = target.description || '';
                 updatePreview();
 
@@ -100,8 +100,54 @@
             document
                 .getElementById(config.ids.entitySelect)
                 .addEventListener('change', handleEntityChange);
-            document.getElementById('amount').addEventListener('input', updatePreview);
+            document.getElementById('amount').addEventListener('input', handleAmountInput);
             document.getElementById('voucherSearchBtn').addEventListener('click', searchVoucher);
+        }
+
+        function normalizeNumberString(value) {
+            if (value === null || value === undefined) return '';
+            let s = String(value).trim();
+            if (s === '') return '';
+
+            const arabicIndic = '٠١٢٣٤٥٦٧٨٩';
+            const easternArabicIndic = '۰۱۲۳۴۵۶۷۸۹';
+
+            s = s.replace(/[٠-٩]/g, (d) => String(arabicIndic.indexOf(d)));
+            s = s.replace(/[۰-۹]/g, (d) => String(easternArabicIndic.indexOf(d)));
+            s = s.replace(/[٬،]/g, '.');
+            s = s.replace(/,/g, '');
+            s = s.replace(/\s+/g, '');
+            return s;
+        }
+
+        function parseLocaleFloat(value) {
+            const normalized = normalizeNumberString(value);
+            const num = parseFloat(normalized);
+            return Number.isFinite(num) ? num : NaN;
+        }
+
+        function formatMoneyInput(value) {
+            const normalized = normalizeNumberString(value);
+            if (!normalized) return '';
+
+            const parts = normalized.split('.');
+            const integerPart = (parts.shift() || '').replace(/[^0-9]/g, '');
+            const decimalPart = parts.join('').replace(/[^0-9]/g, '');
+            const formattedInteger = (integerPart ? Number(integerPart) : 0).toLocaleString('en-US');
+            const hasDot = normalized.includes('.');
+
+            if (hasDot) {
+                return `${formattedInteger}.${decimalPart}`;
+            }
+
+            return formattedInteger;
+        }
+
+        function handleAmountInput(event) {
+            const input = event?.target;
+            if (!input) return;
+            input.value = formatMoneyInput(input.value);
+            updatePreview();
         }
 
         function handleActionClick(event) {
@@ -328,7 +374,7 @@
             }
 
             const currentBalance = Number(selectedEntity.balance) || 0;
-            const amount = Number.parseFloat(document.getElementById('amount').value) || 0;
+            const amount = parseLocaleFloat(document.getElementById('amount').value) || 0;
             const afterBalance = currentBalance - amount;
 
             currentEl.textContent = formatBalancePreview(currentBalance);
@@ -362,7 +408,7 @@
         }
 
         function setQuickAmount(amount) {
-            document.getElementById('amount').value = amount;
+            document.getElementById('amount').value = formatMoneyInput(amount);
             // document.getElementById('amount').focus();
             updatePreview();
         }
@@ -376,7 +422,7 @@
             const entityBalance = Number(selectedEntity.balance) || 0;
 
             if (entityBalance > 0) {
-                document.getElementById('amount').value = entityBalance.toFixed(2);
+                document.getElementById('amount').value = formatMoneyInput(entityBalance.toFixed(2));
                 document.getElementById('description').value = text('fullBalanceDescription');
                 updatePreview();
                 return;
@@ -406,7 +452,7 @@
                     type: config.transactionType,
                     date: document.getElementById('date').value,
                     customer_id: document.getElementById(config.ids.entitySelect).value,
-                    amount: parseFloat(document.getElementById('amount').value),
+                    amount: parseLocaleFloat(document.getElementById('amount').value),
                     description:
                         document.getElementById('description').value ||
                         fmt(text('defaultDescriptionTemplate'), { number: voucherNumberForDescription })

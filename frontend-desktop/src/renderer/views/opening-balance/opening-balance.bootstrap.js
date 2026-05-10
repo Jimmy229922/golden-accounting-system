@@ -509,7 +509,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function formatCurrency(amount) {
-        return new Intl.NumberFormat('ar-EG', { style: 'currency', currency: 'EGP' }).format(amount);
+        const n = Number(amount) || 0;
+        return `${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
     }
 
     function renderHistory(filteredHistory = null) {

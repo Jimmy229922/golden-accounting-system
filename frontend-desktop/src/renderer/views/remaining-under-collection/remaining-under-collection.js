@@ -46,7 +46,7 @@ function escapeHtml(value) {
 }
 
 function formatMoney(value) {
-    return (Number(value) || 0).toLocaleString('ar-EG', {
+    return (Number(value) || 0).toLocaleString('en-US', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0
     });
@@ -312,7 +312,7 @@ function renderSummary() {
     }
 
     if (totalCountEl) {
-        totalCountEl.textContent = (Number(state.totalCount) || 0).toLocaleString('ar-EG');
+        totalCountEl.textContent = (Number(state.totalCount) || 0).toLocaleString('en-US');
     }
 }
 

@@ -15,7 +15,8 @@ const customerReportsRender = window.customerReportsPageRender;
 const CUR = 'ج.م';
 
 function formatCurrency(v) {
-    return parseFloat(v || 0).toFixed(2) + ' ' + CUR;
+    const n = Number(v) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + CUR;
 }
 
 function escapeHtml(value) {

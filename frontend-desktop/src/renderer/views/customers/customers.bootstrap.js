@@ -465,7 +465,7 @@ async function confirmDeleteCustomer() {
 }
 
 function formatCurrency(amount) {
-    return new Intl.NumberFormat('ar-EG', {
+    return new Intl.NumberFormat('en-US', {
         style: 'decimal',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2

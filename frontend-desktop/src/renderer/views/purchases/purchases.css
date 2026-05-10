@@ -309,6 +309,32 @@
     background: rgba(37, 99, 235, 0.14);
 }
 
+.raw-qty-value-btn {
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--table-border);
+    background: rgba(15, 23, 42, 0.04);
+    font-weight: 800;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.raw-qty-value-btn:hover {
+    background: rgba(15, 23, 42, 0.08);
+}
+
+.raw-qty-value-btn:active {
+    transform: translateY(1px);
+}
+
 .raw-qty-value {
     margin-top: 6px;
     display: inline-flex;
@@ -338,6 +364,8 @@
 }
 
 .items-table .quantity-input,
+.items-table .net1-input,
+.items-table .rate-percent-input,
 .items-table .price-input {
     text-align: center;
     direction: ltr;
@@ -864,5 +892,96 @@
 @media (max-width: 768px) {
     :where(.content, .sales-content, .reports-content) {
         padding: 16px;
+    }
+}
+
+/* ===== Print Styles ===== */
+@media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    
+    @page { margin: 10mm; }
+    
+    body {
+        background: #fff !important;
+        color: #000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        font-family: Arial, sans-serif !important;
+    }
+
+    #app, .top-nav, .sales-page-header, #toastContainer, .toast-container, .modal-open, .baskeel-modal-overlay, .form-title-row button, .baskeel-btn, .remove-row, .invoice-footer-grid button {
+        display: none !important;
+    }
+
+    .content.sales-content { display: block !important; padding: 0 !important; }
+    .invoice-form-container { box-shadow: none !important; border: 0 !important; margin: 0 !important; padding: 0 !important; }
+    
+    .form-title-row {
+        border-bottom: 2px solid #333;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        text-align: center;
+        justify-content: center;
+    }
+    
+    .invoice-top-grid, .invoice-financial-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .form-group {
+        flex: 1 1 200px;
+        border: 1px solid #ddd;
+        padding: 10px;
+        border-radius: 6px;
+    }
+
+    .form-control, select, input {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        height: auto !important;
+        color: #000 !important;
+        -webkit-appearance: none;
+        appearance: none;
+        pointer-events: none;
+    }
+
+    .items-table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 20px;
+    }
+    
+    .items-table th, .items-table td {
+        border: 1px solid #999 !important;
+        padding: 8px !important;
+        color: #000 !important;
+    }
+    
+    .items-table th { background-color: #eee !important; font-weight: bold; }
+    
+    .invoice-footer-grid {
+        display: block !important;
+    }
+    .notes-section { margin-bottom: 20px; }
+    .totals-panel {
+        width: 50%;
+        float: left; /* Using float since direction is rtl, left means the left side of the page */
+        border: 1px solid #000;
+        border-radius: 8px;
+        padding: 15px;
+    }
+
+    /* Clarify the rate/calc method in print */
+    .raw-qty-value {
+        display: inline-block;
+        font-weight: bold;
+        background: #f0f0f0;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
     }
 }

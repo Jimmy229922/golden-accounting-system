@@ -72,7 +72,7 @@
                                             <div class="form-group amount-block">
                                                 <label><i class="fas fa-money-bill"></i> ${text('amountLabel')}</label>
                                                 <div class="input-with-icon amount-field-shell">
-                                                    <input type="number" id="amount" class="form-control amount-input ${config.visuals.amountInputClass}" step="0.01" min="0.01" placeholder="0.00" inputmode="decimal" required>
+                                                    <input type="text" id="amount" class="form-control amount-input ${config.visuals.amountInputClass}" placeholder="0.00" inputmode="decimal" required>
                                                     <i class="fas fa-pound-sign"></i>
                                                 </div>
                                             </div>

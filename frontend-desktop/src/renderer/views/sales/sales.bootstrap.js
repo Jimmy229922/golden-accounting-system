@@ -102,7 +102,7 @@ function initializeElements() {
     }
 
     if (salesState.dom.paidAmountInput) {
-        salesState.dom.paidAmountInput.addEventListener('input', () => calculateInvoiceTotal());
+        salesState.dom.paidAmountInput.addEventListener('input', handlePaidAmountInput);
     }
 
     const invoiceNumberInput = document.getElementById('invoiceNumber');
@@ -161,7 +161,7 @@ function escapeHtml(value) {
 function formatMoneyForUi(value) {
     const num = Number(value);
     if (!Number.isFinite(num)) return '0.00';
-    return roundMoney(num).toFixed(2);
+    return roundMoney(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatShiftCloseDateTime(value) {
@@ -821,7 +821,7 @@ async function loadInvoiceForEdit(id) {
 
         if (paidAmountInput) {
             const paid = Number(invoice.paid_amount) || 0;
-            paidAmountInput.value = paid.toFixed(2);
+            paidAmountInput.value = formatMoneyInputValue(paid.toFixed(2));
         }
 
         salesState.dom.invoiceItemsBody.innerHTML = '';
@@ -1757,6 +1757,7 @@ function normalizeNumberString(value) {
     s = s.replace(/[٠-٩]/g, (d) => String(arabicIndic.indexOf(d)));
     s = s.replace(/[۰-۹]/g, (d) => String(easternArabicIndic.indexOf(d)));
     s = s.replace(/[٬،]/g, '.');
+    s = s.replace(/,/g, '');
     s = s.replace(/\s+/g, '');
     return s;
 }
@@ -1765,6 +1766,30 @@ function parseLocaleFloat(value) {
     const normalized = normalizeNumberString(value);
     const num = parseFloat(normalized);
     return Number.isFinite(num) ? num : NaN;
+}
+
+function formatMoneyInputValue(value) {
+    const normalized = normalizeNumberString(value);
+    if (!normalized) return '';
+
+    const parts = normalized.split('.');
+    const integerPart = (parts.shift() || '').replace(/[^0-9]/g, '');
+    const decimalPart = parts.join('').replace(/[^0-9]/g, '');
+    const formattedInteger = (integerPart ? Number(integerPart) : 0).toLocaleString('en-US');
+    const hasDot = normalized.includes('.');
+
+    if (hasDot) {
+        return `${formattedInteger}.${decimalPart}`;
+    }
+
+    return formattedInteger;
+}
+
+function handlePaidAmountInput(event) {
+    const input = event?.target;
+    if (!input) return;
+    input.value = formatMoneyInputValue(input.value);
+    calculateInvoiceTotal();
 }
 
 function roundMoney(value) {
@@ -1808,7 +1833,7 @@ function calculateRowTotal(element) {
     const price = parseLocaleFloat(row.querySelector('.price-input').value);
     const total = (Number.isFinite(quantity) ? quantity : 0) * (Number.isFinite(price) ? price : 0);
 
-    row.querySelector('.row-total').textContent = total.toFixed(2);
+    row.querySelector('.row-total').textContent = formatMoneyForUi(total);
     calculateInvoiceTotal();
     updateProfitIndicator(row);
 }
@@ -1816,32 +1841,32 @@ function calculateRowTotal(element) {
 function calculateInvoiceTotal() {
     let subtotal = 0;
     salesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
-        const rowTotal = parseFloat(row.querySelector('.row-total').textContent) || 0;
+        const rowTotal = parseLocaleFloat(row.querySelector('.row-total').textContent) || 0;
         subtotal += rowTotal;
     });
 
     const financials = getInvoiceFinancials(subtotal);
 
     if (salesState.dom.invoiceSubtotalSpan) {
-        salesState.dom.invoiceSubtotalSpan.textContent = subtotal.toFixed(2);
+        salesState.dom.invoiceSubtotalSpan.textContent = formatMoneyForUi(subtotal);
     }
 
     if (salesState.dom.invoiceDiscountAmountSpan) {
-        salesState.dom.invoiceDiscountAmountSpan.textContent = financials.discountAmount.toFixed(2);
+        salesState.dom.invoiceDiscountAmountSpan.textContent = formatMoneyForUi(financials.discountAmount);
     }
 
-    salesState.dom.invoiceTotalSpan.textContent = financials.netTotal.toFixed(2);
+    salesState.dom.invoiceTotalSpan.textContent = formatMoneyForUi(financials.netTotal);
 
     if (salesState.dom.invoicePaidDisplaySpan) {
-        salesState.dom.invoicePaidDisplaySpan.textContent = financials.paidAmount.toFixed(2);
+        salesState.dom.invoicePaidDisplaySpan.textContent = formatMoneyForUi(financials.paidAmount);
     }
 
     if (salesState.dom.invoiceRemainingSpan) {
         if (financials.customerRemaining > 0) {
-            salesState.dom.invoiceRemainingSpan.textContent = fmt(t('sales.customerDuePositive', 'لينا (مدين) {amount}'), { amount: financials.customerRemaining.toFixed(2) });
+            salesState.dom.invoiceRemainingSpan.textContent = fmt(t('sales.customerDuePositive', 'لينا (مدين) {amount}'), { amount: formatMoneyForUi(financials.customerRemaining) });
             salesState.dom.invoiceRemainingSpan.className = 'customer-due-value due-positive';
         } else if (financials.customerRemaining < 0) {
-            salesState.dom.invoiceRemainingSpan.textContent = fmt(t('sales.customerDueNegative', 'علينا (دائن) {amount}'), { amount: Math.abs(financials.customerRemaining).toFixed(2) });
+            salesState.dom.invoiceRemainingSpan.textContent = fmt(t('sales.customerDueNegative', 'علينا (دائن) {amount}'), { amount: formatMoneyForUi(Math.abs(financials.customerRemaining)) });
             salesState.dom.invoiceRemainingSpan.className = 'customer-due-value due-negative';
         } else {
             salesState.dom.invoiceRemainingSpan.textContent = '0.00';

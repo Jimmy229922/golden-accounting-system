@@ -595,7 +595,8 @@ function updateStats() {
 }
 
 function formatCurrency(value) {
-    return parseFloat(value || 0).toFixed(2) + ' ج.م';
+    const n = Number(value) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
 }
 
 

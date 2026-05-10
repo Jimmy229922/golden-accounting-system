@@ -20,18 +20,33 @@
                     return;
                 }
 
+                if (action === 'print-invoice') {
+                    window.print();
+                    return;
+                }
+
                 if (action === 'load-prev-invoice') {
                     handlers.onLoadPrevInvoice();
                     return;
                 }
 
-                if (action === 'load-next-invoice') {
-                    handlers.onLoadNextInvoice();
+                if (action === 'open-weights') {
+                    handlers.onOpenWeights(actionEl);
                     return;
                 }
 
-                if (action === 'open-weights') {
-                    handlers.onOpenWeights(actionEl);
+                if (action === 'open-quick-raw') {
+                    handlers.onOpenQuickRaw(actionEl);
+                    return;
+                }
+
+                if (action === 'close-weights') {
+                    handlers.onCloseWeights();
+                    return;
+                }
+
+                if (action === 'close-quick-raw') {
+                    handlers.onCloseQuickRaw();
                     return;
                 }
 
@@ -47,6 +62,11 @@
 
                 if (action === 'save-weights') {
                     handlers.onSaveWeights();
+                    return;
+                }
+
+                if (action === 'save-quick-raw') {
+                    handlers.onSaveQuickRaw();
                     return;
                 }
 

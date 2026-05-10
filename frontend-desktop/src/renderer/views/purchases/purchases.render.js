@@ -22,6 +22,9 @@
                     <div class="form-title-row">
                         <h2 class="form-title">${t('purchases.formTitle', 'تسجيل فاتورة شراء جديدة')}</h2>
                         <div style="display: flex; gap: 8px; margin-inline-start: auto;">
+                            <button class="btn btn-outline" type="button" data-action="print-invoice" style="padding: 8px 10px;" title="${t('purchases.printInvoice', 'طباعة الفاتورة')}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                            </button>
                             <button class="btn btn-outline" type="button" data-action="load-prev-invoice" style="padding: 8px 10px;">
                                 ${t('common.actions.previous', 'السابق')}
                             </button>
@@ -87,14 +90,16 @@
                                 <thead>
                                     <tr>
                                         <th style="width: 4%; text-align: center;">#</th>
-                                        <th style="width: 14%;">${t('items.barcode', 'الباركود')}</th>
-                                        <th style="width: 24%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
-                                        <th style="width: 10%;">${t('purchases.tableHeaders.unit', 'الوحدة')}</th>
-                                        <th style="width: 12%;">${t('purchases.raw_quantity', 'الكمية الخام')}</th>
-                                        <th style="width: 12%;">${t('purchases.net_quantity', 'الكمية الصافية')}</th>
-                                        <th style="width: 14%;">${t('purchases.tableHeaders.price', 'سعر الشراء')}</th>
-                                        <th style="width: 14%;">${t('purchases.tableHeaders.total', 'الإجمالي')}</th>
-                                        <th style="width: 6%;"></th>
+                                        <th style="width: 13%;">${t('items.barcode', 'الباركود')}</th>
+                                        <th style="width: 19%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
+                                        <th style="width: 8%;">${t('purchases.tableHeaders.unit', 'الوحدة')}</th>
+                                        <th style="width: 11%;">${t('purchases.raw_quantity', 'خام')}</th>
+                                        <th style="width: 11%;">${t('purchases.net_1_percent', 'صافي 1%')}</th>
+                                        <th style="width: 10%;">${t('purchases.rate_percent', 'المعدل %')}</th>
+                                        <th style="width: 10%;">${t('purchases.final_net', 'الكمية النهائية')}</th>
+                                        <th style="width: 10%;">${t('purchases.tableHeaders.price', 'سعر الشراء')}</th>
+                                        <th style="width: 12%;">${t('purchases.tableHeaders.total', 'الإجمالي')}</th>
+                                        <th style="width: 4%;"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="invoiceItemsBody"></tbody>
@@ -183,6 +188,29 @@
                 </div>
             </div>
         </div>
+
+        <div id="quickRawModal" class="baskeel-modal-overlay" aria-hidden="true">
+            <div class="baskeel-modal" role="dialog" aria-modal="true" aria-labelledby="quickRawModalTitle" style="max-width: 400px;">
+                <div class="baskeel-modal-header">
+                    <h3 id="quickRawModalTitle">${t('purchases.quick_raw_title', 'إجمالي البساكيل دفعة واحدة')}</h3>
+                    <button type="button" class="baskeel-modal-close" data-action="close-quick-raw" aria-label="${t('common.actions.cancel', 'إلغاء')}">
+                        ×
+                    </button>
+                </div>
+                <div class="baskeel-modal-body">
+                    <div class="form-group">
+                        <label>${t('purchases.raw_quantity', 'الكمية الخام')}</label>
+                        <input type="number" id="quickRawInput" class="form-control" style="font-size: 1.2rem; font-weight: bold; text-align: center;" placeholder="0" min="0" step="0.01">
+                    </div>
+                </div>
+                <div class="baskeel-modal-footer">
+                    <div class="baskeel-actions" style="justify-content: space-between; width: 100%;">
+                        <button class="btn btn-secondary" type="button" data-action="close-quick-raw">${t('common.actions.cancel', 'إلغاء')}</button>
+                        <button class="btn btn-success" type="button" data-action="save-quick-raw">${t('common.actions.save', 'حفظ')}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
     }
 
@@ -205,6 +233,19 @@
         const rawWeights = existingItem && typeof existingItem.raw_weights === 'string' ? existingItem.raw_weights : '';
         const price = existingItem ? existingItem.cost_price : 0;
         const total = existingItem ? existingItem.total_price : 0;
+        
+        let method = 'normal';
+        let rateValue = '';
+        
+        try {
+            if (rawWeights && rawWeights.trim()) {
+                const parsed = JSON.parse(rawWeights);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    method = parsed.method || 'normal';
+                    rateValue = parsed.rate ? String(parsed.rate) : '';
+                }
+            }
+        } catch(e) {}
 
         let unitName = '';
         let barcodeValue = '';
@@ -235,17 +276,23 @@
             <button class="baskeel-btn" type="button" data-action="open-weights">
                 ${t('purchases.baskeels_weights', 'أوزان البساكيل')}
             </button>
-            <div class="raw-qty-value">${Number.isFinite(rawQuantity) && rawQuantity > 0 ? rawQuantity : ''}</div>
+            <button type="button" class="raw-qty-value-btn" data-action="open-quick-raw" title="إدخال الكمية دفعة واحدة">${Number.isFinite(rawQuantity) && rawQuantity > 0 ? rawQuantity : 'إدخال سريع'}</button>
         </td>
         <td>
-            <input type="text" autocomplete="off" class="form-control quantity-input" data-fs-size="sm" value="${quantity}" placeholder="0" readonly>
+            <input type="text" autocomplete="off" class="form-control net1-input" data-fs-size="sm" value="" placeholder="0" readonly title="الكمية الصافية الأساسية بخصم 1%">
+        </td>
+        <td>
+            <input type="number" autocomplete="off" class="form-control rate-percent-input" data-fs-size="sm" value="${rateValue}" placeholder="%" title="اكتب النسبة فقط مثل 40">
+        </td>
+        <td>
+            <input type="text" autocomplete="off" class="form-control quantity-input final-net-input" data-fs-size="sm" value="${quantity}" placeholder="0" readonly title="الكمية الصافية النهائية">
         </td>
         <td>
             <input type="text" autocomplete="off" class="form-control price-input" data-fs-size="sm" value="${price}">
             <div class="profit-indicator"></div>
         </td>
         <td>
-            <span class="row-total">${total.toFixed(2)}</span>
+            <span class="row-total">${(Number(total) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </td>
         <td>
             <button class="remove-row" type="button" data-action="remove-row" title="${t('purchases.removeRow', 'حذف الصنف')}">
