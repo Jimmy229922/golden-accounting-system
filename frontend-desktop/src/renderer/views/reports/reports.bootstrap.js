@@ -320,7 +320,7 @@ function renderReports(reports) {
     if (!Array.isArray(reports) || reports.length === 0) {
         reportsTableBody.innerHTML = `
             <tr>
-                <td colspan="7">
+                <td colspan="9">
                     <div class="empty-state">
                         <i class="fas fa-inbox"></i>
                         <h3>${t('reports.noDataTitle', 'لا توجد فواتير')}</h3>
@@ -355,6 +355,13 @@ function renderReports(reports) {
             : `<strong>${escapeHtml(invoiceNumberValue || '-')}</strong>`;
         const safeCustomer = escapeHtml(report.customer_name || '-');
 
+        const paidAmountVal = (report.type === 'receipt' || report.type === 'payment')
+            ? formatCurrency(report.paid_amount)
+            : formatCurrency(report.paid_amount || 0);
+        const remainingAmountVal = (report.type === 'receipt' || report.type === 'payment')
+            ? '—'
+            : formatCurrency(report.remaining_amount || 0);
+
         row.className = typeMeta.rowClass;
         row.innerHTML = `
             <td class="index-col">${start + idx + 1}</td>
@@ -363,6 +370,8 @@ function renderReports(reports) {
             <td>${typeMeta.badge}</td>
             <td class="name-col">${safeCustomer}</td>
             <td class="amount ${typeMeta.amountClass}">${formatCurrency(report.total_amount)}</td>
+            <td class="amount">${paidAmountVal}</td>
+            <td class="amount">${remainingAmountVal}</td>
             <td>
                 <div class="row-actions">
                     ${report.type === 'receipt' || report.type === 'payment' ? `

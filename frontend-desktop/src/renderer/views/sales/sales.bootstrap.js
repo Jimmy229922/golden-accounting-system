@@ -2110,6 +2110,7 @@ async function resetForm() {
 
     window.history.replaceState({}, document.title, window.location.pathname);
     await loadItems();
+    await loadInvoiceNumberSuggestions();
     await initializeNewInvoice();
     updatePrintBtnState();
 }

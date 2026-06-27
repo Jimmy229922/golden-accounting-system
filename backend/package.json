@@ -10,6 +10,7 @@
     "compat:check": "node scripts/compatibility-check.js"
   },
   "dependencies": {
+    "accounting-system-monorepo": "file:..",
     "better-sqlite3": "^12.5.0",
     "pdf-lib": "^1.17.1"
   }

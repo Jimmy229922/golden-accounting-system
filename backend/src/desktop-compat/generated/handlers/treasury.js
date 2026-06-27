@@ -121,7 +121,7 @@ function register() {
                 stmt.run({ type, amount, date, description, customer_id, voucher_number, related_type });
                 
                 if (customer_id) {
-                    updateBalance.run({ amount: -amount, id: customer_id });
+                    updateBalance.run({ amount: type === 'expense' ? amount : -amount, id: customer_id });
                 }
             });
 
@@ -137,12 +137,12 @@ function register() {
         if (denied) return denied;
         try {
             const { id, type } = transaction;
-            if (type === 'expense') {
-                const existing = db.prepare('SELECT id, type, amount FROM treasury_transactions WHERE id = ? LIMIT 1').get(id);
-                if (!existing) {
-                    return { success: false, error: 'الحركة المطلوب تعديلها غير موجودة.' };
-                }
+            const existing = db.prepare('SELECT * FROM treasury_transactions WHERE id = ?').get(id);
+            if (!existing) {
+                return { success: false, error: 'الحركة المطلوب تعديلها غير موجودة.' };
+            }
 
+            if (type === 'expense') {
                 let balanceBeforeUpdate = getCurrentTreasuryBalance();
                 if (existing.type === 'expense') {
                     balanceBeforeUpdate += Number(existing.amount) || 0;
@@ -160,12 +160,34 @@ function register() {
                 }
             }
 
-            const stmt = db.prepare(`
-                UPDATE treasury_transactions 
-                SET type = @type, amount = @amount, transaction_date = @date, description = @description
+            const updateBalance = db.prepare(`
+                UPDATE customers
+                SET balance = balance + @amount
                 WHERE id = @id
             `);
-            stmt.run(transaction);
+
+            const stmt = db.prepare(`
+                UPDATE treasury_transactions 
+                SET type = @type, amount = @amount, transaction_date = @date, description = @description, customer_id = @customer_id
+                WHERE id = @id
+            `);
+
+            const tx = db.transaction(() => {
+                // 1. Revert old balance effect
+                if (existing.customer_id) {
+                    updateBalance.run({ amount: existing.type === 'expense' ? -existing.amount : existing.amount, id: existing.customer_id });
+                }
+
+                // 2. Update transaction
+                stmt.run(transaction);
+
+                // 3. Apply new balance effect
+                if (transaction.customer_id) {
+                    updateBalance.run({ amount: type === 'expense' ? transaction.amount : -transaction.amount, id: transaction.customer_id });
+                }
+            });
+
+            tx();
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
@@ -195,7 +217,7 @@ function register() {
             if (trans.customer_id) {
                 // When payment was added, we subtracted amount from balance.
                 // Now we add it back.
-                updateCustomer.run({ amount: trans.amount, id: trans.customer_id });
+                updateCustomer.run({ amount: trans.type === 'expense' ? -trans.amount : trans.amount, id: trans.customer_id });
             }
 
             if (trans.related_invoice_id) {
@@ -205,7 +227,7 @@ function register() {
                     
                     const invoice = getSalesInvoice.get(trans.related_invoice_id);
                     if (invoice && invoice.customer_id) {
-                        updateCustomer.run({ amount: trans.amount, id: invoice.customer_id });
+                        updateCustomer.run({ amount: trans.type === 'expense' ? -trans.amount : trans.amount, id: invoice.customer_id });
                     }
                 } else if (trans.related_type === 'purchase') {
                     // Revert Purchase Payment
@@ -213,7 +235,7 @@ function register() {
                     
                     const invoice = getPurchaseInvoice.get(trans.related_invoice_id);
                     if (invoice && invoice.supplier_id) {
-                        updateCustomer.run({ amount: trans.amount, id: invoice.supplier_id });
+                        updateCustomer.run({ amount: trans.type === 'expense' ? -trans.amount : trans.amount, id: invoice.supplier_id });
                     }
                 }
             }

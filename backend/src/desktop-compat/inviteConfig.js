@@ -11,7 +11,7 @@ function getMachineId() {
     try {
         let id = '';
         if (process.platform === 'win32') {
-            id = execSync('wmic csproduct get uuid', { windowsHide: true }).toString().replace('UUID', '').trim();
+            id = execSync('reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography /v MachineGuid', { windowsHide: true }).toString().split('REG_SZ')[1].trim();
         } else if (process.platform === 'darwin') {
             id = execSync('ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID').toString().split('"')[3];
         } else {

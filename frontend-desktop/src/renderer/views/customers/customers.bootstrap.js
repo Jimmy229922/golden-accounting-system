@@ -1,4 +1,4 @@
-﻿let ar = {};
+let ar = {};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
 
 function buildTopNavHTML() {
@@ -187,7 +187,7 @@ function updateStats() {
     let totalPayables = 0;
 
     allCustomers.forEach((c) => {
-        const balance = parseFloat(c.opening_balance) || 0;
+        const balance = parseFloat(c.balance) || 0;
         if (balance > 0) {
             totalReceivables += balance;
         } else if (balance < 0) {
@@ -256,7 +256,7 @@ function renderTable() {
             typeText = t('customers.typeSupplier', 'مورد');
         }
 
-        const balance = parseFloat(customer.opening_balance) || 0;
+        const balance = parseFloat(customer.balance) || 0;
         let balanceClass = 'balance-neutral';
         let balanceTag = t('customers.balanceBalanced', 'متزن');
 

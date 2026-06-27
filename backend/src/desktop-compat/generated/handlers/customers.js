@@ -115,14 +115,14 @@ function register() {
             // Closing Balance = Current - Future Increases + Future Decreases
             // Increases to Balance: Sales, Purchases
             // Decreases to Balance: Payments
-            let closingBalance = customer.current_balance 
-                - (futureSales + futurePurchases) 
-                + (futureSalesPayments + futurePurchasePayments);
+            let closingBalance = customer.current_balance
+                - futureSales + futurePurchases
+                + futureSalesPayments - futurePurchasePayments;
                 
             // Opening Balance = Closing - Period Increases + Period Decreases
-            let openingBalance = closingBalance 
-                - (periodSales + periodPurchases) 
-                + (periodSalesPayments + periodPurchasePayments);
+            let openingBalance = closingBalance
+                - periodSales + periodPurchases
+                + periodSalesPayments - periodPurchasePayments;
                 
             let debitAmount = 0;
             let creditAmount = 0;

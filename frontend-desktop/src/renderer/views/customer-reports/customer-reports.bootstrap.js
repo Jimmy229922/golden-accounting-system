@@ -1,4 +1,4 @@
-﻿let customerSelect;
+let customerSelect;
 let reportContainer;
 let totalSalesEl;
 let totalPurchasesEl;
@@ -245,6 +245,7 @@ async function loadCustomerReport(customerId) {
             </td>
             <td></td>
             <td></td>
+            <td></td>
             <td class="running-bal ${obClass}">${formatCurrency(Math.abs(totals.openingBalance))} ${obLabel}</td>
         `;
         customerReportTableBody.appendChild(obRow);
@@ -253,7 +254,7 @@ async function loadCustomerReport(customerId) {
     if (transactions.length === 0 && totals.openingBalance === 0) {
         customerReportTableBody.innerHTML = `
             <tr class="no-data-row">
-                <td colspan="8">
+                <td colspan="9">
                     <i class="fas fa-inbox"></i>
                     ${t('customerReports.noTransactions', 'لا توجد عمليات لهذا العميل')}
                 </td>
@@ -263,29 +264,40 @@ async function loadCustomerReport(customerId) {
             const mainRow = document.createElement('tr');
             mainRow.className = `trans-main-row trans-type-${item.type}`;
             let typeBadge = '';
-            let debitVal = '';
-            let creditVal = '';
+            
+            let totalInvoiceVal = '—';
+            let paidVal = '—';
+            let remainingVal = '—';
+
             const hasDetails = ['sales', 'purchase', 'sales_return', 'purchase_return'].includes(item.type);
             const rowId = `items-${idx}`;
 
             if (item.type === 'sales') {
                 typeBadge = `<span class="badge badge-sales"><i class="fas fa-shopping-cart"></i> ${t('customerReports.salesBadge', 'مبيعات')}</span>`;
-                debitVal = item.debit ? formatCurrency(item.debit) : '';
+                totalInvoiceVal = formatCurrency(item.total_amount);
+                paidVal = formatCurrency(item.paid_amount);
+                remainingVal = formatCurrency(item.remaining_amount);
             } else if (item.type === 'purchase') {
                 typeBadge = `<span class="badge badge-purchase"><i class="fas fa-shopping-bag"></i> ${t('customerReports.purchaseBadge', 'مشتريات')}</span>`;
-                creditVal = item.credit ? formatCurrency(item.credit) : '';
+                totalInvoiceVal = formatCurrency(item.total_amount);
+                paidVal = formatCurrency(item.paid_amount);
+                remainingVal = formatCurrency(item.remaining_amount);
             } else if (item.type === 'payment_in') {
                 typeBadge = `<span class="badge badge-receipt"><i class="fas fa-hand-holding-usd"></i> ${t('customerReports.receiptBadge', 'تحصيل')}</span>`;
-                creditVal = item.credit ? formatCurrency(item.credit) : '';
+                paidVal = formatCurrency(item.paid_amount);
             } else if (item.type === 'payment_out') {
                 typeBadge = `<span class="badge badge-payment"><i class="fas fa-money-bill-wave"></i> ${t('customerReports.paymentBadge', 'سداد')}</span>`;
-                debitVal = item.debit ? formatCurrency(item.debit) : '';
+                paidVal = formatCurrency(item.paid_amount);
             } else if (item.type === 'sales_return') {
                 typeBadge = `<span class="badge badge-sales-return"><i class="fas fa-undo"></i> ${t('customerReports.salesReturnBadge', 'مردود مبيعات')}</span>`;
-                creditVal = item.credit ? formatCurrency(item.credit) : '';
+                totalInvoiceVal = formatCurrency(item.total_amount);
+                paidVal = formatCurrency(0);
+                remainingVal = formatCurrency(item.total_amount);
             } else if (item.type === 'purchase_return') {
                 typeBadge = `<span class="badge badge-purchase-return"><i class="fas fa-undo"></i> ${t('customerReports.purchaseReturnBadge', 'مردود مشتريات')}</span>`;
-                debitVal = item.debit ? formatCurrency(item.debit) : '';
+                totalInvoiceVal = formatCurrency(item.total_amount);
+                paidVal = formatCurrency(0);
+                remainingVal = formatCurrency(item.total_amount);
             }
 
             const rb = item.running_balance;
@@ -306,8 +318,9 @@ async function loadCustomerReport(customerId) {
                 <td>${typeBadge}</td>
                 <td>${docNumberCellHtml}</td>
                 <td class="notes-cell">${item.notes || '—'}</td>
-                <td class="amt-cell"><span class="amount debit">${debitVal}</span></td>
-                <td class="amt-cell"><span class="amount credit">${creditVal}</span></td>
+                <td class="amt-cell">${totalInvoiceVal}</td>
+                <td class="amt-cell">${paidVal}</td>
+                <td class="amt-cell">${remainingVal}</td>
                 <td class="running-bal ${rbClass}">${rbText}</td>
             `;
             customerReportTableBody.appendChild(mainRow);
@@ -319,7 +332,7 @@ async function loadCustomerReport(customerId) {
                 detailRow.dataset.loaded = 'false';
                 detailRow.dataset.detailType = item.type;
                 detailRow.dataset.detailId = String(item.id);
-                detailRow.innerHTML = `<td colspan="8"><div class="items-loading"><i class="fas fa-spinner fa-spin"></i> ${t('customerReports.loadingItems', 'جاري تحميل الأصناف...')}</div></td>`;
+                detailRow.innerHTML = `<td colspan="9"><div class="items-loading"><i class="fas fa-spinner fa-spin"></i> ${t('customerReports.loadingItems', 'جاري تحميل الأصناف...')}</div></td>`;
                 customerReportTableBody.appendChild(detailRow);
             }
         });

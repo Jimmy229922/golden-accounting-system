@@ -1,4 +1,4 @@
-﻿const purchasesState = window.purchasesPageState.createInitialState();
+const purchasesState = window.purchasesPageState.createInitialState();
 const purchasesApi = window.purchasesPageApi;
 const purchasesRender = window.purchasesPageRender;
 const purchasesEvents = window.purchasesPageEvents;
@@ -1669,5 +1669,6 @@ async function resetForm() {
 
     window.history.replaceState({}, document.title, window.location.pathname);
     await loadItems();
+    await loadInvoiceNumberSuggestions();
     await initializeNewInvoice();
 }

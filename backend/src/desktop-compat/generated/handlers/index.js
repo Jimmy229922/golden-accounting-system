@@ -23,6 +23,9 @@ const pettyInspection = require('./pettyInspection');
 const pettyShippingClearance = require('./pettyShippingClearance');
 const pettyOperation = require('./pettyOperation');
 const underCollection = require('./underCollection');
+const remainingUnderCollection = require('./remainingUnderCollection');
+const exportRevenues = require('./exportRevenues');
+const localSales = require('./localSales');
 
 function setupIPC() {
     repairWarehouseNamesEncoding();
@@ -53,6 +56,9 @@ function setupIPC() {
     pettyShippingClearance.register();
     pettyOperation.register();
     underCollection.register();
+    remainingUnderCollection.register();
+    exportRevenues.register();
+    localSales.register();
 }
 
 module.exports = { setupIPC };

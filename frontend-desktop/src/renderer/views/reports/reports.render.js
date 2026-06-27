@@ -166,6 +166,8 @@
                                     <th>${t('reports.tableHeaders.type', 'النوع')}</th>
                                     <th>${t('reports.tableHeaders.customerSupplier', 'العميل / المورد')}</th>
                                     <th>${t('reports.tableHeaders.amount', 'المبلغ')}</th>
+                                    <th>${t('reports.tableHeaders.paid', 'المدفوع')}</th>
+                                    <th>${t('reports.tableHeaders.remaining', 'المتبقي')}</th>
                                     <th>${t('reports.tableHeaders.actions', 'إجراءات')}</th>
                                 </tr>
                             </thead>

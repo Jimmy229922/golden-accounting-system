@@ -30,6 +30,11 @@
                     return;
                 }
 
+                if (action === 'load-next-invoice') {
+                    handlers.onLoadNextInvoice();
+                    return;
+                }
+
                 if (action === 'open-weights') {
                     handlers.onOpenWeights(actionEl);
                     return;

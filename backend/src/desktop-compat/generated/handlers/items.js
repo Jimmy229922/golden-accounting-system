@@ -340,9 +340,9 @@ function register() {
         }
     });
 
-    // Update damaged stock entry (admin only)
+    // Update damaged stock entry
     ipcMain.handle('update-damaged-stock-entry', (event, payload = {}) => {
-        const denied = requirePermission('__admin_only__', 'edit');
+        const denied = requirePermission('inventory', 'edit');
         if (denied) return denied;
 
         const id = Number(payload.id);
@@ -444,7 +444,7 @@ function register() {
 
     // Delete damaged stock entry (admin only + restore quantity)
     ipcMain.handle('delete-damaged-stock-entry', (event, id) => {
-        const denied = requirePermission('__admin_only__', 'delete');
+        const denied = requirePermission('inventory', 'delete');
         if (denied) return denied;
 
         const normalizedId = Number(id);
