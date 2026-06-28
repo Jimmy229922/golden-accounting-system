@@ -232,6 +232,7 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_type TEXT DEFAULT 'amount'", 'purchase_invoices', 'discount_type');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'purchase_invoices', 'discount_value');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_amount REAL DEFAULT 0", 'purchase_invoices', 'discount_amount');
+    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'purchase_invoices', 'created_at');
 
     // 6. Purchase Invoice Details Table (جدول تفاصيل فاتورة المشتريات)
     db.exec(`
@@ -278,6 +279,7 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_type TEXT DEFAULT 'amount'", 'sales_invoices', 'discount_type');
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'sales_invoices', 'discount_value');
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_amount REAL DEFAULT 0", 'sales_invoices', 'discount_amount');
+    runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'sales_invoices', 'created_at');
 
     // 8. Sales Invoice Details Table (جدول تفاصيل فاتورة المبيعات)
     db.exec(`
@@ -315,6 +317,7 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN customer_id INTEGER REFERENCES customers(id)", 'treasury_transactions', 'customer_id');
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id)", 'treasury_transactions', 'supplier_id');
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN voucher_number TEXT", 'treasury_transactions', 'voucher_number');
+    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'treasury_transactions', 'created_at');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS petty_expenses (
@@ -530,66 +533,6 @@ function initDB() {
         // Column likely exists
     }
 
-    // 15. Sales Returns Table (جدول مردودات المبيعات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS sales_returns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_number TEXT,
-            original_invoice_id INTEGER NOT NULL,
-            customer_id INTEGER NOT NULL,
-            return_date TEXT DEFAULT CURRENT_DATE,
-            total_amount REAL DEFAULT 0,
-            notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (original_invoice_id) REFERENCES sales_invoices(id),
-            FOREIGN KEY (customer_id) REFERENCES customers(id)
-        )
-    `);
-
-    // 16. Sales Return Details Table (جدول تفاصيل مردودات المبيعات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS sales_return_details (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_id INTEGER NOT NULL,
-            item_id INTEGER NOT NULL,
-            quantity REAL NOT NULL,
-            price REAL NOT NULL,
-            total_price REAL NOT NULL,
-            FOREIGN KEY (return_id) REFERENCES sales_returns(id) ON DELETE CASCADE,
-            FOREIGN KEY (item_id) REFERENCES items(id)
-        )
-    `);
-
-    // 17. Purchase Returns Table (جدول مردودات المشتريات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS purchase_returns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_number TEXT,
-            original_invoice_id INTEGER NOT NULL,
-            supplier_id INTEGER NOT NULL,
-            return_date TEXT DEFAULT CURRENT_DATE,
-            total_amount REAL DEFAULT 0,
-            notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (original_invoice_id) REFERENCES purchase_invoices(id),
-            FOREIGN KEY (supplier_id) REFERENCES customers(id)
-        )
-    `);
-
-    // 18. Purchase Return Details Table (جدول تفاصيل مردودات المشتريات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS purchase_return_details (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_id INTEGER NOT NULL,
-            item_id INTEGER NOT NULL,
-            quantity REAL NOT NULL,
-            price REAL NOT NULL,
-            total_price REAL NOT NULL,
-            FOREIGN KEY (return_id) REFERENCES purchase_returns(id) ON DELETE CASCADE,
-            FOREIGN KEY (item_id) REFERENCES items(id)
-        )
-    `);
-
     // 19. User Permissions Table (جدول صلاحيات المستخدمين)
     db.exec(`
         CREATE TABLE IF NOT EXISTS user_permissions (
@@ -655,14 +598,6 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_customer_id ON local_sales(customer_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_period_end_at ON sales_shift_closings(period_end_at)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_created_at ON sales_shift_closings(created_at)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_returns_customer_id ON sales_returns(customer_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_returns_original_invoice_id ON sales_returns(original_invoice_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_return_details_return_id ON sales_return_details(return_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_return_details_item_id ON sales_return_details(item_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_returns_supplier_id ON purchase_returns(supplier_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_returns_original_invoice_id ON purchase_returns(original_invoice_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_return_details_return_id ON purchase_return_details(return_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_return_details_item_id ON purchase_return_details(item_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_opening_balances_item_id ON opening_balances(item_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_opening_balances_warehouse_id ON opening_balances(warehouse_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_user_permissions_user_id ON user_permissions(user_id)`);
@@ -774,72 +709,6 @@ function initDB() {
           )
         BEGIN
             SELECT RAISE(ABORT, 'duplicate purchase invoice number');
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_sales_return_number_unique_insert
-        BEFORE INSERT ON sales_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM sales_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate sales return number');
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_sales_return_number_unique_update
-        BEFORE UPDATE OF return_number ON sales_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM sales_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-                AND id <> OLD.id
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate sales return number');
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_purchase_return_number_unique_insert
-        BEFORE INSERT ON purchase_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM purchase_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate purchase return number');
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_purchase_return_number_unique_update
-        BEFORE UPDATE OF return_number ON purchase_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM purchase_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-                AND id <> OLD.id
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate purchase return number');
         END
     `);
 

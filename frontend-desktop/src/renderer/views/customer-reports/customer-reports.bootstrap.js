@@ -28,6 +28,50 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function getVisibleStatementEffect(item) {
+    if (!item) return 0;
+    if (item.type === 'sales') {
+        return (Number(item.total_amount) - Number(item.paid_amount)) || 0;
+    }
+    if (item.type === 'purchase') {
+        return -((Number(item.total_amount) - Number(item.paid_amount)) || 0);
+    }
+    if (item.type === 'payment_in') {
+        return -(Number(item.paid_amount) || 0);
+    }
+    if (item.type === 'payment_out') {
+        return Number(item.paid_amount) || 0;
+    }
+    return 0;
+}
+
+function buildVisibleStatementData(transactions, totals) {
+    const safeTotals = totals || {};
+    const visibleTransactions = (Array.isArray(transactions) ? transactions : [])
+        .map((item) => ({ ...item }));
+
+    const visibleTotals = {
+        ...safeTotals,
+        totalSales: visibleTransactions.filter((item) => item.type === 'sales').reduce((sum, item) => sum + Number(item.total_amount || 0), 0),
+        totalPurchases: visibleTransactions.filter((item) => item.type === 'purchase').reduce((sum, item) => sum + Number(item.total_amount || 0), 0),
+        totalPaymentsIn: visibleTransactions.filter((item) => item.type === 'payment_in').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0)
+            + visibleTransactions.filter((item) => item.type === 'sales').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0),
+        totalPaymentsOut: visibleTransactions.filter((item) => item.type === 'payment_out').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0)
+            + visibleTransactions.filter((item) => item.type === 'purchase').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0),
+        totalSalesReturns: 0,
+        totalPurchaseReturns: 0
+    };
+
+    let runningBalance = Number(visibleTotals.openingBalance) || 0;
+    visibleTransactions.forEach((item) => {
+        runningBalance += getVisibleStatementEffect(item);
+        item.running_balance = runningBalance;
+    });
+    visibleTotals.closingBalance = runningBalance;
+
+    return { transactions: visibleTransactions, totals: visibleTotals };
+}
+
 function buildTopNavHTML() {
     return '';
 }
@@ -188,14 +232,15 @@ async function loadCustomerReport(customerId) {
         return;
     }
 
-    const { transactions, totals } = result;
+    const visibleStatement = buildVisibleStatementData(result.transactions, result.totals);
+    const { transactions, totals } = visibleStatement;
 
     totalSalesEl.textContent = formatCurrency(totals.totalSales);
     totalPurchasesEl.textContent = formatCurrency(totals.totalPurchases);
     totalReceiptsEl.textContent = formatCurrency(totals.totalPaymentsIn);
     totalPaymentsOutEl.textContent = formatCurrency(totals.totalPaymentsOut);
-    totalSalesReturnsEl.textContent = formatCurrency(totals.totalSalesReturns);
-    totalPurchaseReturnsEl.textContent = formatCurrency(totals.totalPurchaseReturns);
+    if (totalSalesReturnsEl) totalSalesReturnsEl.textContent = formatCurrency(totals.totalSalesReturns);
+    if (totalPurchaseReturnsEl) totalPurchaseReturnsEl.textContent = formatCurrency(totals.totalPurchaseReturns);
 
     const selectedOption = customerSelect.options[customerSelect.selectedIndex];
     document.getElementById('printCustomerName').textContent = selectedOption ? selectedOption.textContent : '—';
@@ -269,7 +314,7 @@ async function loadCustomerReport(customerId) {
             let paidVal = '—';
             let remainingVal = '—';
 
-            const hasDetails = ['sales', 'purchase', 'sales_return', 'purchase_return'].includes(item.type);
+            const hasDetails = ['sales', 'purchase'].includes(item.type);
             const rowId = `items-${idx}`;
 
             if (item.type === 'sales') {
@@ -288,16 +333,6 @@ async function loadCustomerReport(customerId) {
             } else if (item.type === 'payment_out') {
                 typeBadge = `<span class="badge badge-payment"><i class="fas fa-money-bill-wave"></i> ${t('customerReports.paymentBadge', 'سداد')}</span>`;
                 paidVal = formatCurrency(item.paid_amount);
-            } else if (item.type === 'sales_return') {
-                typeBadge = `<span class="badge badge-sales-return"><i class="fas fa-undo"></i> ${t('customerReports.salesReturnBadge', 'مردود مبيعات')}</span>`;
-                totalInvoiceVal = formatCurrency(item.total_amount);
-                paidVal = formatCurrency(0);
-                remainingVal = formatCurrency(item.total_amount);
-            } else if (item.type === 'purchase_return') {
-                typeBadge = `<span class="badge badge-purchase-return"><i class="fas fa-undo"></i> ${t('customerReports.purchaseReturnBadge', 'مردود مشتريات')}</span>`;
-                totalInvoiceVal = formatCurrency(item.total_amount);
-                paidVal = formatCurrency(0);
-                remainingVal = formatCurrency(item.total_amount);
             }
 
             const rb = item.running_balance;
@@ -356,8 +391,8 @@ async function loadCustomerReport(customerId) {
         <span class="bf-value ${balClass}">${balText} ${balLabel}</span>
     `;
 
-    const totalDebit = totals.totalSales + totals.totalPaymentsOut + totals.totalPurchaseReturns;
-    const totalCredit = totals.totalPurchases + totals.totalPaymentsIn + totals.totalSalesReturns;
+    const totalDebit = totals.totalSales + totals.totalPaymentsOut;
+    const totalCredit = totals.totalPurchases + totals.totalPaymentsIn;
     const netMovement = totalDebit - totalCredit;
     document.getElementById('summaryDebit').textContent = formatCurrency(totalDebit);
     document.getElementById('summaryCredit').textContent = formatCurrency(totalCredit);
@@ -444,83 +479,6 @@ async function deleteTransaction(id) {
 
     try {
         const result = await window.electronAPI.deleteTreasuryTransaction(id);
-        if (result.success) {
-            notifyCustomerReports(t('customerReports.deleteSuccess', 'تم الحذف بنجاح'), 'success');
-            const customerId = document.getElementById('customerSelect').value;
-            if (customerId) loadCustomerReport(customerId);
-        } else {
-            notifyCustomerReports(fmt(t('customerReports.deleteError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
-        }
-    } catch (error) {
-        console.error(error);
-        notifyCustomerReports(t('customerReports.unexpectedError', 'حدث خطأ غير متوقع'), 'error');
-    }
-}
-
-function editInvoice(id, type) {
-    if (type === 'sales') {
-        const target = `../sales/index.html?editId=${id}`;
-        if (!window.__navigateWithinShell || !window.__navigateWithinShell(target)) {
-            window.location.href = target;
-        }
-    } else if (type === 'purchase') {
-        const target = `../purchases/index.html?editId=${id}`;
-        if (!window.__navigateWithinShell || !window.__navigateWithinShell(target)) {
-            window.location.href = target;
-        }
-    }
-}
-
-async function deleteInvoice(id, type) {
-    const confirmed = typeof window.showConfirmDialog === 'function'
-        ? await window.showConfirmDialog(t('customerReports.deleteInvoiceConfirm', 'هل أنت متأكد من حذف هذه الفاتورة؟ سيتم إلغاء جميع التأثيرات المالية والمخزنية.'))
-        : false;
-    if (!confirmed) return;
-
-    try {
-        const result = await window.electronAPI.deleteInvoice(id, type);
-        if (result.success) {
-            notifyCustomerReports(t('customerReports.deleteSuccess', 'تم الحذف بنجاح'), 'success');
-            const customerId = document.getElementById('customerSelect').value;
-            if (customerId) loadCustomerReport(customerId);
-        } else {
-            notifyCustomerReports(fmt(t('customerReports.deleteError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
-        }
-    } catch (error) {
-        console.error('Error deleting invoice:', error);
-        notifyCustomerReports(t('customerReports.unexpectedError', 'حدث خطأ غير متوقع'), 'error');
-    }
-}
-
-async function deleteSalesReturn(id) {
-    const confirmed = typeof window.showConfirmDialog === 'function'
-        ? await window.showConfirmDialog(t('customerReports.deleteReturnConfirm', 'هل أنت متأكد من حذف هذا المرتجع؟'))
-        : false;
-    if (!confirmed) return;
-
-    try {
-        const result = await window.electronAPI.deleteSalesReturn(id);
-        if (result.success) {
-            notifyCustomerReports(t('customerReports.deleteSuccess', 'تم الحذف بنجاح'), 'success');
-            const customerId = document.getElementById('customerSelect').value;
-            if (customerId) loadCustomerReport(customerId);
-        } else {
-            notifyCustomerReports(fmt(t('customerReports.deleteError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
-        }
-    } catch (error) {
-        console.error(error);
-        notifyCustomerReports(t('customerReports.unexpectedError', 'حدث خطأ غير متوقع'), 'error');
-    }
-}
-
-async function deletePurchaseReturn(id) {
-    const confirmed = typeof window.showConfirmDialog === 'function'
-        ? await window.showConfirmDialog(t('customerReports.deleteReturnConfirm', 'هل أنت متأكد من حذف هذا المرتجع؟'))
-        : false;
-    if (!confirmed) return;
-
-    try {
-        const result = await window.electronAPI.deletePurchaseReturn(id);
         if (result.success) {
             notifyCustomerReports(t('customerReports.deleteSuccess', 'تم الحذف بنجاح'), 'success');
             const customerId = document.getElementById('customerSelect').value;
@@ -638,7 +596,8 @@ window.saveSummaryPDF = async () => {
     else if (startDate) periodText = `من ${startDate}`;
     else if (endDate) periodText = `حتى ${endDate}`;
 
-    const { transactions, totals } = detailedResult;
+    const visibleStatement = buildVisibleStatementData(detailedResult.transactions, detailedResult.totals);
+    const { transactions, totals } = visibleStatement;
     const printDate = new Date().toLocaleDateString('ar-EG');
 
     // Company info
@@ -655,9 +614,7 @@ window.saveSummaryPDF = async () => {
         sales: t('customerReports.salesBadge', 'مبيعات'),
         purchase: t('customerReports.purchaseBadge', 'مشتريات'),
         payment_in: t('customerReports.receiptBadge', 'تحصيل'),
-        payment_out: t('customerReports.paymentBadge', 'سداد'),
-        sales_return: t('customerReports.salesReturnBadge', 'مردود مبيعات'),
-        purchase_return: t('customerReports.purchaseReturnBadge', 'مردود مشتريات')
+        payment_out: t('customerReports.paymentBadge', 'سداد')
     };
 
     // Build table rows
@@ -685,10 +642,10 @@ window.saveSummaryPDF = async () => {
     for (const trans of transactions) {
         idx++;
         const typeLabel = typeLabels[trans.type] || trans.type;
-        const invoiceTotal = (trans.type === 'sales' || trans.type === 'payment_out' || trans.type === 'purchase_return')
+        const invoiceTotal = (trans.type === 'sales' || trans.type === 'payment_out')
             ? formatCurrency(trans.total_amount)
             : '';
-        const paymentAmount = (trans.type === 'purchase' || trans.type === 'payment_in' || trans.type === 'sales_return')
+        const paymentAmount = (trans.type === 'purchase' || trans.type === 'payment_in')
             ? formatCurrency(trans.total_amount)
             : '';
 
@@ -721,8 +678,8 @@ window.saveSummaryPDF = async () => {
             : 'summary-cell-balance-neutral';
 
     // Summary totals
-    const totalDebit = totals.totalSales + totals.totalPaymentsOut + totals.totalPurchaseReturns;
-    const totalCredit = totals.totalPurchases + totals.totalPaymentsIn + totals.totalSalesReturns;
+    const totalDebit = totals.totalSales + totals.totalPaymentsOut;
+    const totalCredit = totals.totalPurchases + totals.totalPaymentsIn;
 
     // Build full summary print HTML
     const summaryHtml = `
@@ -831,9 +788,7 @@ function buildSummaryItemsSection(result, t) {
 
     const sections = [
         { key: 'salesItems', title: t('customerReports.summaryItemsSales', 'أصناف المبيعات'), color: '#059669', icon: 'fa-shopping-cart' },
-        { key: 'purchaseItems', title: t('customerReports.summaryItemsPurchases', 'أصناف المشتريات'), color: '#d97706', icon: 'fa-shopping-bag' },
-        { key: 'salesReturnItems', title: t('customerReports.summaryItemsSalesReturns', 'أصناف مردودات المبيعات'), color: '#9333ea', icon: 'fa-undo' },
-        { key: 'purchaseReturnItems', title: t('customerReports.summaryItemsPurchaseReturns', 'أصناف مردودات المشتريات'), color: '#0d9488', icon: 'fa-undo' }
+        { key: 'purchaseItems', title: t('customerReports.summaryItemsPurchases', 'أصناف المشتريات'), color: '#d97706', icon: 'fa-shopping-bag' }
     ];
 
     sections.forEach((section, sectionIndex) => {

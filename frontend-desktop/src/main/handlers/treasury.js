@@ -48,6 +48,22 @@ function getCurrentTreasuryBalance() {
     return income - expense;
 }
 
+function normalizeTreasuryType(type) {
+    const normalizedType = String(type || '').trim();
+    return normalizedType === 'income' || normalizedType === 'expense' ? normalizedType : null;
+}
+
+function normalizeTreasuryAmount(amount) {
+    const normalizedAmount = Number(amount);
+    return Number.isFinite(normalizedAmount) && normalizedAmount > 0 ? normalizedAmount : null;
+}
+
+function normalizeTreasuryCustomerId(customerId) {
+    if (customerId === null || customerId === undefined || String(customerId).trim() === '') return null;
+    const normalizedCustomerId = Number(customerId);
+    return Number.isFinite(normalizedCustomerId) && normalizedCustomerId > 0 ? normalizedCustomerId : null;
+}
+
 function register() {
     // --- Treasury Handlers ---
 
@@ -86,22 +102,32 @@ function register() {
         if (denied) return denied;
         try {
             const { type, amount, date, description, customer_id } = transaction;
-            const related_type = shouldDeferCustomerCollection(transaction)
-                ? CUSTOMER_COLLECTION_PENDING_RELATED_TYPE
-                : null;
-            const voucher_number = getNextTreasuryVoucherNumberForType(type);
-            if (!voucher_number) {
-                return { success: false, error: 'Invalid treasury transaction type' };
+            const normalizedType = normalizeTreasuryType(type);
+            if (!normalizedType) {
+                return { success: false, error: 'نوع حركة الخزينة غير صالح.' };
             }
 
-            if (type === 'expense') {
+            const normalizedAmount = normalizeTreasuryAmount(amount);
+            if (normalizedAmount === null) {
+                return { success: false, error: 'مبلغ حركة الخزينة يجب أن يكون أكبر من صفر.' };
+            }
+
+            const normalizedCustomerId = normalizeTreasuryCustomerId(customer_id);
+            const related_type = shouldDeferCustomerCollection({ ...transaction, type: normalizedType, customer_id: normalizedCustomerId })
+                ? CUSTOMER_COLLECTION_PENDING_RELATED_TYPE
+                : null;
+            const voucher_number = getNextTreasuryVoucherNumberForType(normalizedType);
+            if (!voucher_number) {
+                return { success: false, error: 'نوع حركة الخزينة غير صالح.' };
+            }
+
+            if (normalizedType === 'expense') {
                 const currentBalance = getCurrentTreasuryBalance();
                 if (currentBalance <= 0) {
                     return { success: false, error: 'لا يمكن تسجيل حركة سحب لأن رصيد الخزينة الحالي يساوي صفر.' };
                 }
 
-                const expenseAmount = Number(amount) || 0;
-                if (expenseAmount > currentBalance) {
+                if (normalizedAmount > currentBalance) {
                     return { success: false, error: 'لا يمكن تسجيل حركة سحب لأن قيمة السحب أكبر من الرصيد المتاح في الخزينة.' };
                 }
             }
@@ -118,10 +144,10 @@ function register() {
             `);
 
             const tx = db.transaction(() => {
-                stmt.run({ type, amount, date, description, customer_id, voucher_number, related_type });
+                stmt.run({ type: normalizedType, amount: normalizedAmount, date, description, customer_id: normalizedCustomerId, voucher_number, related_type });
                 
-                if (customer_id) {
-                    updateBalance.run({ amount: type === 'expense' ? amount : -amount, id: customer_id });
+                if (normalizedCustomerId) {
+                    updateBalance.run({ amount: normalizedType === 'expense' ? normalizedAmount : -normalizedAmount, id: normalizedCustomerId });
                 }
             });
 
@@ -137,12 +163,23 @@ function register() {
         if (denied) return denied;
         try {
             const { id, type } = transaction;
+            const normalizedType = normalizeTreasuryType(type);
+            if (!normalizedType) {
+                return { success: false, error: 'نوع حركة الخزينة غير صالح.' };
+            }
+
+            const normalizedAmount = normalizeTreasuryAmount(transaction.amount);
+            if (normalizedAmount === null) {
+                return { success: false, error: 'مبلغ حركة الخزينة يجب أن يكون أكبر من صفر.' };
+            }
+
+            const normalizedCustomerId = normalizeTreasuryCustomerId(transaction.customer_id);
             const existing = db.prepare('SELECT * FROM treasury_transactions WHERE id = ?').get(id);
             if (!existing) {
                 return { success: false, error: 'الحركة المطلوب تعديلها غير موجودة.' };
             }
 
-            if (type === 'expense') {
+            if (normalizedType === 'expense') {
                 let balanceBeforeUpdate = getCurrentTreasuryBalance();
                 if (existing.type === 'expense') {
                     balanceBeforeUpdate += Number(existing.amount) || 0;
@@ -154,8 +191,7 @@ function register() {
                     return { success: false, error: 'لا يمكن تسجيل حركة سحب لأن رصيد الخزينة الحالي يساوي صفر.' };
                 }
 
-                const expenseAmount = Number(transaction.amount) || 0;
-                if (expenseAmount > balanceBeforeUpdate) {
+                if (normalizedAmount > balanceBeforeUpdate) {
                     return { success: false, error: 'لا يمكن تسجيل حركة سحب لأن قيمة السحب أكبر من الرصيد المتاح في الخزينة.' };
                 }
             }
@@ -179,11 +215,11 @@ function register() {
                 }
 
                 // 2. Update transaction
-                stmt.run(transaction);
+                stmt.run({ ...transaction, type: normalizedType, amount: normalizedAmount, customer_id: normalizedCustomerId });
 
                 // 3. Apply new balance effect
-                if (transaction.customer_id) {
-                    updateBalance.run({ amount: type === 'expense' ? transaction.amount : -transaction.amount, id: transaction.customer_id });
+                if (normalizedCustomerId) {
+                    updateBalance.run({ amount: normalizedType === 'expense' ? normalizedAmount : -normalizedAmount, id: normalizedCustomerId });
                 }
             });
 
@@ -212,9 +248,10 @@ function register() {
         const tx = db.transaction(() => {
             const trans = getTrans.get(id);
             if (!trans) return; // Already deleted
+            const isInvoiceLinked = trans.related_invoice_id && (trans.related_type === 'sales' || trans.related_type === 'purchase');
 
             // Handle Direct Payments (linked via customer_id)
-            if (trans.customer_id) {
+            if (trans.customer_id && !isInvoiceLinked) {
                 // When payment was added, we subtracted amount from balance.
                 // Now we add it back.
                 updateCustomer.run({ amount: trans.type === 'expense' ? -trans.amount : trans.amount, id: trans.customer_id });

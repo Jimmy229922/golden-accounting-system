@@ -284,6 +284,9 @@ async function initializeNewInvoice() {
     purchasesState.isEditLocked = false;
     setEditLocked(false);
     purchasesState.originalInvoiceItemTotalsByItemId = {};
+    if (purchasesState.dom.invoiceDateInput) {
+        purchasesState.dom.invoiceDateInput.valueAsDate = new Date();
+    }
     const nextId = await purchasesApi.getNextInvoiceNumber();
     const invoiceNumberInput = document.getElementById('invoiceNumber');
     if (invoiceNumberInput) {

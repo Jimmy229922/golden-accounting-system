@@ -15,8 +15,6 @@ const settings = require('./settings');
 const invoices = require('./invoices');
 const reports = require('./reports');
 const backup = require('./backup');
-const salesReturns = require('./salesReturns');
-const purchaseReturns = require('./purchaseReturns');
 const pettyExpenses = require('./pettyExpenses');
 const pettyBags = require('./pettyBags');
 const pettyInspection = require('./pettyInspection');
@@ -48,8 +46,6 @@ function setupIPC() {
     invoices.register();
     reports.register();
     backup.register();
-    salesReturns.register();
-    purchaseReturns.register();
     pettyExpenses.register();
     pettyBags.register();
     pettyInspection.register();

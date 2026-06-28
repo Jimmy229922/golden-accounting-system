@@ -29,7 +29,6 @@
                     <a href="#">${t('common.nav.sales')}</a>
                     <div class="dropdown-content">
                         <a href="../sales/index.html">${t('common.nav.salesInvoice')}</a>
-                        <a href="../sales-returns/index.html">${t('common.nav.salesReturns')}</a>
                     </div>
                 </li>
                 <li class="dropdown">

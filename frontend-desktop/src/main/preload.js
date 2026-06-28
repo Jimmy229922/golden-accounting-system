@@ -244,24 +244,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Summary Statement
     getCustomerSummaryStatement: (params) => invokeChannel('get-customer-summary-statement', params),
 
-    // Sales Returns API
-    getSalesReturns: () => invokeChannel('get-sales-returns'),
-    getCustomerSalesInvoices: (customerId) => invokeChannel('get-customer-sales-invoices', customerId),
-    getInvoiceItemsForReturn: (invoiceId, type) => invokeChannel('get-invoice-items-for-return', { invoiceId, type }),
-    saveSalesReturn: (data) => invokeChannel('save-sales-return', data),
-    updateSalesReturn: (data) => invokeChannel('update-sales-return', data),
-    deleteSalesReturn: (id) => invokeChannel('delete-sales-return', id),
-
-    // Purchase Returns API
-    getPurchaseReturns: () => invokeChannel('get-purchase-returns'),
-    getSupplierPurchaseInvoices: (supplierId) => invokeChannel('get-supplier-purchase-invoices', supplierId),
-    savePurchaseReturn: (data) => invokeChannel('save-purchase-return', data),
-    updatePurchaseReturn: (data) => invokeChannel('update-purchase-return', data),
-    deletePurchaseReturn: (id) => invokeChannel('delete-purchase-return', id),
-
-    // Invoice & Return Details API (for Global Search)
+    // Invoice Details API (for Global Search)
     getSalesInvoiceDetails: (invoiceId) => invokeChannel('get-sales-invoice-details', invoiceId),
-    getPurchaseInvoiceDetails: (invoiceId) => invokeChannel('get-purchase-invoice-details', invoiceId),
-    getSalesReturnDetails: (returnId) => invokeChannel('get-sales-return-details', returnId),
-    getPurchaseReturnDetails: (returnId) => invokeChannel('get-purchase-return-details', returnId)
+    getPurchaseInvoiceDetails: (invoiceId) => invokeChannel('get-purchase-invoice-details', invoiceId)
 });

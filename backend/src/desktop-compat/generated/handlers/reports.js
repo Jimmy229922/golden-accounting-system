@@ -252,7 +252,8 @@ function register() {
                     i.${numCol} as invoice_number,
                     i.${dateCol} as invoice_date,
                     i.total_amount,
-                    c.name as customer_name
+                    c.name as customer_name,
+                    i.created_at
                 FROM ${table} i
                 LEFT JOIN customers c ON i.${joinCol} = c.id
                 WHERE 1=1
@@ -293,7 +294,8 @@ function register() {
                     t.voucher_number as invoice_number,
                     t.transaction_date as invoice_date,
                     t.amount as total_amount,
-                    c.name as customer_name
+                    c.name as customer_name,
+                    t.created_at
                 FROM treasury_transactions t
                 LEFT JOIN customers c ON t.customer_id = c.id
                 WHERE t.type = '${treasuryType}' AND t.customer_id IS NOT NULL
@@ -319,7 +321,7 @@ function register() {
 
         if (queries.length === 0) return [];
 
-        const finalQuery = queries.join(' UNION ALL ') + ' ORDER BY invoice_date ASC';
+        const finalQuery = queries.join(' UNION ALL ') + ' ORDER BY created_at DESC, id DESC';
         
         return db.prepare(finalQuery).all({ startDate, endDate, customerId });
         } catch (error) {

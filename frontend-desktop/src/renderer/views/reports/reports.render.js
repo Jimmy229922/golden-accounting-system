@@ -65,22 +65,6 @@
                         </div>
                     </article>
 
-                    <article class="summary-card card-sales-return">
-                        <div class="sc-icon"><i class="fas fa-undo"></i></div>
-                        <div>
-                            <div class="sc-label">${t('reports.summary.salesReturnCount', 'مردودات المبيعات')}</div>
-                            <div class="sc-value" id="salesReturnCount">0</div>
-                        </div>
-                    </article>
-
-                    <article class="summary-card card-purchase-return">
-                        <div class="sc-icon"><i class="fas fa-undo"></i></div>
-                        <div>
-                            <div class="sc-label">${t('reports.summary.purchaseReturnCount', 'مردودات المشتريات')}</div>
-                            <div class="sc-value" id="purchaseReturnCount">0</div>
-                        </div>
-                    </article>
-
                     <article class="summary-card card-receipt">
                         <div class="sc-icon"><i class="fas fa-hand-holding-usd"></i></div>
                         <div>
@@ -111,8 +95,6 @@
                                 <option value="all">${t('reports.allTypes', 'الكل')}</option>
                                 <option value="sales">${t('reports.salesType', 'مبيعات')}</option>
                                 <option value="purchase">${t('reports.purchaseType', 'مشتريات')}</option>
-                                <option value="sales_return">${t('reports.salesReturnType', 'مردودات مبيعات')}</option>
-                                <option value="purchase_return">${t('reports.purchaseReturnType', 'مردودات مشتريات')}</option>
                                 <option value="receipt">${t('reports.receiptType', 'سندات تحصيل')}</option>
                                 <option value="payment">${t('reports.paymentType', 'سندات سداد')}</option>
                             </select>

@@ -99,20 +99,6 @@
                             <div class="sc-value" id="totalPaymentsOut">0.00</div>
                         </div>
                     </div>
-                    <div class="summary-card">
-                        <div class="sc-icon sales-return"><i class="fas fa-undo"></i></div>
-                        <div>
-                            <div class="sc-label">${t('customerReports.totalSalesReturns', 'مردودات المبيعات')}</div>
-                            <div class="sc-value" id="totalSalesReturns">0.00</div>
-                        </div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="sc-icon purchase-return"><i class="fas fa-undo"></i></div>
-                        <div>
-                            <div class="sc-label">${t('customerReports.totalPurchaseReturns', 'مردودات المشتريات')}</div>
-                            <div class="sc-value" id="totalPurchaseReturns">0.00</div>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="table-card">

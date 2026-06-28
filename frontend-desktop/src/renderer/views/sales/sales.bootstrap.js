@@ -757,6 +757,9 @@ async function initializeNewInvoice() {
     salesState.isEditLocked = false;
     setEditLocked(false);
     salesState.originalInvoiceItemTotalsByItemId = {};
+    if (salesState.dom.invoiceDateInput) {
+        salesState.dom.invoiceDateInput.valueAsDate = new Date();
+    }
     const nextId = await salesApi.getNextInvoiceNumber();
     const invoiceNumberInput = document.getElementById('invoiceNumber');
     if (invoiceNumberInput) {

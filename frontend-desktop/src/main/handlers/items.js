@@ -522,44 +522,6 @@ function register() {
                 ORDER BY si.invoice_date DESC
             `).all(itemId);
 
-            // حركات مرتجعات المبيعات (وارد)
-            const salesReturns = db.prepare(`
-                SELECT 
-                    srd.id,
-                    CAST(sr.id AS TEXT) as invoice_number,
-                    sr.return_date as date,
-                    c.name as party_name,
-                    srd.quantity,
-                    srd.price,
-                    (srd.quantity * srd.price) as total_price,
-                    'sales_return' as type,
-                    'وارد - مرتجع مبيعات' as type_label
-                FROM sales_return_details srd
-                JOIN sales_returns sr ON srd.return_id = sr.id
-                LEFT JOIN customers c ON sr.customer_id = c.id
-                WHERE srd.item_id = ?
-                ORDER BY sr.return_date DESC
-            `).all(itemId);
-
-            // حركات مرتجعات المشتريات (صادر)
-            const purchaseReturns = db.prepare(`
-                SELECT 
-                    prd.id,
-                    CAST(pr.id AS TEXT) as invoice_number,
-                    pr.return_date as date,
-                    c.name as party_name,
-                    prd.quantity,
-                    prd.price,
-                    (prd.quantity * prd.price) as total_price,
-                    'purchase_return' as type,
-                    'صادر - مرتجع مشتريات' as type_label
-                FROM purchase_return_details prd
-                JOIN purchase_returns pr ON prd.return_id = pr.id
-                LEFT JOIN customers c ON pr.supplier_id = c.id
-                WHERE prd.item_id = ?
-                ORDER BY pr.return_date DESC
-            `).all(itemId);
-
             // حركات بضاعة أول المدة (رصيد افتتاحي)
             const openingBalances = db.prepare(`
                 SELECT 
@@ -596,7 +558,7 @@ function register() {
             `).all(itemId);
 
             // دمج جميع الحركات وترتيبها بالتاريخ
-            const allMovements = [...purchases, ...sales, ...salesReturns, ...purchaseReturns, ...openingBalances, ...damagedMovements]
+            const allMovements = [...purchases, ...sales, ...openingBalances, ...damagedMovements]
                 .sort((a, b) => new Date(b.date) - new Date(a.date));
 
             // حساب الإحصائيات
@@ -683,44 +645,6 @@ function register() {
         if (startDate) { salesQuery += ' AND si.invoice_date >= ?'; salesParams.push(startDate); }
         if (endDate) { salesQuery += ' AND si.invoice_date <= ?'; salesParams.push(endDate); }
 
-        // sales returns (in)
-        let srQuery = `
-            SELECT 
-                'sales_return' as type,
-                sr.return_date as date,
-                CAST(sr.id AS TEXT) as ref,
-                srd.quantity as qty_in,
-                0 as qty_out,
-                srd.price as price,
-                c.name as party
-            FROM sales_return_details srd
-            JOIN sales_returns sr ON srd.return_id = sr.id
-            LEFT JOIN customers c ON sr.customer_id = c.id
-            WHERE srd.item_id = ?
-        `;
-        const srParams = [itemId];
-        if (startDate) { srQuery += ' AND sr.return_date >= ?'; srParams.push(startDate); }
-        if (endDate) { srQuery += ' AND sr.return_date <= ?'; srParams.push(endDate); }
-
-        // purchase returns (out)
-        let prQuery = `
-            SELECT 
-                'purchase_return' as type,
-                pr.return_date as date,
-                CAST(pr.id AS TEXT) as ref,
-                0 as qty_in,
-                prd.quantity as qty_out,
-                prd.price as price,
-                c.name as party
-            FROM purchase_return_details prd
-            JOIN purchase_returns pr ON prd.return_id = pr.id
-            LEFT JOIN customers c ON pr.supplier_id = c.id
-            WHERE prd.item_id = ?
-        `;
-        const prParams = [itemId];
-        if (startDate) { prQuery += ' AND pr.return_date >= ?'; prParams.push(startDate); }
-        if (endDate) { prQuery += ' AND pr.return_date <= ?'; prParams.push(endDate); }
-
         // damaged stock (out)
         let damagedQuery = `
             SELECT
@@ -740,11 +664,9 @@ function register() {
 
         const purchases = db.prepare(purchaseQuery).all(...purchaseParams);
         const sales = db.prepare(salesQuery).all(...salesParams);
-        const salesReturns = db.prepare(srQuery).all(...srParams);
-        const purchaseReturns = db.prepare(prQuery).all(...prParams);
         const damaged = db.prepare(damagedQuery).all(...damagedParams);
 
-        const allTx = [...purchases, ...sales, ...salesReturns, ...purchaseReturns, ...damaged]
+        const allTx = [...purchases, ...sales, ...damaged]
             .sort((a, b) => new Date(a.date) - new Date(b.date));
 
         let balance = openingQty;

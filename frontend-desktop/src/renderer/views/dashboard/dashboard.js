@@ -357,10 +357,6 @@ window.showNetProfitDetails = function() {
                         <span style="color: var(--text-muted, #cbd5e1)">إجمالي الفواتير:</span>
                         <strong style="color: var(--text-color, #fff)">${m(p.salesTotalMonth)}</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color:#ef4444">- مردودات (مرتجعات):</span>
-                        <strong style="color: #ef4444">${m(p.salesReturnsTotalMonth)}</strong>
-                    </div>
                     <div style="display: flex; justify-content: space-between; margin-top: 10px; border-top: 1px dashed var(--border-color, rgba(255,255,255,0.1)); padding-top: 10px;">
                         <span style="color:#0ea5e9; font-weight:bold;">= صافي المبيعات:</span>
                         <strong style="color: #0ea5e9; font-size: 1.1rem;">${m(p.salesMonth)}</strong>
@@ -372,10 +368,6 @@ window.showNetProfitDetails = function() {
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span style="color: var(--text-muted, #cbd5e1)">تكلفة البضاعة الخارجة:</span>
                         <strong style="color: var(--text-color, #fff)">${m(p.cogsMonthSales)}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color:#10b981">- تكلفة المرتجعات:</span>
-                        <strong style="color: #10b981">${m(p.cogsMonthReturns)}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-top: 10px; border-top: 1px dashed var(--border-color, rgba(255,255,255,0.1)); padding-top: 10px;">
                         <span style="color:#f59e0b; font-weight:bold;">= التكلفة الفعلية (المخصومة):</span>

@@ -192,6 +192,13 @@ function register() {
         const denied = requirePermission('purchases', 'add');
         if (denied) return denied;
         const { supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount } = invoiceData;
+        const trimmedInvoiceNumber = String(invoice_number || '').trim();
+        if (trimmedInvoiceNumber) {
+            const duplicateInvoice = db.prepare('SELECT id FROM purchase_invoices WHERE TRIM(invoice_number) = TRIM(?) LIMIT 1').get(trimmedInvoiceNumber);
+            if (duplicateInvoice) {
+                return { success: false, error: 'رقم فاتورة الشراء موجود مسبقًا. يرجى إدخال رقم مختلف.' };
+            }
+        }
 
         const normalizedItems = normalizePurchaseItems(items);
         let rawSubtotalAmount = 0;
@@ -224,11 +231,6 @@ function register() {
             SET stock_quantity = stock_quantity + @quantity,
                 cost_price = @cost_price 
             WHERE id = @item_id
-        `);
-
-        const insertTreasuryTransaction = db.prepare(`
-            INSERT INTO treasury_transactions (type, amount, transaction_date, description, related_invoice_id, related_type, customer_id)
-            VALUES ('expense', @amount, @date, @description, @invoice_id, 'purchase', @customer_id)
         `);
 
         const updateSupplierBalance = db.prepare(`
@@ -272,16 +274,6 @@ function register() {
                 });
             }
 
-            if (financials.paid_amount > 0) {
-                insertTreasuryTransaction.run({
-                    amount: financials.paid_amount,
-                    date: data.invoice_date,
-                    description: `فاتورة شراء رقم ${data.invoice_number || invoiceId} (مدفوع ${financials.paid_amount.toFixed(2)})`,
-                    invoice_id: invoiceId,
-                    customer_id: data.supplier_id
-                });
-            }
-
             if (financials.balance_delta !== 0) {
                 updateSupplierBalance.run({
                     amount: financials.balance_delta,
@@ -310,6 +302,13 @@ function register() {
         const oldDetails = db.prepare('SELECT * FROM purchase_invoice_details WHERE invoice_id = ?').all(id);
 
         if (!oldInvoice) return { success: false, error: 'Invoice not found' };
+        const trimmedInvoiceNumber = String(invoice_number || '').trim();
+        if (trimmedInvoiceNumber) {
+            const duplicateInvoice = db.prepare('SELECT id FROM purchase_invoices WHERE TRIM(invoice_number) = TRIM(?) AND id != ? LIMIT 1').get(trimmedInvoiceNumber, id);
+            if (duplicateInvoice) {
+                return { success: false, error: 'رقم فاتورة الشراء موجود مسبقًا. يرجى إدخال رقم مختلف.' };
+            }
+        }
 
         const normalizedItems = normalizePurchaseItems(items);
         let rawSubtotalAmount = 0;
@@ -336,10 +335,6 @@ function register() {
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
                 db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
-            }
-            // Delete Treasury
-            if (oldInvoice.paid_amount > 0) {
-                db.prepare("DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = 'purchase'").run(id);
             }
             // Delete Details
             db.prepare('DELETE FROM purchase_invoice_details WHERE invoice_id = ?').run(id);
@@ -390,18 +385,6 @@ function register() {
                 db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
             }
 
-            if (financials.paid_amount > 0) {
-                db.prepare(`
-                    INSERT INTO treasury_transactions (type, amount, transaction_date, description, related_invoice_id, related_type, customer_id)
-                    VALUES ('expense', @amount, @date, @description, @invoice_id, 'purchase', @customer_id)
-                `).run({
-                    amount: financials.paid_amount,
-                    date: invoice_date,
-                    description: `تعديل فاتورة شراء رقم ${invoice_number || id} (مدفوع ${financials.paid_amount.toFixed(2)})`,
-                    invoice_id: id,
-                    customer_id: supplier_id
-                });
-            }
         });
 
         try {

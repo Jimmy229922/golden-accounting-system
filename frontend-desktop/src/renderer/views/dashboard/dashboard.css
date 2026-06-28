@@ -344,8 +344,8 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    min-width: 0;
-    flex: 0 0 110px;
+    min-width: 130px;
+    flex: 1 1 130px;
 }
 .form-group label {
     font-size: 0.75rem;

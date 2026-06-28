@@ -233,16 +233,6 @@ class GlobalSearch {
                 color: white;
             }
             
-            .gsearch-item-icon.sales-return {
-                background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-                color: white;
-            }
-            
-            .gsearch-item-icon.purchase-return {
-                background: linear-gradient(135deg, #ec4899, #db2777);
-                color: white;
-            }
-            
             .gsearch-item-icon.receipt {
                 background: linear-gradient(135deg, #0891b2, #0e7490);
                 color: white;
@@ -306,16 +296,6 @@ class GlobalSearch {
             .gsearch-item-badge.purchase {
                 background: rgba(245, 158, 11, 0.15);
                 color: #fbbf24;
-            }
-            
-            .gsearch-item-badge.sales-return {
-                background: rgba(139, 92, 246, 0.15);
-                color: #a78bfa;
-            }
-            
-            .gsearch-item-badge.purchase-return {
-                background: rgba(236, 72, 153, 0.15);
-                color: #f472b6;
             }
             
             .gsearch-item-badge.receipt {
@@ -874,22 +854,6 @@ class GlobalSearch {
                 });
             });
             
-            // البحث في مرتجعات المبيعات
-            const salesReturns = await window.electronAPI.getSalesReturns();
-            const filteredSalesReturns = salesReturns.filter(ret => 
-                ret.return_number && ret.return_number.includes(query)
-            ).slice(0, 5);
-            
-            filteredSalesReturns.forEach(salesReturn => {
-                this.results.push({
-                    type: 'sales-return',
-                    id: salesReturn.id,
-                    title: salesReturn.return_number,
-                    subtitle: `${this.t('globalSearch.customer', 'العميل')}: ${salesReturn.customer_name || '-'} | ${this.t('globalSearch.amount', 'المبلغ')}: ${(salesReturn.total_amount || 0).toLocaleString()} | ${salesReturn.return_date}`,
-                    data: salesReturn
-                });
-            });
-            
             // البحث في سندات التحصيل والسداد
             const transactions = await window.electronAPI.getTreasuryTransactions();
             const filteredTransactions = transactions.filter(tr => 
@@ -961,7 +925,6 @@ class GlobalSearch {
         const itemResults = this.results.filter(r => r.type === 'item');
         const salesResults = this.results.filter(r => r.type === 'sales');
         const purchaseResults = this.results.filter(r => r.type === 'purchase');
-        const salesReturnResults = this.results.filter(r => r.type === 'sales-return');
         const receiptResults = this.results.filter(r => r.type === 'receipt');
         const paymentResults = this.results.filter(r => r.type === 'payment');
         const customerResults = this.results.filter(r => r.type === 'customer');
@@ -987,17 +950,6 @@ class GlobalSearch {
                         <i class="fas fa-file-invoice-dollar"></i> ${this.t('globalSearch.sections.purchases', 'فواتير المشتريات')}
                     </div>
                     ${purchaseResults.map((r, i) => this.renderResultItem(r, this.results.indexOf(r))).join('')}
-                </div>
-            `;
-        }
-        
-        if (salesReturnResults.length) {
-            html += `
-                <div class="gsearch-section">
-                    <div class="gsearch-section-title">
-                        <i class="fas fa-undo-alt"></i> ${this.t('globalSearch.sections.salesReturns', 'مردودات المبيعات')}
-                    </div>
-                    ${salesReturnResults.map((r, i) => this.renderResultItem(r, this.results.indexOf(r))).join('')}
                 </div>
             `;
         }
@@ -1066,8 +1018,6 @@ class GlobalSearch {
             item: this.t('globalSearch.badges.item', 'صنف'),
             sales: this.t('globalSearch.badges.sales', 'مبيعات'),
             purchase: this.t('globalSearch.badges.purchase', 'مشتريات'),
-            'sales-return': this.t('globalSearch.badges.salesReturn', 'مرتجع بيع'),
-            'purchase-return': this.t('globalSearch.badges.purchaseReturn', 'مرتجع شراء'),
             receipt: this.t('globalSearch.badges.receipt', 'تحصيل'),
             payment: this.t('globalSearch.badges.payment', 'سداد'),
             customer: this.t('globalSearch.badges.customer', 'عميل'),
@@ -1078,8 +1028,6 @@ class GlobalSearch {
             item: 'fa-box',
             sales: 'fa-file-invoice',
             purchase: 'fa-file-invoice-dollar',
-            'sales-return': 'fa-undo-alt',
-            'purchase-return': 'fa-undo',
             receipt: 'fa-hand-holding-usd',
             payment: 'fa-money-bill-wave',
             customer: 'fa-user',
@@ -1113,9 +1061,6 @@ class GlobalSearch {
         } else if (type === 'purchase') {
             // عرض تفاصيل فاتورة الشراء في Modal
             await this.showPurchaseInvoiceDetails(id);
-        } else if (type === 'sales-return') {
-            // عرض تفاصيل مرتجع بيع في Modal
-            await this.showSalesReturnDetails(id);
         } else {
             // للعملاء والموردين - الانتقال للصفحة المناسبة
             this.close();

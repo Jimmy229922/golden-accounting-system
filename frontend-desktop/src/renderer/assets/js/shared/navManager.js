@@ -129,7 +129,6 @@ function buildTopNavItems(prefix) {
             fallback: 'Sales',
             children: [
                 { key: 'common.nav.salesInvoice', fallback: 'Sales Invoice', href: withPrefix('sales/index.html') },
-                { key: 'common.nav.salesReturns', fallback: 'Sales Returns', href: withPrefix('sales-returns/index.html') },
                 { key: '', fallback: 'إقفال وردية', href: withPrefix('sales/index.html?openShiftClose=1') }
             ]
         },

@@ -43,6 +43,14 @@ function formatDateForUi(value) {
     return date.toLocaleDateString('ar-EG');
 }
 
+function formatTimeForUi(value) {
+    if (!value) return '';
+    const dateStr = String(value).replace(' ', 'T') + 'Z';
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 function formatDateTimeForUi(value) {
     if (!value) return '-';
     const date = new Date(value);
@@ -210,8 +218,6 @@ function updateSummary(reports) {
     const safeReports = Array.isArray(reports) ? reports : [];
     const salesCount = safeReports.filter((r) => r.type === 'sales').length;
     const purchaseCount = safeReports.filter((r) => r.type === 'purchase').length;
-    const salesReturnCount = safeReports.filter((r) => r.type === 'sales_return').length;
-    const purchaseReturnCount = safeReports.filter((r) => r.type === 'purchase_return').length;
     const receiptCount = safeReports.filter((r) => r.type === 'receipt').length;
     const paymentCount = safeReports.filter((r) => r.type === 'payment').length;
     const totalAmount = safeReports.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
@@ -219,8 +225,6 @@ function updateSummary(reports) {
     document.getElementById('totalInvoices').textContent = safeReports.length;
     document.getElementById('salesCount').textContent = salesCount;
     document.getElementById('purchaseCount').textContent = purchaseCount;
-    document.getElementById('salesReturnCount').textContent = salesReturnCount;
-    document.getElementById('purchaseReturnCount').textContent = purchaseReturnCount;
     document.getElementById('receiptCount').textContent = receiptCount;
     document.getElementById('paymentCount').textContent = paymentCount;
     document.getElementById('totalAmount').textContent = formatCurrency(totalAmount);
@@ -247,14 +251,6 @@ function getTypeMeta(type) {
         };
     }
 
-    if (type === 'sales_return') {
-        return {
-            badge: `<span class="badge badge-sales-return"><i class="fas fa-undo"></i> ${t('reports.salesReturnType', 'مردودات مبيعات')}</span>`,
-            amountClass: 'amount-sales-return',
-            rowClass: 'row-sales-return'
-        };
-    }
-
     if (type === 'receipt') {
         return {
             badge: `<span class="badge badge-receipt"><i class="fas fa-hand-holding-usd"></i> ${t('reports.receiptType', 'سندات تحصيل')}</span>`,
@@ -272,9 +268,9 @@ function getTypeMeta(type) {
     }
 
     return {
-        badge: `<span class="badge badge-purchase-return"><i class="fas fa-undo"></i> ${t('reports.purchaseReturnType', 'مردودات مشتريات')}</span>`,
-        amountClass: 'amount-purchase-return',
-        rowClass: 'row-purchase-return'
+        badge: `<span class="badge"><i class="fas fa-file"></i> ${escapeHtml(type || '-')}</span>`,
+        amountClass: '',
+        rowClass: ''
     };
 }
 
@@ -291,6 +287,14 @@ async function loadReports() {
 
     try {
         const reports = await window.electronAPI.getAllReports(filters);
+
+        if (reports && reports.error) {
+            console.error('Backend SQL Error:', reports.error, '\nStack:', reports.stack);
+            setStatus('خطأ في قاعدة البيانات: ' + reports.error, 'error');
+            reportsTableBody.innerHTML = `<tr><td colspan="9" style="color:red; text-align:center;">${reports.error}</td></tr>`;
+            return;
+        }
+
         currentReports = Array.isArray(reports) ? reports : [];
         updateSummary(currentReports);
         renderReports(currentReports);
@@ -347,6 +351,10 @@ function renderReports(reports) {
         const row = document.createElement('tr');
         const typeMeta = getTypeMeta(report.type);
         const safeDate = formatDateForUi(report.invoice_date);
+        const safeTime = report.created_at ? formatTimeForUi(report.created_at) : '';
+        const dateHtml = safeTime
+            ? `<div>${safeDate}</div><div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;"><i class="fas fa-clock"></i> ${safeTime}</div>`
+            : `<div>${safeDate}</div>`;
         const invoiceNumberValue = (report.type === 'receipt' || report.type === 'payment')
             ? (report.invoice_number || '-')
             : (report.invoice_number || report.id || '-');
@@ -365,7 +373,7 @@ function renderReports(reports) {
         row.className = typeMeta.rowClass;
         row.innerHTML = `
             <td class="index-col">${start + idx + 1}</td>
-            <td class="date-col">${safeDate}</td>
+            <td class="date-col">${dateHtml}</td>
             <td>${invoiceCellHtml}</td>
             <td>${typeMeta.badge}</td>
             <td class="name-col">${safeCustomer}</td>
@@ -447,7 +455,6 @@ function handleTableAction(event) {
         let page;
         if (type === 'sales') page = '../sales/index.html';
         else if (type === 'purchase') page = '../purchases/index.html';
-        else if (type === 'sales_return') page = '../sales-returns/index.html';
         else if (type === 'receipt') page = '../payments/receipt.html';
         else if (type === 'payment') page = '../payments/payment.html';
 
@@ -479,10 +486,6 @@ async function deleteInvoice(id, type) {
     let result;
     if (isTreasury) {
         result = await window.electronAPI.deleteTreasuryTransaction(Number(id));
-    } else if (type === 'sales_return') {
-        result = await window.electronAPI.deleteSalesReturn(Number(id));
-    } else if (type === 'purchase_return') {
-        result = await window.electronAPI.deletePurchaseReturn(Number(id));
     } else {
         result = await window.electronAPI.deleteInvoice(Number(id), type);
     }
