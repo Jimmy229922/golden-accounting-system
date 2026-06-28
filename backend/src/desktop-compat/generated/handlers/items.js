@@ -167,7 +167,15 @@ function register() {
                     reorder_level = @reorder_level
                 WHERE id = @id
             `);
-            stmt.run(item);
+            stmt.run({
+                id: item.id,
+                name: item.name,
+                barcode: item.barcode || null,
+                unit_id: item.unit_id || null,
+                cost_price: item.cost_price || 0,
+                sale_price: item.sale_price || 0,
+                reorder_level: item.reorder_level || 0
+            });
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

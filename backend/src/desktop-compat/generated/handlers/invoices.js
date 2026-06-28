@@ -208,7 +208,8 @@ function register() {
             // 3. Reverse Treasury (if paid > 0)
             if (invoice.paid_amount > 0) {
                 // Delete the treasury transaction
-                db.prepare('DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = ?').run(id, type);
+                const tType = isSales ? 'sale' : 'purchase';
+                db.prepare('DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = ?').run(id, tType);
             }
 
             // 4. Delete Details

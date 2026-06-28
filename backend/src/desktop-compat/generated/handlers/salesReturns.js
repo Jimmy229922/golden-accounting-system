@@ -193,11 +193,9 @@ function register() {
                 throw new Error('المردود غير موجود');
             }
 
-            // Reverse previous effect (stock/balance/treasury) before applying new values.
+            // Reverse previous effect (balance/treasury) before applying new values.
+            // Stock reversal (subtracting old details) is moved below to prevent temporary negative values.
             const previousDetails = getReturnDetails.all(returnId);
-            previousDetails.forEach((detail) => {
-                subtractFromStock.run({ quantity: detail.quantity, item_id: detail.item_id });
-            });
 
             const oldInvoice = getOriginalInvoice.get(existingReturn.original_invoice_id);
             if (oldInvoice && oldInvoice.payment_type === 'cash') {
@@ -234,6 +232,11 @@ function register() {
                     quantity: item.quantity,
                     item_id: item.item_id
                 });
+            });
+
+            // Revert Old Stock Now that new stock is added
+            previousDetails.forEach((detail) => {
+                subtractFromStock.run({ quantity: detail.quantity, item_id: detail.item_id });
             });
 
             const newInvoice = getOriginalInvoice.get(original_invoice_id);

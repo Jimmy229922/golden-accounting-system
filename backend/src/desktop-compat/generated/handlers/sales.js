@@ -721,17 +721,17 @@ function register() {
                 WHERE id = @id
             `).run({
                 id,
-                customer_id,
-                invoice_number,
-                invoice_date,
-                total_amount: financials.total_amount,
-                discount_type: financials.discount_type,
-                discount_value: financials.discount_value,
-                discount_amount: financials.discount_amount,
-                paid_amount: financials.paid_amount,
-                remaining_amount: financials.remaining_amount,
-                payment_type,
-                notes
+                customer_id: customer_id || null,
+                invoice_number: invoice_number || null,
+                invoice_date: invoice_date || null,
+                total_amount: financials.total_amount || 0,
+                discount_type: financials.discount_type || null,
+                discount_value: financials.discount_value || 0,
+                discount_amount: financials.discount_amount || 0,
+                paid_amount: financials.paid_amount || 0,
+                remaining_amount: financials.remaining_amount || 0,
+                payment_type: payment_type || null,
+                notes: notes || null
             });
 
             // Insert New Details & Update Stock

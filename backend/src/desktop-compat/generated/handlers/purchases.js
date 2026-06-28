@@ -329,10 +329,8 @@ function register() {
 
         const transaction = db.transaction(() => {
             // --- REVERSE OLD ---
-            // Reverse Stock (Remove purchased items)
-            for (const item of oldDetails) {
-                db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
-            }
+            // We will reverse stock after adding new stock to prevent temporary negative values.
+            // Stock reversal is moved below.
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
                 db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
@@ -354,17 +352,17 @@ function register() {
                 WHERE id = @id
             `).run({
                 id,
-                supplier_id,
-                invoice_number,
-                invoice_date,
-                total_amount: financials.total_amount,
-                discount_type: financials.discount_type,
-                discount_value: financials.discount_value,
-                discount_amount: financials.discount_amount,
-                paid_amount: financials.paid_amount,
-                remaining_amount: financials.remaining_amount,
-                payment_type,
-                notes
+                supplier_id: supplier_id || null,
+                invoice_number: invoice_number || null,
+                invoice_date: invoice_date || null,
+                total_amount: financials.total_amount || 0,
+                discount_type: financials.discount_type || null,
+                discount_value: financials.discount_value || 0,
+                discount_amount: financials.discount_amount || 0,
+                paid_amount: financials.paid_amount || 0,
+                remaining_amount: financials.remaining_amount || 0,
+                payment_type: payment_type || null,
+                notes: notes || null
             });
 
             const insertDetail = db.prepare(`
@@ -384,6 +382,11 @@ function register() {
                     total_price: item.total_price
                 });
                 updateItemStock.run({ quantity: item.quantity, cost_price: item.cost_price, item_id: item.item_id });
+            }
+
+            // Reverse Stock (Remove old purchased items)
+            for (const item of oldDetails) {
+                db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
             }
 
             if (financials.balance_delta !== 0) {

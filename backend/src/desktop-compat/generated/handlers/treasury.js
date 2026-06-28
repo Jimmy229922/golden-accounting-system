@@ -179,7 +179,14 @@ function register() {
                 }
 
                 // 2. Update transaction
-                stmt.run(transaction);
+                stmt.run({
+                    id: transaction.id,
+                    type: transaction.type,
+                    amount: transaction.amount,
+                    date: transaction.transaction_date || transaction.date || null,
+                    description: transaction.description || null,
+                    customer_id: transaction.customer_id || null
+                });
 
                 // 3. Apply new balance effect
                 if (transaction.customer_id) {

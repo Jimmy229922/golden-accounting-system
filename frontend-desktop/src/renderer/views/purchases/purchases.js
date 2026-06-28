@@ -1396,9 +1396,9 @@ function setRowBaskeelData(row, { rawQuantity, rawWeights }, options = {}) {
     row.dataset.rawQuantity = String(safeRaw || 0);
     row.dataset.rawWeights = JSON.stringify(method === 'normal' ? weightsArray : { weights: weightsArray, method, rate: rateValue });
 
-    const rawValueEl = row.querySelector('.raw-qty-value');
+    const rawValueEl = row.querySelector('.raw-qty-value-btn');
     if (rawValueEl) {
-        rawValueEl.textContent = safeRaw > 0 ? formatBaskeelNumber(safeRaw) : '';
+        rawValueEl.textContent = safeRaw > 0 ? formatBaskeelNumber(safeRaw) : 'إدخال سريع';
     }
 
     const net1Quantity = safeRaw > 0 ? safeRaw * PURCHASE_NET_FACTOR : 0;

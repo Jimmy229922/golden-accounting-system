@@ -28,7 +28,10 @@ function register() {
     ipcMain.handle('update-unit', (event, unit) => {
         try {
             const stmt = db.prepare('UPDATE units SET name = @name WHERE id = @id');
-            stmt.run(unit);
+            stmt.run({
+                id: unit.id,
+                name: unit.name
+            });
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

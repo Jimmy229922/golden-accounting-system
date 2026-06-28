@@ -167,7 +167,15 @@ function register() {
             customer.code = nextCode;
             customer.balance = customer.opening_balance;
             const stmt = db.prepare('INSERT INTO customers (name, phone, address, balance, opening_balance, type, code) VALUES (@name, @phone, @address, @balance, @opening_balance, @type, @code)');
-            const info = stmt.run(customer);
+            const info = stmt.run({
+                name: customer.name,
+                phone: customer.phone || null,
+                address: customer.address || null,
+                balance: customer.balance || 0,
+                opening_balance: customer.opening_balance || 0,
+                type: customer.type || 'retail',
+                code: customer.code
+            });
             return { success: true, id: info.lastInsertRowid };
         } catch (error) {
             return { success: false, error: error.message };
@@ -183,7 +191,15 @@ function register() {
             const newOpening = customer.opening_balance || 0;
             const diff = newOpening - oldOpening;
             const stmt = db.prepare('UPDATE customers SET name = @name, phone = @phone, address = @address, opening_balance = @opening_balance, balance = balance + @diff, type = @type WHERE id = @id');
-            stmt.run({ ...customer, diff });
+            stmt.run({
+                id: customer.id,
+                name: customer.name,
+                phone: customer.phone || null,
+                address: customer.address || null,
+                opening_balance: customer.opening_balance || 0,
+                type: customer.type || 'retail',
+                diff
+            });
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

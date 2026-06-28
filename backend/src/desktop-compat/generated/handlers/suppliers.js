@@ -16,7 +16,13 @@ function register() {
     ipcMain.handle('add-supplier', (event, supplier) => {
         try {
             const stmt = db.prepare('INSERT INTO suppliers (name, phone, address, balance) VALUES (@name, @phone, @address, @balance)');
-            const info = stmt.run(supplier);
+            const info = stmt.run({
+                name: supplier.name,
+                phone: supplier.phone || null,
+                address: supplier.address || null,
+                balance: supplier.balance || 0,
+                notes: supplier.notes || null
+            });
             return { success: true, id: info.lastInsertRowid };
         } catch (error) {
             return { success: false, error: error.message };
