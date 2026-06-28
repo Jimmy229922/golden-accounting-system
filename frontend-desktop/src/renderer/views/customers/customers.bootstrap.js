@@ -156,6 +156,11 @@ function handleTableActionClick(event) {
         return;
     }
 
+    if (action === 'view-report') {
+        window.location.href = `../customer-reports/index.html?customerId=${id}`;
+        return;
+    }
+
     if (action === 'delete-customer') {
         deleteCustomer(id);
     }
@@ -277,6 +282,9 @@ function renderTable() {
             <td class="${balanceClass}" dir="ltr">${formatCurrency(Math.abs(balance))}<span class="balance-tag">${balanceTag}</span></td>
             <td>
                 <div class="action-buttons">
+                    <button class="btn-icon btn-report" data-action="view-report" data-id="${customer.id}" title="${t('customers.viewReport', 'كشف حساب')}">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                    </button>
                     <button class="btn-icon btn-edit" data-action="edit-customer" data-id="${customer.id}">
                         <i class="fas fa-edit"></i>
                     </button>

@@ -1,4 +1,4 @@
-﻿let companyNameInput, companyAddressInput, companyPhoneInput, invoiceFooterInput, settingsForm;
+let companyNameInput, companyAddressInput, companyPhoneInput, invoiceFooterInput, settingsForm;
 let backupBtn, restoreBtn, backupStatusEl, restoreStatusEl, themeToggleBtn;
 let profileImageInput, profileImagePreview, removeImageBtn, saveBtn;
 let changeLogLastModifiedEl, changeLogModifiedByEl, changeLogSummaryEl;
@@ -207,7 +207,7 @@ function renderPage() {
                         <div class="info-item-icon"><i class="fas fa-code-branch"></i></div>
                         <div>
                             <div class="info-item-label">${t('settings.version', 'إصدار التطبيق')}</div>
-                            <div class="info-item-value">1.1.5</div>
+                            <div class="info-item-value">2.0.0</div>
                         </div>
                     </div>
                     <div class="info-item">

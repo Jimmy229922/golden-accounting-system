@@ -9,10 +9,10 @@ const { sanitizeSuggestedFileName } = require('./utils');
 function getCustomerStatementTransactionEffect(trans) {
     if (!trans) return 0;
     if (trans.type === 'sales') {
-        return Number(trans.remaining_amount) || 0;
+        return (Number(trans.total_amount) - Number(trans.paid_amount)) || 0;
     }
     if (trans.type === 'purchase') {
-        return -(Number(trans.remaining_amount) || 0);
+        return -((Number(trans.total_amount) - Number(trans.paid_amount)) || 0);
     }
     if (trans.type === 'payment_in') {
         return -(Number(trans.paid_amount) || 0);
@@ -29,54 +29,6 @@ function getCustomerStatementTransactionEffect(trans) {
     return 0;
 }
 
-function getCustomerStatementMovementAfterDate(customerId, afterDate) {
-    if (!afterDate) return 0;
-
-    const custId = Number(customerId);
-    const row = db.prepare(`
-        SELECT COALESCE(SUM(
-            CASE
-                WHEN sub_type = 'sales' THEN amount
-                WHEN sub_type = 'purchase' THEN -amount
-                WHEN sub_type = 'payment_in' THEN -amount
-                WHEN sub_type = 'payment_out' THEN amount
-                WHEN sub_type = 'sales_return' THEN -amount
-                WHEN sub_type = 'purchase_return' THEN amount
-                ELSE 0
-            END
-        ), 0) as net
-        FROM (
-            SELECT 'sales' as sub_type, remaining_amount as amount, invoice_date as trans_date
-            FROM sales_invoices WHERE customer_id = @custId
-
-            UNION ALL
-            SELECT 'purchase' as sub_type, remaining_amount as amount, invoice_date as trans_date
-            FROM purchase_invoices WHERE supplier_id = @custId
-
-            UNION ALL
-            SELECT CASE WHEN type = 'income' THEN 'payment_in' ELSE 'payment_out' END as sub_type,
-                   amount, transaction_date as trans_date
-            FROM treasury_transactions
-            WHERE customer_id = @custId
-              AND COALESCE(related_type, '') NOT IN ('sales', 'purchase', 'sales_return', 'purchase_return')
-
-            UNION ALL
-            SELECT 'sales_return' as sub_type, total_amount as amount, return_date as trans_date
-            FROM sales_returns
-            WHERE customer_id = @custId
-              AND original_invoice_id IN (SELECT id FROM sales_invoices WHERE payment_type = 'credit')
-
-            UNION ALL
-            SELECT 'purchase_return' as sub_type, total_amount as amount, return_date as trans_date
-            FROM purchase_returns
-            WHERE supplier_id = @custId
-              AND original_invoice_id IN (SELECT id FROM purchase_invoices WHERE payment_type = 'credit')
-        ) sub
-        WHERE trans_date > @afterDate
-    `).get({ custId, afterDate });
-
-    return Number(row && row.net) || 0;
-}
 
 async function prepareShellFrameForPdfCapture(webContents) {
     if (!webContents || webContents.isDestroyed()) {
@@ -406,11 +358,11 @@ function register() {
                         END
                     ), 0) as net
                     FROM (
-                        SELECT 'sales' as sub_type, remaining_amount as amount
+                        SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount
                         FROM sales_invoices WHERE customer_id = ? AND invoice_date < ?
 
                         UNION ALL
-                        SELECT 'purchase' as sub_type, remaining_amount as amount
+                        SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount
                         FROM purchase_invoices WHERE supplier_id = ? AND invoice_date < ?
 
                         UNION ALL
@@ -448,7 +400,7 @@ function register() {
             // جلب جميع الحركات داخل الفترة باستخدام UNION ALL
             const params = [];
             let query = `
-                SELECT id, 'sales' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, remaining_amount, notes, 1 as sort_order
+                SELECT id, 'sales' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, (total_amount - paid_amount) as remaining_amount, notes, 1 as sort_order
                 FROM sales_invoices WHERE customer_id = ?`;
             params.push(custId);
             if (startDate) { query += ' AND invoice_date >= ?'; params.push(startDate); }
@@ -456,7 +408,7 @@ function register() {
 
             query += `
                 UNION ALL
-                SELECT id, 'purchase' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, remaining_amount, notes, 1 as sort_order
+                SELECT id, 'purchase' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, (total_amount - paid_amount) as remaining_amount, notes, 1 as sort_order
                 FROM purchase_invoices WHERE supplier_id = ?`;
             params.push(custId);
             if (startDate) { query += ' AND invoice_date >= ?'; params.push(startDate); }
@@ -496,13 +448,10 @@ function register() {
             query += ' ORDER BY trans_date ASC, sort_order ASC, id ASC';
 
             const transactions = db.prepare(query).all(...params);
-            let closingBalance = Number(customer.balance) || 0;
-            if (endDate) {
-                closingBalance -= getCustomerStatementMovementAfterDate(custId, endDate);
-            }
+            // لا نعتمد على رصيد العميل الحالي في كشف الحساب لضمان عدم حدوث تباين بسبب أخطاء تراكمية قديمة
+            // وإنما نعتمد على الرصيد الافتتاحي المحسوب من إجمالي الحركات السابقة للفترة
             const periodMovement = transactions.reduce((sum, trans) => sum + getCustomerStatementTransactionEffect(trans), 0);
-            openingBalance = closingBalance - periodMovement;
-
+            
             // حساب الرصيد الجاري لكل حركة في الفترة
             let runningBalance = openingBalance;
             for (const trans of transactions) {
@@ -719,11 +668,11 @@ function register() {
                         END
                     ), 0) as net
                     FROM (
-                        SELECT 'sales' as sub_type, remaining_amount as amount
+                        SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount
                         FROM sales_invoices WHERE customer_id = ? AND invoice_date < ?
 
                         UNION ALL
-                        SELECT 'purchase' as sub_type, remaining_amount as amount
+                        SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount
                         FROM purchase_invoices WHERE supplier_id = ? AND invoice_date < ?
 
                         UNION ALL
@@ -765,11 +714,10 @@ function register() {
 
             const totalDebit = totalSales + totalPaymentsOut + totalPurchaseReturns;
             const totalCredit = totalPurchases + totalPaymentsIn + totalSalesReturns;
-            let closingBalance = Number(customer.balance) || 0;
-            if (endDate) {
-                closingBalance -= getCustomerStatementMovementAfterDate(custId, endDate);
-            }
-            openingBalance = closingBalance - (totalDebit - totalCredit);
+            
+            // حساب الرصيد الختامي بشكل تصاعدي بناءً على رصيد أول المدة المحسوب من الاستعلام والحركات خلال الفترة
+            // لضمان دقة كشف الحساب واستقلاليته عن الرصيد الإجمالي المخزن للعميل
+            let closingBalance = openingBalance + (totalDebit - totalCredit);
 
             return {
                 success: true,

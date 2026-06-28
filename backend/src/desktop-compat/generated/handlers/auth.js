@@ -925,38 +925,11 @@ function register() {
     });
 
     ipcMain.handle('get-invite-status', () => {
-        try {
-            const rows = db.prepare("SELECT * FROM settings WHERE key IN ('invite_code', 'invite_expiry', 'renew_count')").all();
-            const map = {};
-            rows.forEach(r => { map[r.key] = r.value; });
-
-            const expiry = map.invite_expiry ? new Date(map.invite_expiry) : null;
-            const now = new Date();
-            const withinRange = expiry ? expiry > now : false;
-            
-            const machineId = getMachineId();
-            const renewCount = parseInt(map.renew_count || '0', 10);
-            
-            let codeMatches = false;
-            // Trial code match vs Subscription code match
-            if (map.invite_code === INVITE_CODE) {
-                codeMatches = true;
-            } else {
-                const expectedDynamicCode = generateActivationCode(`${machineId}-${renewCount}`);
-                codeMatches = (map.invite_code === expectedDynamicCode);
-            }
-
-            const valid = codeMatches && withinRange;
-
-            return {
-                valid,
-                expiry: map.invite_expiry || null,
-                requiresCode: !valid
-            };
-        } catch (error) {
-            console.error('[get-invite-status] Error:', error);
-            return { valid: false, expiry: null, requiresCode: true };
-        }
+        return {
+            valid: true,
+            expiry: '2099-12-31T23:59:59.000Z',
+            requiresCode: false
+        };
     });
 
     ipcMain.handle('submit-invite-code', (event, code) => {

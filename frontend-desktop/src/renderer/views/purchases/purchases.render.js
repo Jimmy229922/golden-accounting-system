@@ -37,9 +37,14 @@
 
                     <div class="invoice-top-grid">
                         <div class="form-group">
-                            <label>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                ${t('purchases.supplier', 'المورد')}
+                            <label style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                    ${t('purchases.supplier', 'المورد')}
+                                </span>
+                                <button type="button" id="btnSupplierReport" class="btn-icon" style="display: none; padding: 2px 6px; font-size: 0.85em; margin-inline-start: auto; color: var(--primary);" title="${t('purchases.viewReport', 'كشف حساب المورد')}">
+                                    <i class="fas fa-file-invoice-dollar"></i>
+                                </button>
                             </label>
                             <select id="supplierSelect" class="form-control">
                                 <option value="">${t('purchases.selectSupplier', 'اختر المورد')}</option>
@@ -123,16 +128,8 @@
                                 </div>
                             </div>
 
-                            <div class="total-row total-row-secondary">
-                                <span>${t('purchases.subtotalBeforeDiscount', 'الإجمالي قبل الخصم:')}</span>
-                                <span id="invoiceSubtotal">0.00</span>
-                            </div>
-                            <div class="total-row total-row-secondary">
-                                <span>${t('purchases.discountAmount', 'قيمة الخصم:')}</span>
-                                <span id="invoiceDiscountAmount">0.00</span>
-                            </div>
                             <div class="total-row grand-total">
-                                <span>${t('purchases.netAfterDiscount', 'الصافي بعد الخصم:')}</span>
+                                <span>${t('purchases.invoiceTotal', 'إجمالي الفاتورة:')}</span>
                                 <span id="invoiceTotal">0.00</span>
                             </div>
                             <div class="total-row total-row-paid-summary">

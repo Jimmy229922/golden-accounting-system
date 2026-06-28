@@ -259,12 +259,21 @@ async function handleSupplierChange() {
 
     if (!purchasesState.dom.supplierSelect || !purchasesState.dom.invoiceItemsBody) return;
 
+    const btnReport = document.getElementById('btnSupplierReport');
+
     if (purchasesState.dom.supplierSelect.value) {
+        if (btnReport) {
+            btnReport.style.display = 'inline-block';
+            btnReport.onclick = () => {
+                window.location.href = `../customer-reports/index.html?customerId=${purchasesState.dom.supplierSelect.value}`;
+            };
+        }
         await displaySupplierBalance();
         if (purchasesState.dom.invoiceItemsBody.children.length === 0) {
             addInvoiceRow();
         }
     } else {
+        if (btnReport) btnReport.style.display = 'none';
         const balanceDiv = document.getElementById('supplierBalance');
         if (balanceDiv) balanceDiv.style.display = 'none';
         clearSelectedItemAvailability();

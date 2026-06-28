@@ -234,7 +234,7 @@
                         </div>
                         <div class="status-row">
                             <span>${t('dashboard.appVersion', 'نسخة البرنامج')}</span>
-                            <span style="font-weight: bold;">v1.1.5</span>
+                            <span style="font-weight: bold;">v2.0.0</span>
                         </div>
                         <div class="status-row">
                             <span>${t('dashboard.customersCount', 'قاعدة العملاء')}</span>

@@ -59,12 +59,23 @@ function readJsonBody(req) {
     });
 }
 
+const crypto = require('crypto');
+const fallbackToken = crypto.randomBytes(16).toString('hex');
+if (!config.rpcToken) {
+    console.warn(`[SECURITY WARNING] BACKEND_RPC_TOKEN environment variable is not defined!`);
+    console.warn(`[SECURITY WARNING] A temporary secure token has been generated for this session: ${fallbackToken}`);
+}
+
 function isAuthorized(req) {
-    if (!config.rpcToken) {
+    const ip = req.socket.remoteAddress;
+    const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    const tokenToValidate = config.rpcToken || fallbackToken;
+
+    if (isLocalhost && !config.rpcToken) {
         return true;
     }
 
-    return req.headers['x-api-token'] === config.rpcToken;
+    return req.headers['x-api-token'] === tokenToValidate;
 }
 
 async function app(req, res) {

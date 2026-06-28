@@ -9,10 +9,10 @@ const { sanitizeSuggestedFileName } = require('./utils');
 function getCustomerStatementTransactionEffect(trans) {
     if (!trans) return 0;
     if (trans.type === 'sales') {
-        return Number(trans.remaining_amount) || 0;
+        return (Number(trans.total_amount) - Number(trans.paid_amount)) || 0;
     }
     if (trans.type === 'purchase') {
-        return -(Number(trans.remaining_amount) || 0);
+        return -((Number(trans.total_amount) - Number(trans.paid_amount)) || 0);
     }
     if (trans.type === 'payment_in') {
         return -(Number(trans.paid_amount) || 0);
@@ -46,11 +46,11 @@ function getCustomerStatementMovementAfterDate(customerId, afterDate) {
             END
         ), 0) as net
         FROM (
-            SELECT 'sales' as sub_type, remaining_amount as amount, invoice_date as trans_date
+            SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount, invoice_date as trans_date
             FROM sales_invoices WHERE customer_id = @custId
 
             UNION ALL
-            SELECT 'purchase' as sub_type, remaining_amount as amount, invoice_date as trans_date
+            SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount, invoice_date as trans_date
             FROM purchase_invoices WHERE supplier_id = @custId
 
             UNION ALL
@@ -406,11 +406,11 @@ function register() {
                         END
                     ), 0) as net
                     FROM (
-                        SELECT 'sales' as sub_type, remaining_amount as amount
+                        SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount
                         FROM sales_invoices WHERE customer_id = ? AND invoice_date < ?
 
                         UNION ALL
-                        SELECT 'purchase' as sub_type, remaining_amount as amount
+                        SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount
                         FROM purchase_invoices WHERE supplier_id = ? AND invoice_date < ?
 
                         UNION ALL
@@ -448,7 +448,7 @@ function register() {
             // جلب جميع الحركات داخل الفترة باستخدام UNION ALL
             const params = [];
             let query = `
-                SELECT id, 'sales' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, remaining_amount, notes, 1 as sort_order
+                SELECT id, 'sales' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, (total_amount - paid_amount) as remaining_amount, notes, 1 as sort_order
                 FROM sales_invoices WHERE customer_id = ?`;
             params.push(custId);
             if (startDate) { query += ' AND invoice_date >= ?'; params.push(startDate); }
@@ -456,7 +456,7 @@ function register() {
 
             query += `
                 UNION ALL
-                SELECT id, 'purchase' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, remaining_amount, notes, 1 as sort_order
+                SELECT id, 'purchase' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, (total_amount - paid_amount) as remaining_amount, notes, 1 as sort_order
                 FROM purchase_invoices WHERE supplier_id = ?`;
             params.push(custId);
             if (startDate) { query += ' AND invoice_date >= ?'; params.push(startDate); }
@@ -719,11 +719,11 @@ function register() {
                         END
                     ), 0) as net
                     FROM (
-                        SELECT 'sales' as sub_type, remaining_amount as amount
+                        SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount
                         FROM sales_invoices WHERE customer_id = ? AND invoice_date < ?
 
                         UNION ALL
-                        SELECT 'purchase' as sub_type, remaining_amount as amount
+                        SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount
                         FROM purchase_invoices WHERE supplier_id = ? AND invoice_date < ?
 
                         UNION ALL
