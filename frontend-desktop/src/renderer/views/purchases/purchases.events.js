@@ -82,6 +82,27 @@
 
                 if (action === 'remove-row') {
                     handlers.onRemoveRow(actionEl);
+                    return;
+                }
+
+                if (action === 'cancel-edit') {
+                    if (typeof handlers.onCancelEdit === 'function') handlers.onCancelEdit();
+                    return;
+                }
+
+                if (action === 'open-delete-confirm') {
+                    if (typeof handlers.onOpenDeleteConfirm === 'function') handlers.onOpenDeleteConfirm();
+                    return;
+                }
+
+                if (action === 'close-delete-confirm') {
+                    if (typeof handlers.onCloseDeleteConfirm === 'function') handlers.onCloseDeleteConfirm();
+                    return;
+                }
+
+                if (action === 'confirm-delete-invoice') {
+                    if (typeof handlers.onConfirmDeleteInvoice === 'function') handlers.onConfirmDeleteInvoice();
+                    return;
                 }
             });
         }

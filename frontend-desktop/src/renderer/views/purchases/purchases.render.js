@@ -21,7 +21,7 @@
                 <div class="invoice-shell">
                     <div class="form-title-row">
                         <h2 class="form-title">${t('purchases.formTitle', 'تسجيل فاتورة شراء جديدة')}</h2>
-                        <div style="display: flex; gap: 8px; margin-inline-start: auto;">
+                        <div style="display: flex; gap: 8px; margin-inline-start: auto; align-items: center;">
                             <button class="btn btn-outline" type="button" data-action="print-invoice" style="padding: 8px 10px;" title="${t('purchases.printInvoice', 'طباعة الفاتورة')}">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                             </button>
@@ -31,8 +31,11 @@
                             <button class="btn btn-outline" type="button" data-action="load-next-invoice" style="padding: 8px 10px;">
                                 ${t('common.actions.next', 'التالي')}
                             </button>
+                            <span class="form-status-chip">${t('purchases.formStatusChip', 'فاتورة مشتريات')}</span>
+                            <button class="btn btn-danger" type="button" id="cancelEditBtn" data-action="cancel-edit" style="display: none; padding: 0; border-radius: 50%; width: 26px; height: 26px; justify-content: center; align-items: center; line-height: 1;" title="إلغاء التعديل">
+                                ✖
+                            </button>
                         </div>
-                        <span class="form-status-chip">${t('purchases.formStatusChip', 'فاتورة مشتريات')}</span>
                     </div>
 
                     <div class="invoice-top-grid">
@@ -42,9 +45,6 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                     ${t('purchases.supplier', 'المورد')}
                                 </span>
-                                <button type="button" id="btnSupplierReport" class="btn-icon" style="display: none; padding: 2px 6px; font-size: 0.85em; margin-inline-start: auto; color: var(--primary);" title="${t('purchases.viewReport', 'كشف حساب المورد')}">
-                                    <i class="fas fa-file-invoice-dollar"></i>
-                                </button>
                             </label>
                             <select id="supplierSelect" class="form-control">
                                 <option value="">${t('purchases.selectSupplier', 'اختر المورد')}</option>
@@ -84,7 +84,12 @@
                         <div class="items-section-head">
                             <div class="items-section-title-wrap">
                                 <h3 class="items-section-title">${t('purchases.invoiceItems', 'أصناف الفاتورة')}</h3>
-                                <div id="supplierBalance" class="customer-balance" style="display: none;"></div>
+                                <div class="items-balance-row">
+                                    <div id="supplierBalance" class="customer-balance" style="display: none;"></div>
+                                    <button type="button" id="btnSupplierReport" class="btn-icon supplier-report-btn" style="display: none;" title="${t('purchases.viewReport', 'كشف حساب المورد')}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                    </button>
+                                </div>
                                 <span id="selectedItemAvailability" class="selected-item-availability"></span>
                             </div>
                             <button class="btn btn-outline" type="button" data-action="add-row">${t('purchases.addItemBtn', '+ إضافة صنف')}</button>
@@ -140,9 +145,14 @@
                                 <span class="customer-due-label">${t('purchases.supplierDue', 'المتبقي على المورد:')}</span>
                                 <span id="invoiceRemaining" class="customer-due-value">0.00</span>
                             </div>
-                            <button class="btn btn-success" type="button" data-action="submit-invoice">
-                                ${t('purchases.saveAndPost', 'حفظ وترحيل الفاتورة')}
-                            </button>
+                            <div class="invoice-actions-row">
+                                <button class="btn btn-success invoice-action-btn" type="button" data-action="submit-invoice">
+                                    ${t('purchases.saveAndPost', 'حفظ وترحيل الفاتورة')}
+                                </button>
+                                <button class="btn btn-danger purchase-delete-btn invoice-action-btn" type="button" id="deleteInvoiceBtn" data-action="open-delete-confirm" disabled>
+                                    حذف الفاتورة
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -204,6 +214,28 @@
                     <div class="baskeel-actions" style="justify-content: space-between; width: 100%;">
                         <button class="btn btn-secondary" type="button" data-action="close-quick-raw">${t('common.actions.cancel', 'إلغاء')}</button>
                         <button class="btn btn-success" type="button" data-action="save-quick-raw">${t('common.actions.save', 'حفظ')}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="deleteConfirmModal" class="baskeel-modal-overlay delete-confirm-overlay" aria-hidden="true">
+            <div class="baskeel-modal delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmModalTitle" style="max-width: 430px;">
+                <div class="baskeel-modal-header delete-confirm-header">
+                    <h3 id="deleteConfirmModalTitle">تأكيد حذف الفاتورة</h3>
+                    <button type="button" class="baskeel-modal-close" data-action="close-delete-confirm" aria-label="${t('common.actions.cancel', 'إلغاء')}">
+                        ×
+                    </button>
+                </div>
+                <div class="baskeel-modal-body delete-confirm-body">
+                    <div class="delete-confirm-icon">!</div>
+                    <p style="margin: 0; font-size: 1rem; line-height: 1.8;">هل أنت متأكد من حذف الفاتورة نهائياً؟</p>
+                    <p style="margin: 0; font-size: 0.92rem; color: var(--text-muted); line-height: 1.7;">سيتم تنفيذ الحذف مباشرة والرجوع إلى فاتورة جديدة فارغة.</p>
+                </div>
+                <div class="baskeel-modal-footer delete-confirm-footer">
+                    <div class="baskeel-actions" style="justify-content: space-between; width: 100%;">
+                        <button class="btn btn-outline" type="button" data-action="close-delete-confirm">${t('common.actions.cancel', 'إلغاء')}</button>
+                        <button class="btn btn-danger purchase-delete-btn" type="button" data-action="confirm-delete-invoice">حذف الفاتورة</button>
                     </div>
                 </div>
             </div>

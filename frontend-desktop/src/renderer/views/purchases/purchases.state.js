@@ -30,7 +30,8 @@
                 baskeelDiscountTotal: null,
                 baskeelNetTotal: null,
                 quickRawModal: null,
-                quickRawInput: null
+                quickRawInput: null,
+                deleteConfirmModal: null
             }
         };
     }
@@ -57,6 +58,7 @@
         state.dom.baskeelNetTotal = document.getElementById('baskeelNetTotal');
         state.dom.quickRawModal = document.getElementById('quickRawModal');
         state.dom.quickRawInput = document.getElementById('quickRawInput');
+        state.dom.deleteConfirmModal = document.getElementById('deleteConfirmModal');
         return state.dom;
     }
 

@@ -326,12 +326,33 @@ function register() {
             finalAmount: netSubtotalAmount
         });
 
+        const getItemStock = db.prepare('SELECT name, stock_quantity FROM items WHERE id = ?');
+        const itemDeltas = new Map();
+        for (const item of oldDetails) {
+            itemDeltas.set(item.item_id, -(Number(item.quantity) || 0));
+        }
+        for (const item of normalizedItems) {
+            const currentDelta = itemDeltas.get(item.item_id) || 0;
+            itemDeltas.set(item.item_id, currentDelta + (Number(item.quantity) || 0));
+        }
+        for (const [itemId, delta] of itemDeltas.entries()) {
+            if (delta < 0) {
+                const dbItem = getItemStock.get(itemId);
+                const currentStock = Number(dbItem?.stock_quantity) || 0;
+                if (currentStock + delta < 0) {
+                    const itemName = dbItem?.name || `ID: ${itemId}`;
+                    return {
+                        success: false,
+                        error: `لا يمكن تعديل الفاتورة وتقليل الكمية. المخزون الحالي للصنف "${itemName}" لا يسمح (تم بيع جزء منه).`
+                    };
+                }
+            }
+        }
+
         const transaction = db.transaction(() => {
             // --- REVERSE OLD ---
-            // Reverse Stock (Remove purchased items)
-            for (const item of oldDetails) {
-                db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
-            }
+            // Stock reversal moved to the end to prevent temporary negative values.
+
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
                 db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
@@ -379,6 +400,11 @@ function register() {
                     total_price: item.total_price
                 });
                 updateItemStock.run({ quantity: item.quantity, cost_price: item.cost_price, item_id: item.item_id });
+            }
+
+            // Reverse Stock (Remove old purchased items)
+            for (const item of oldDetails) {
+                db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
             }
 
             if (financials.balance_delta !== 0) {

@@ -28,6 +28,10 @@
         return window.electronAPI.updatePurchaseInvoice(invoiceData);
     }
 
+    async function deletePurchaseInvoice(id) {
+        return window.electronAPI.deleteInvoice(Number(id), 'purchase');
+    }
+
     window.purchasesPageApi = {
         getNextInvoiceNumber,
         getInvoiceWithDetails,
@@ -35,6 +39,7 @@
         getPurchaseInvoices,
         getItems,
         savePurchaseInvoice,
-        updatePurchaseInvoice
+        updatePurchaseInvoice,
+        deletePurchaseInvoice
     };
 })();

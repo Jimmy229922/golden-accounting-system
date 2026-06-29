@@ -27,7 +27,8 @@ document.addEventListener('DOMContentLoaded', async () => {    // Reset submitti
     initializeElements();
 
     if (purchasesState.dom.invoiceDateInput) {
-        purchasesState.dom.invoiceDateInput.valueAsDate = new Date();
+        const _d = new Date();
+        purchasesState.dom.invoiceDateInput.value = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
     }
 
     Promise.all([
@@ -71,7 +72,13 @@ function initializeElements() {
             onSaveWeights: saveWeightsFromModal,
             onSaveQuickRaw: saveQuickRawModal,
             onCloseWeights: closeWeightsModal,
-            onCloseQuickRaw: closeQuickRawModal
+            onCloseQuickRaw: closeQuickRawModal,
+            onOpenDeleteConfirm: openDeleteConfirmModal,
+            onCloseDeleteConfirm: closeDeleteConfirmModal,
+            onConfirmDeleteInvoice: confirmDeleteInvoice,
+            onCancelEdit: () => {
+                resetForm();
+            }
         }
     });
 
@@ -117,6 +124,14 @@ function initializeElements() {
         });
     }
 
+    if (purchasesState.dom.deleteConfirmModal) {
+        purchasesState.dom.deleteConfirmModal.addEventListener('click', (event) => {
+            if (event.target === purchasesState.dom.deleteConfirmModal) {
+                closeDeleteConfirmModal();
+            }
+        });
+    }
+
     if (purchasesState.dom.quickRawInput) {
         purchasesState.dom.quickRawInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -132,6 +147,8 @@ function initializeElements() {
                 closeWeightsModal();
             } else if (purchasesState.dom.quickRawModal?.classList.contains('is-open')) {
                 closeQuickRawModal();
+            } else if (purchasesState.dom.deleteConfirmModal?.classList.contains('is-open')) {
+                closeDeleteConfirmModal();
             }
         }
     });
@@ -141,10 +158,19 @@ function initializeElements() {
         invoiceNumberInput.addEventListener('input', updateInvoiceNavigationButtons);
         invoiceNumberInput.addEventListener('change', updateInvoiceNavigationButtons);
     }
+
 }
 
 function isEditLocked() {
     return Boolean(purchasesState.editingInvoiceId && purchasesState.isEditLocked);
+}
+
+function updateDeleteButtonState() {
+    const deleteBtn = document.getElementById('deleteInvoiceBtn');
+    if (!deleteBtn) return;
+
+    const hasSupplier = Boolean(purchasesState.dom.supplierSelect?.value);
+    deleteBtn.disabled = !hasSupplier;
 }
 
 function setEditLocked(locked) {
@@ -184,7 +210,9 @@ function setEditLocked(locked) {
         if (
             control.dataset.action === 'submit-invoice' ||
             control.dataset.action === 'load-prev-invoice' ||
-            control.dataset.action === 'load-next-invoice'
+            control.dataset.action === 'load-next-invoice' ||
+            control.id === 'cancelEditBtn' ||
+            control.id === 'deleteInvoiceBtn'
         ) return;
         control.disabled = lockActive;
 
@@ -252,6 +280,14 @@ function setEditLocked(locked) {
             removeEl.style.opacity = lockActive ? '0.45' : '';
         });
     }
+
+    updateDeleteButtonState();
+
+    const cancelEditBtnEl = document.getElementById('cancelEditBtn');
+    if (cancelEditBtnEl) {
+        const showCancel = Boolean(purchasesState.editingInvoiceId && !lockActive);
+        cancelEditBtnEl.style.display = showCancel ? 'inline-flex' : 'none';
+    }
 }
 
 async function handleSupplierChange() {
@@ -263,7 +299,7 @@ async function handleSupplierChange() {
 
     if (purchasesState.dom.supplierSelect.value) {
         if (btnReport) {
-            btnReport.style.display = 'inline-block';
+            btnReport.style.display = 'inline-flex';
             btnReport.onclick = () => {
                 window.location.href = `../customer-reports/index.html?customerId=${purchasesState.dom.supplierSelect.value}`;
             };
@@ -278,6 +314,8 @@ async function handleSupplierChange() {
         if (balanceDiv) balanceDiv.style.display = 'none';
         clearSelectedItemAvailability();
     }
+
+    updateDeleteButtonState();
 }
 
 async function initializeNewInvoice() {
@@ -285,7 +323,8 @@ async function initializeNewInvoice() {
     setEditLocked(false);
     purchasesState.originalInvoiceItemTotalsByItemId = {};
     if (purchasesState.dom.invoiceDateInput) {
-        purchasesState.dom.invoiceDateInput.valueAsDate = new Date();
+        const _d = new Date();
+        purchasesState.dom.invoiceDateInput.value = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
     }
     const nextId = await purchasesApi.getNextInvoiceNumber();
     const invoiceNumberInput = document.getElementById('invoiceNumber');
@@ -294,6 +333,7 @@ async function initializeNewInvoice() {
     }
     calculateInvoiceTotal();
     updateInvoiceNavigationButtons();
+    updateDeleteButtonState();
 }
 
 async function loadInvoiceForEdit(id) {
@@ -316,6 +356,7 @@ async function loadInvoiceForEdit(id) {
 
         purchasesState.dom.supplierSelect.value = invoice.supplier_id;
         if (purchasesState.supplierAutocomplete) purchasesState.supplierAutocomplete.refresh();
+        updateDeleteButtonState();
 
         const invoiceNumberInput = document.getElementById('invoiceNumber');
         if (invoiceNumberInput) {
@@ -881,6 +922,59 @@ function closeQuickRawModal() {
     purchasesState.dom.quickRawModal.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('modal-open');
     purchasesState.activeWeightsRow = null;
+}
+
+function openDeleteConfirmModal() {
+    if (!purchasesState.dom.deleteConfirmModal) return;
+    purchasesState.dom.deleteConfirmModal.classList.add('is-open');
+    purchasesState.dom.deleteConfirmModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+}
+
+function closeDeleteConfirmModal() {
+    if (!purchasesState.dom.deleteConfirmModal) return;
+    purchasesState.dom.deleteConfirmModal.classList.remove('is-open');
+    purchasesState.dom.deleteConfirmModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+}
+
+async function confirmDeleteInvoice() {
+    closeDeleteConfirmModal();
+
+    if (purchasesState.isSubmitting) return;
+    purchasesState.isSubmitting = true;
+
+    const deleteBtn = document.getElementById('deleteInvoiceBtn');
+    if (deleteBtn) {
+        deleteBtn.disabled = true;
+        deleteBtn.style.opacity = '0.6';
+        deleteBtn.style.cursor = 'not-allowed';
+    }
+
+    try {
+        if (!purchasesState.editingInvoiceId) {
+            await resetForm();
+            if (window.showToast) window.showToast('تم حذف بيانات الفاتورة الحالية.', 'success');
+            return;
+        }
+
+        const result = await purchasesApi.deletePurchaseInvoice(purchasesState.editingInvoiceId);
+        if (result && result.success) {
+            if (window.showToast) window.showToast('تم حذف الفاتورة بنجاح', 'success');
+            await resetForm();
+        } else if (window.showToast) {
+            window.showToast('حدث خطأ أثناء حذف الفاتورة: ' + ((result && result.error) || 'خطأ غير معروف'), 'error');
+        }
+    } catch (error) {
+        if (window.showToast) window.showToast('حدث خطأ أثناء حذف الفاتورة: ' + error.message, 'error');
+    } finally {
+        purchasesState.isSubmitting = false;
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.style.opacity = '1';
+            deleteBtn.style.cursor = 'pointer';
+        }
+    }
 }
 
 function saveQuickRawModal() {
@@ -1678,6 +1772,7 @@ async function resetForm() {
     purchasesState.originalInvoiceItemTotalsByItemId = {};
     purchasesRender.setCreateModeUI(t);
     setEditLocked(false);
+    updateDeleteButtonState();
 
     window.history.replaceState({}, document.title, window.location.pathname);
     await loadItems();
