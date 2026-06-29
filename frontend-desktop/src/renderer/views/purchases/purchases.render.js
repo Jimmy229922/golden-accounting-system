@@ -101,8 +101,7 @@
                                     <tr>
                                         <th style="width: 4%; text-align: center;">#</th>
                                         <th style="width: 13%;">${t('items.barcode', 'الباركود')}</th>
-                                        <th style="width: 19%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
-                                        <th style="width: 10%;">${t('purchases.tableHeaders.warehouse', 'المخزن')}</th>
+                                        <th style="width: 29%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
                                         <th style="width: 8%;">${t('purchases.tableHeaders.unit', 'الوحدة')}</th>
                                         <th style="width: 11%;">${t('purchases.raw_quantity', 'خام')}</th>
                                         <th style="width: 11%;">${t('purchases.net_1_percent', 'صافي 1%')}</th>
@@ -306,11 +305,6 @@
                 </select>
                 <span class="item-stock-badge empty"></span>
             </div>
-        </td>
-        <td>
-            <select class="form-control warehouse-select" data-fs-size="sm">
-                ${buildWarehousesOptions({ allWarehouses, existingItem, t })}
-            </select>
         </td>
         <td>
             <span class="unit-label">${unitName}</span>

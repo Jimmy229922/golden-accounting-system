@@ -586,18 +586,6 @@ function register() {
             VALUES (@invoice_id, @item_id, @warehouse_id, @quantity, @sale_price, @total_price)
         `);
 
-        const updateItemStock = db.prepare(`
-            UPDATE items 
-            SET stock_quantity = stock_quantity - @quantity
-            WHERE id = @item_id
-        `);
-
-        const updateCustomerBalance = db.prepare(`
-            UPDATE parties 
-            SET balance = balance + @amount 
-            WHERE id = @id
-        `);
-
         const transaction = db.transaction((data) => {
             const info = insertInvoice.run({
                 customer_id: data.customer_id,
@@ -622,19 +610,6 @@ function register() {
                     quantity: item.quantity,
                     sale_price: item.sale_price,
                     total_price: item.total_price
-                });
-
-                // Update item stock (subtract quantity)
-                updateItemStock.run({
-                    quantity: item.quantity,
-                    item_id: item.item_id
-                });
-            }
-
-            if (financials.balance_delta !== 0) {
-                updateCustomerBalance.run({
-                    amount: financials.balance_delta,
-                    id: data.customer_id
                 });
             }
 
@@ -682,32 +657,29 @@ function register() {
             paidAmount: paid_amount
         });
 
+        const itemDeltas = new Map();
+        for (const item of oldDetails) {
+            itemDeltas.set(item.item_id, -(Number(item.quantity) || 0));
+        }
+        for (const item of items) {
+            const currentDelta = itemDeltas.get(item.item_id) || 0;
+            itemDeltas.set(item.item_id, currentDelta + (Number(item.quantity) || 0));
+        }
+        const getStockForUpdate = db.prepare('SELECT name, stock_quantity FROM items WHERE id = ?');
+        for (const [itemId, delta] of itemDeltas.entries()) {
+            if (delta > 0) {
+                const dbItem = getStockForUpdate.get(itemId);
+                const currentStock = Number(dbItem?.stock_quantity) || 0;
+                if (currentStock - delta < 0) {
+                    const itemName = dbItem?.name || `ID: ${itemId}`;
+                    return { success: false, error: `الصنف "${itemName}": الكمية المطلوبة غير متاحة في المخزن.` };
+                }
+            }
+        }
+
         const transaction = db.transaction(() => {
             // --- REVERSE OLD EFFECTS ---
-            
-            // Reverse Stock (Add back sold items)
-            for (const item of oldDetails) {
-                db.prepare('UPDATE items SET stock_quantity = stock_quantity + ? WHERE id = ?').run(item.quantity, item.item_id);
-            }
-
-            // Stock validation after reversal: check new quantities fit
-            const getStockForUpdate = db.prepare('SELECT id, name, stock_quantity FROM items WHERE id = ?');
-            for (const item of items) {
-                const dbItem = getStockForUpdate.get(item.item_id);
-                if (!dbItem) {
-                    throw new Error(`الصنف غير موجود (ID: ${item.item_id})`);
-                }
-                if (item.quantity > dbItem.stock_quantity) {
-                    throw new Error(`الصنف "${dbItem.name}": الكمية المطلوبة (${item.quantity}) أكبر من المتاح (${dbItem.stock_quantity})`);
-                }
-            }
-
-            const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
-            if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.customer_id);
-            }
-
-            // Delete old Details
+            // Delete old Details (Triggers will auto-revert stock)
             db.prepare('DELETE FROM sales_invoice_details WHERE invoice_id = ?').run(id);
 
             // --- APPLY NEW EFFECTS ---
@@ -735,12 +707,11 @@ function register() {
                 notes
             });
 
-            // Insert New Details & Update Stock
+            // Insert New Details
             const insertDetail = db.prepare(`
                 INSERT INTO sales_invoice_details (invoice_id, item_id, warehouse_id, quantity, sale_price, total_price)
                 VALUES (@invoice_id, @item_id, @warehouse_id, @quantity, @sale_price, @total_price)
             `);
-            const updateItemStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity - @quantity WHERE id = @item_id');
 
             for (const item of items) {
                 insertDetail.run({
@@ -751,13 +722,7 @@ function register() {
                     sale_price: item.sale_price,
                     total_price: item.total_price
                 });
-                updateItemStock.run({ quantity: item.quantity, item_id: item.item_id });
             }
-
-            if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(financials.balance_delta, customer_id);
-            }
-
         });
 
         try {

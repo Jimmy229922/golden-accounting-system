@@ -11,7 +11,12 @@ function roundMoney(value) {
 }
 
 function getCurrentTreasuryBalance() {
-    const income = Number(db.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM treasury_transactions WHERE type = 'income'").get().total || 0);
+    const income = Number(db.prepare(`
+        SELECT COALESCE(SUM(amount), 0) as total 
+        FROM treasury_transactions 
+        WHERE type = 'income'
+          AND COALESCE(related_type, '') NOT IN ('customer_collection_pending', 'customer_collection_shift_close')
+    `).get().total || 0);
     const expense = Number(db.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM treasury_transactions WHERE type = 'expense'").get().total || 0);
     return roundMoney(income - expense);
 }

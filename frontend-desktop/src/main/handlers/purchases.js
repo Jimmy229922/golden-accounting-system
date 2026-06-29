@@ -234,11 +234,7 @@ function register() {
             WHERE id = @item_id
         `);
 
-        const updateSupplierBalance = db.prepare(`
-            UPDATE parties
-            SET balance = balance - @amount
-            WHERE id = @id
-        `);
+        // Manual balance update removed; handled by trg_party_ledger_after_purchase_invoice_insert and trg_update_party_balance
 
         const transaction = db.transaction((data) => {
             const info = insertInvoice.run({
@@ -276,12 +272,7 @@ function register() {
                 });
             }
 
-            if (financials.balance_delta !== 0) {
-                updateSupplierBalance.run({
-                    amount: financials.balance_delta,
-                    id: data.supplier_id
-                });
-            }
+            // Manual balance update removed
 
             return invoiceId;
         });
@@ -353,13 +344,7 @@ function register() {
 
         const transaction = db.transaction(() => {
             // --- REVERSE OLD ---
-            // Stock reversal moved to the end to prevent temporary negative values.
-
-            const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
-            if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
-            }
-            // Delete Details
+            // Delete Details (This will trigger DB cascade to inventory_transactions and auto-revert stock)
             db.prepare('DELETE FROM purchase_invoice_details WHERE invoice_id = ?').run(id);
 
             // --- APPLY NEW ---
@@ -389,7 +374,7 @@ function register() {
                 INSERT INTO purchase_invoice_details (invoice_id, item_id, warehouse_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
                 VALUES (@invoice_id, @item_id, @warehouse_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
             `);
-            const updateItemStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity + @quantity, cost_price = @cost_price WHERE id = @item_id');
+            const updateItemCostPrice = db.prepare('UPDATE items SET cost_price = @cost_price WHERE id = @item_id');
 
             for (const item of normalizedItems) {
                 insertDetail.run({
@@ -402,18 +387,8 @@ function register() {
                     cost_price: item.cost_price,
                     total_price: item.total_price
                 });
-                updateItemStock.run({ quantity: item.quantity, cost_price: item.cost_price, item_id: item.item_id });
+                updateItemCostPrice.run({ cost_price: item.cost_price, item_id: item.item_id });
             }
-
-            // Reverse Stock (Remove old purchased items)
-            for (const item of oldDetails) {
-                db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
-            }
-
-            if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
-            }
-
         });
 
         try {

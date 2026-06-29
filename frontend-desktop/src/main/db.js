@@ -228,7 +228,7 @@ function initDB() {
             phone TEXT,
             address TEXT,
             balance REAL DEFAULT 0,
-            type TEXT DEFAULT 'customer',
+            type TEXT CHECK(type IN ('customer', 'supplier', 'both')) DEFAULT 'customer',
             code INTEGER,
             opening_balance REAL DEFAULT 0
         )
@@ -285,13 +285,6 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN remaining_amount REAL DEFAULT 0", 'purchase_invoices', 'remaining_amount');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_type TEXT DEFAULT 'amount'", 'purchase_invoices', 'discount_type');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'purchase_invoices', 'discount_value');
-
-    // Add columns if they don't exist
-    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN payment_type TEXT DEFAULT 'cash'", 'purchase_invoices', 'payment_type');
-    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN paid_amount REAL DEFAULT 0", 'purchase_invoices', 'paid_amount');
-    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN remaining_amount REAL DEFAULT 0", 'purchase_invoices', 'remaining_amount');
-    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_type TEXT DEFAULT 'amount'", 'purchase_invoices', 'discount_type');
-    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'purchase_invoices', 'discount_value');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_amount REAL DEFAULT 0", 'purchase_invoices', 'discount_amount');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'purchase_invoices', 'created_at');
 
@@ -320,7 +313,7 @@ function initDB() {
     db.exec(`
         CREATE TABLE IF NOT EXISTS sales_invoices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            invoice_number TEXT,
+            invoice_number TEXT UNIQUE,
             customer_id INTEGER,
             invoice_date TEXT DEFAULT CURRENT_DATE,
             payment_type TEXT DEFAULT 'cash', -- 'cash' or 'credit'
@@ -332,7 +325,7 @@ function initDB() {
             remaining_amount REAL DEFAULT 0,
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES parties(id)
+            FOREIGN KEY (customer_id) REFERENCES parties(id) ON DELETE RESTRICT
         )
     `);
 
@@ -375,10 +368,10 @@ function initDB() {
             transaction_date TEXT DEFAULT CURRENT_DATE,
             description TEXT,
             related_invoice_id INTEGER, -- Optional: Link to sales/purchase invoice
-            related_type TEXT, -- 'sales' or 'purchase'
+            related_type TEXT CHECK(related_type IN ('sales', 'purchase', 'customer_collection_pending', 'customer_collection_shift_close', 'supplier_payment_pending') OR related_type IS NULL),
             customer_id INTEGER, -- Link to party (for direct payments)
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES parties(id)
+            FOREIGN KEY (customer_id) REFERENCES parties(id) ON DELETE RESTRICT
         )
     `);
 
@@ -473,7 +466,7 @@ function initDB() {
             total REAL NOT NULL DEFAULT 0,
             statement TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES parties(id)
+            FOREIGN KEY (customer_id) REFERENCES parties(id) ON DELETE RESTRICT
         )
     `);
 
@@ -524,6 +517,9 @@ function initDB() {
         )
     `);
 
+    // Ensure default warehouse exists (id = 1)
+    db.exec(`INSERT OR IGNORE INTO warehouses (id, name) VALUES (1, 'المخزن الرئيسي')`);
+
     // 13. Opening Balances Table (أرصدة أول المدة)
     db.exec(`
         CREATE TABLE IF NOT EXISTS opening_balances (
@@ -532,9 +528,11 @@ function initDB() {
             warehouse_id INTEGER NOT NULL,
             quantity REAL DEFAULT 0,
             cost_price REAL DEFAULT 0,
+            group_id INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (item_id) REFERENCES items(id),
-            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
+            FOREIGN KEY (group_id) REFERENCES opening_balance_groups(id) ON DELETE CASCADE
         )
     `);
 
@@ -743,8 +741,38 @@ function initDB() {
             reference_id INTEGER,
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (item_id) REFERENCES items(id)
+            FOREIGN KEY (item_id) REFERENCES items(id),
+            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
         )
+    `);
+
+    // Add triggers to auto-update items.stock_quantity from inventory_transactions
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_items_stock_after_inventory_insert
+        AFTER INSERT ON inventory_transactions
+        FOR EACH ROW
+        BEGIN
+            UPDATE items SET stock_quantity = stock_quantity + NEW.quantity WHERE id = NEW.item_id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_items_stock_after_inventory_delete
+        AFTER DELETE ON inventory_transactions
+        FOR EACH ROW
+        BEGIN
+            UPDATE items SET stock_quantity = stock_quantity - OLD.quantity WHERE id = OLD.item_id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_items_stock_after_inventory_update
+        AFTER UPDATE OF quantity, item_id ON inventory_transactions
+        FOR EACH ROW
+        BEGIN
+            UPDATE items SET stock_quantity = stock_quantity - OLD.quantity WHERE id = OLD.item_id;
+            UPDATE items SET stock_quantity = stock_quantity + NEW.quantity WHERE id = NEW.item_id;
+        END
     `);
 
     // Add triggers to automatically record inventory transactions
@@ -770,23 +798,33 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_inventory_after_purchase_detail_delete`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_inventory_after_purchase_detail_delete
         AFTER DELETE ON purchase_invoice_details
         FOR EACH ROW
         BEGIN
             DELETE FROM inventory_transactions
-            WHERE transaction_type = 'purchase' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = OLD.quantity;
+            WHERE id = (
+                SELECT id FROM inventory_transactions
+                WHERE transaction_type = 'purchase' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = OLD.quantity
+                LIMIT 1
+            );
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_inventory_after_purchase_detail_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_inventory_after_purchase_detail_update
         AFTER UPDATE OF item_id, warehouse_id, quantity ON purchase_invoice_details
         FOR EACH ROW
         BEGIN
             DELETE FROM inventory_transactions
-            WHERE transaction_type = 'purchase' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = OLD.quantity;
+            WHERE id = (
+                SELECT id FROM inventory_transactions
+                WHERE transaction_type = 'purchase' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = OLD.quantity
+                LIMIT 1
+            );
             
             INSERT INTO inventory_transactions (item_id, warehouse_id, transaction_type, quantity, reference_id, created_at)
             VALUES (NEW.item_id, NEW.warehouse_id, 'purchase', NEW.quantity, NEW.invoice_id, CURRENT_TIMESTAMP);
@@ -804,23 +842,33 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_inventory_after_sales_detail_delete`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_inventory_after_sales_detail_delete
         AFTER DELETE ON sales_invoice_details
         FOR EACH ROW
         BEGIN
             DELETE FROM inventory_transactions
-            WHERE transaction_type = 'sale' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = -OLD.quantity;
+            WHERE id = (
+                SELECT id FROM inventory_transactions
+                WHERE transaction_type = 'sale' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = -OLD.quantity
+                LIMIT 1
+            );
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_inventory_after_sales_detail_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_inventory_after_sales_detail_update
         AFTER UPDATE OF item_id, warehouse_id, quantity ON sales_invoice_details
         FOR EACH ROW
         BEGIN
             DELETE FROM inventory_transactions
-            WHERE transaction_type = 'sale' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = -OLD.quantity;
+            WHERE id = (
+                SELECT id FROM inventory_transactions
+                WHERE transaction_type = 'sale' AND item_id = OLD.item_id AND reference_id = OLD.invoice_id AND quantity = -OLD.quantity
+                LIMIT 1
+            );
             
             INSERT INTO inventory_transactions (item_id, warehouse_id, transaction_type, quantity, reference_id, created_at)
             VALUES (NEW.item_id, NEW.warehouse_id, 'sale', -NEW.quantity, NEW.invoice_id, CURRENT_TIMESTAMP);
@@ -838,13 +886,18 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_inventory_after_damaged_stock_delete`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_inventory_after_damaged_stock_delete
         AFTER DELETE ON damaged_stock_logs
         FOR EACH ROW
         BEGIN
             DELETE FROM inventory_transactions
-            WHERE transaction_type = 'damaged' AND item_id = OLD.item_id AND reference_id = OLD.id AND quantity = -OLD.quantity;
+            WHERE id = (
+                SELECT id FROM inventory_transactions
+                WHERE transaction_type = 'damaged' AND item_id = OLD.item_id AND reference_id = OLD.id AND quantity = -OLD.quantity
+                LIMIT 1
+            );
         END
     `);
 
@@ -893,8 +946,37 @@ function initDB() {
             reference_id INTEGER,
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (party_id) REFERENCES parties(id)
+            FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE RESTRICT
         )
+    `);
+
+    // Add triggers to auto-update parties.balance from party_ledger
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_parties_balance_after_ledger_insert
+        AFTER INSERT ON party_ledger
+        FOR EACH ROW
+        BEGIN
+            UPDATE parties SET balance = balance + NEW.amount WHERE id = NEW.party_id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_parties_balance_after_ledger_delete
+        AFTER DELETE ON party_ledger
+        FOR EACH ROW
+        BEGIN
+            UPDATE parties SET balance = balance - OLD.amount WHERE id = OLD.party_id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_parties_balance_after_ledger_update
+        AFTER UPDATE OF amount, party_id ON party_ledger
+        FOR EACH ROW
+        BEGIN
+            UPDATE parties SET balance = balance - OLD.amount WHERE id = OLD.party_id;
+            UPDATE parties SET balance = balance + NEW.amount WHERE id = NEW.party_id;
+        END
     `);
 
     // 1. Sales Invoices
@@ -908,14 +990,16 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_sales_invoice_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_sales_invoice_update
-        AFTER UPDATE OF total_amount, paid_amount, invoice_date ON sales_invoices
+        AFTER UPDATE OF total_amount, paid_amount, invoice_date, customer_id ON sales_invoices
         FOR EACH ROW
         BEGIN
             UPDATE party_ledger
             SET amount = NEW.total_amount - NEW.paid_amount,
-                transaction_date = NEW.invoice_date
+                transaction_date = NEW.invoice_date,
+                party_id = NEW.customer_id
             WHERE transaction_type = 'sales_invoice' AND reference_id = NEW.id;
         END
     `);
@@ -941,14 +1025,16 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_purchase_invoice_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_purchase_invoice_update
-        AFTER UPDATE OF total_amount, paid_amount, invoice_date ON purchase_invoices
+        AFTER UPDATE OF total_amount, paid_amount, invoice_date, supplier_id ON purchase_invoices
         FOR EACH ROW
         BEGIN
             UPDATE party_ledger
             SET amount = -(NEW.total_amount - NEW.paid_amount),
-                transaction_date = NEW.invoice_date
+                transaction_date = NEW.invoice_date,
+                party_id = NEW.supplier_id
             WHERE transaction_type = 'purchase_invoice' AND reference_id = NEW.id;
         END
     `);
@@ -1035,6 +1121,40 @@ function initDB() {
         END
     `);
 
+    // 5. Local Sales
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_insert
+        AFTER INSERT ON local_sales
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+            VALUES (NEW.customer_id, 'local_sale', NEW.total, NEW.record_date, NEW.id, NEW.created_at);
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_update
+        AFTER UPDATE OF total, customer_id, record_date ON local_sales
+        FOR EACH ROW
+        BEGIN
+            UPDATE party_ledger
+            SET amount = NEW.total,
+                party_id = NEW.customer_id,
+                transaction_date = NEW.record_date
+            WHERE transaction_type = 'local_sale' AND reference_id = NEW.id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_delete
+        AFTER DELETE ON local_sales
+        FOR EACH ROW
+        BEGIN
+            DELETE FROM party_ledger
+            WHERE transaction_type = 'local_sale' AND reference_id = OLD.id;
+        END
+    `);
+
     // Migrate old data if party_ledger is empty
     const hasPartyLedger = db.prepare('SELECT 1 FROM party_ledger LIMIT 1').get();
     if (!hasPartyLedger) {
@@ -1068,9 +1188,32 @@ function initDB() {
                 FROM treasury_transactions
                 WHERE customer_id IS NOT NULL AND amount != 0
             `);
+            // Local Sales
+            db.exec(`
+                INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+                SELECT customer_id, 'local_sale', total, record_date, id, created_at
+                FROM local_sales
+            `);
         });
         resetPartyTx();
     }
+    // ── Additional Performance Indexes (inventory_transactions & party_ledger) ──
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_inventory_transactions_item_id ON inventory_transactions(item_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_inventory_transactions_transaction_type ON inventory_transactions(transaction_type)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_inventory_transactions_item_date ON inventory_transactions(item_id, created_at)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_inventory_transactions_warehouse_id ON inventory_transactions(warehouse_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_party_ledger_party_id ON party_ledger(party_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_party_ledger_party_date ON party_ledger(party_id, transaction_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_party_ledger_type_ref ON party_ledger(transaction_type, reference_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_invoices_payment_type ON purchase_invoices(payment_type)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_invoices_payment_type ON sales_invoices(payment_type)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_is_collected ON under_collection_records(is_collected)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_remaining_under_collection_records_is_collected ON remaining_under_collection_records(is_collected)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_opening_balances_group_id ON opening_balances(group_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_related ON treasury_transactions(related_invoice_id, related_type)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_voucher ON treasury_transactions(voucher_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_petty_expenses_category ON petty_expenses(category)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_petty_expenses_date ON petty_expenses(expense_date)`);
 
     console.log('Database initialized at:', dbPath);
 }
