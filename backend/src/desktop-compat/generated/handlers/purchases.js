@@ -179,7 +179,7 @@ function register() {
             return db.prepare(`
                 SELECT pi.*, c.name as supplier_name 
                 FROM purchase_invoices pi
-                LEFT JOIN customers c ON pi.supplier_id = c.id
+                LEFT JOIN parties c ON pi.supplier_id = c.id
                 ORDER BY pi.id DESC
             `).all();
         } catch (error) {
@@ -192,6 +192,13 @@ function register() {
         const denied = requirePermission('purchases', 'add');
         if (denied) return denied;
         const { supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount } = invoiceData;
+        const trimmedInvoiceNumber = String(invoice_number || '').trim();
+        if (trimmedInvoiceNumber) {
+            const duplicateInvoice = db.prepare('SELECT id FROM purchase_invoices WHERE TRIM(invoice_number) = TRIM(?) LIMIT 1').get(trimmedInvoiceNumber);
+            if (duplicateInvoice) {
+                return { success: false, error: 'رقم فاتورة الشراء موجود مسبقًا. يرجى إدخال رقم مختلف.' };
+            }
+        }
 
         const normalizedItems = normalizePurchaseItems(items);
         let rawSubtotalAmount = 0;
@@ -226,10 +233,8 @@ function register() {
             WHERE id = @item_id
         `);
 
-
-
         const updateSupplierBalance = db.prepare(`
-            UPDATE customers
+            UPDATE parties
             SET balance = balance - @amount
             WHERE id = @id
         `);
@@ -269,8 +274,6 @@ function register() {
                 });
             }
 
-
-
             if (financials.balance_delta !== 0) {
                 updateSupplierBalance.run({
                     amount: financials.balance_delta,
@@ -299,6 +302,13 @@ function register() {
         const oldDetails = db.prepare('SELECT * FROM purchase_invoice_details WHERE invoice_id = ?').all(id);
 
         if (!oldInvoice) return { success: false, error: 'Invoice not found' };
+        const trimmedInvoiceNumber = String(invoice_number || '').trim();
+        if (trimmedInvoiceNumber) {
+            const duplicateInvoice = db.prepare('SELECT id FROM purchase_invoices WHERE TRIM(invoice_number) = TRIM(?) AND id != ? LIMIT 1').get(trimmedInvoiceNumber, id);
+            if (duplicateInvoice) {
+                return { success: false, error: 'رقم فاتورة الشراء موجود مسبقًا. يرجى إدخال رقم مختلف.' };
+            }
+        }
 
         const normalizedItems = normalizePurchaseItems(items);
         let rawSubtotalAmount = 0;
@@ -316,15 +326,37 @@ function register() {
             finalAmount: netSubtotalAmount
         });
 
+        const getItemStock = db.prepare('SELECT name, stock_quantity FROM items WHERE id = ?');
+        const itemDeltas = new Map();
+        for (const item of oldDetails) {
+            itemDeltas.set(item.item_id, -(Number(item.quantity) || 0));
+        }
+        for (const item of normalizedItems) {
+            const currentDelta = itemDeltas.get(item.item_id) || 0;
+            itemDeltas.set(item.item_id, currentDelta + (Number(item.quantity) || 0));
+        }
+        for (const [itemId, delta] of itemDeltas.entries()) {
+            if (delta < 0) {
+                const dbItem = getItemStock.get(itemId);
+                const currentStock = Number(dbItem?.stock_quantity) || 0;
+                if (currentStock + delta < 0) {
+                    const itemName = dbItem?.name || `ID: ${itemId}`;
+                    return {
+                        success: false,
+                        error: `لا يمكن تعديل الفاتورة وتقليل الكمية. المخزون الحالي للصنف "${itemName}" لا يسمح (تم بيع جزء منه).`
+                    };
+                }
+            }
+        }
+
         const transaction = db.transaction(() => {
             // --- REVERSE OLD ---
-            // We will reverse stock after adding new stock to prevent temporary negative values.
-            // Stock reversal is moved below.
+            // Stock reversal moved to the end to prevent temporary negative values.
+
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
+                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
             }
-
             // Delete Details
             db.prepare('DELETE FROM purchase_invoice_details WHERE invoice_id = ?').run(id);
 
@@ -338,17 +370,17 @@ function register() {
                 WHERE id = @id
             `).run({
                 id,
-                supplier_id: supplier_id || null,
-                invoice_number: invoice_number || null,
-                invoice_date: invoice_date || null,
-                total_amount: financials.total_amount || 0,
-                discount_type: financials.discount_type || null,
-                discount_value: financials.discount_value || 0,
-                discount_amount: financials.discount_amount || 0,
-                paid_amount: financials.paid_amount || 0,
-                remaining_amount: financials.remaining_amount || 0,
-                payment_type: payment_type || null,
-                notes: notes || null
+                supplier_id,
+                invoice_number,
+                invoice_date,
+                total_amount: financials.total_amount,
+                discount_type: financials.discount_type,
+                discount_value: financials.discount_value,
+                discount_amount: financials.discount_amount,
+                paid_amount: financials.paid_amount,
+                remaining_amount: financials.remaining_amount,
+                payment_type,
+                notes
             });
 
             const insertDetail = db.prepare(`
@@ -376,9 +408,8 @@ function register() {
             }
 
             if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
+                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
             }
-
 
         });
 
@@ -393,3 +424,5 @@ function register() {
 }
 
 module.exports = { register };
+
+

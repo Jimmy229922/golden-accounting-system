@@ -1,14 +1,8 @@
 const Database = require('better-sqlite3');
-const fs = require('fs');
 const path = require('path');
+const { app } = require('electron');
 
-const dataDir = process.env.BACKEND_DATA_DIR
-    ? path.resolve(process.cwd(), process.env.BACKEND_DATA_DIR)
-    : path.resolve(process.cwd(), 'data');
-
-fs.mkdirSync(dataDir, { recursive: true });
-
-const dbPath = path.join(dataDir, 'accounting.db');
+const dbPath = path.join(app.getPath('userData'), 'accounting.db');
 const db = new Database(dbPath);
 
 function isExpectedAddColumnError(error) {
@@ -28,6 +22,71 @@ function runAddColumnMigration(sql, table, column) {
     }
 
     return true;
+}
+
+function tableExists(name) {
+    const row = db.prepare(`
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = ?
+        LIMIT 1
+    `).get(name);
+    return Boolean(row);
+}
+
+function applyUnifiedPartiesSchemaReset() {
+    const partiesExists = tableExists('parties');
+
+    const fullResetTables = [
+        'sales_invoice_details',
+        'purchase_invoice_details',
+        'sales_shift_closings',
+        'local_sales',
+        'treasury_transactions',
+        'sales_invoices',
+        'purchase_invoices',
+        'sales_return_details',
+        'sales_returns',
+        'purchase_return_details',
+        'purchase_returns',
+        'suppliers',
+        'customers',
+        'parties'
+    ];
+
+    const obsoleteTables = [
+        'sales_return_details',
+        'sales_returns',
+        'purchase_return_details',
+        'purchase_returns',
+        'suppliers'
+    ];
+
+    let tablesToDrop = [];
+    if (!partiesExists) {
+        const hasLegacySchema = fullResetTables.some((table) => tableExists(table));
+        if (hasLegacySchema) {
+            tablesToDrop = fullResetTables;
+        }
+    } else {
+        tablesToDrop = obsoleteTables.filter((table) => tableExists(table));
+    }
+
+    if (!tablesToDrop.length) {
+        return;
+    }
+
+    db.pragma('foreign_keys = OFF');
+    try {
+        const resetTx = db.transaction(() => {
+            tablesToDrop.forEach((table) => {
+                db.exec(`DROP TABLE IF EXISTS ${table}`);
+            });
+        });
+        resetTx();
+    } finally {
+        db.pragma('foreign_keys = ON');
+    }
 }
 
 const TREASURY_VOUCHER_SCHEME_KEY = 'treasury_voucher_scheme_v2';
@@ -122,6 +181,7 @@ function initDB() {
     db.pragma('busy_timeout = 5000');
     db.pragma('cache_size = -16000');
     db.pragma('synchronous = NORMAL');
+    applyUnifiedPartiesSchemaReset();
 
     // 1. Units Table (جدول الوحدات)
     db.exec(`
@@ -160,32 +220,32 @@ function initDB() {
         // Column likely already exists
     }
 
-    // 3. Customers Table (جدول العملاء)
+    // 3. Parties Table (جدول الجهات الموحد)
     db.exec(`
-        CREATE TABLE IF NOT EXISTS customers (
+        CREATE TABLE IF NOT EXISTS parties (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             phone TEXT,
             address TEXT,
             balance REAL DEFAULT 0,
             type TEXT DEFAULT 'customer',
-            code INTEGER
+            code INTEGER,
+            opening_balance REAL DEFAULT 0
         )
     `);
 
     // Attempt to add 'type' column if it doesn't exist (for existing databases)
     try {
-        db.exec("ALTER TABLE customers ADD COLUMN type TEXT DEFAULT 'customer'");
+        db.exec("ALTER TABLE parties ADD COLUMN type TEXT DEFAULT 'customer'");
     } catch (err) {
         // Column likely already exists, ignore error
     }
 
     // Attempt to add 'code' column if it doesn't exist (for existing databases)
     try {
-        db.exec("ALTER TABLE customers ADD COLUMN code INTEGER");
-        // Backfill existing customers with sequential codes
-        const rows = db.prepare("SELECT id FROM customers WHERE code IS NULL ORDER BY id ASC").all();
-        const update = db.prepare("UPDATE customers SET code = ? WHERE id = ?");
+        db.exec("ALTER TABLE parties ADD COLUMN code INTEGER");
+        const rows = db.prepare("SELECT id FROM parties WHERE code IS NULL ORDER BY id ASC").all();
+        const update = db.prepare("UPDATE parties SET code = ? WHERE id = ?");
         rows.forEach((row, i) => update.run(i + 1, row.id));
     } catch (err) {
         // Column likely already exists
@@ -193,23 +253,11 @@ function initDB() {
 
     // Attempt to add 'opening_balance' column if it doesn't exist (for existing databases)
     try {
-        db.exec("ALTER TABLE customers ADD COLUMN opening_balance REAL DEFAULT 0");
-        // Backfill: copy current balance as opening_balance for existing customers
-        db.exec("UPDATE customers SET opening_balance = balance WHERE opening_balance = 0 AND balance != 0");
+        db.exec("ALTER TABLE parties ADD COLUMN opening_balance REAL DEFAULT 0");
+        db.exec("UPDATE parties SET opening_balance = balance WHERE opening_balance = 0 AND balance != 0");
     } catch (err) {
         // Column likely already exists
     }
-
-    // 4. Suppliers Table (جدول الموردين)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS suppliers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            phone TEXT,
-            address TEXT,
-            balance REAL DEFAULT 0
-        )
-    `);
 
     // 5. Purchase Invoices Table (جدول فواتير المشتريات)
     db.exec(`
@@ -227,7 +275,7 @@ function initDB() {
             remaining_amount REAL DEFAULT 0,
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (supplier_id) REFERENCES customers(id)
+            FOREIGN KEY (supplier_id) REFERENCES parties(id)
         )
     `);
 
@@ -238,6 +286,7 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_type TEXT DEFAULT 'amount'", 'purchase_invoices', 'discount_type');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'purchase_invoices', 'discount_value');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_amount REAL DEFAULT 0", 'purchase_invoices', 'discount_amount');
+    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'purchase_invoices', 'created_at');
 
     // 6. Purchase Invoice Details Table (جدول تفاصيل فاتورة المشتريات)
     db.exec(`
@@ -273,7 +322,7 @@ function initDB() {
             remaining_amount REAL DEFAULT 0,
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES customers(id)
+            FOREIGN KEY (customer_id) REFERENCES parties(id)
         )
     `);
 
@@ -284,6 +333,7 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_type TEXT DEFAULT 'amount'", 'sales_invoices', 'discount_type');
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'sales_invoices', 'discount_value');
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_amount REAL DEFAULT 0", 'sales_invoices', 'discount_amount');
+    runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'sales_invoices', 'created_at');
 
     // 8. Sales Invoice Details Table (جدول تفاصيل فاتورة المبيعات)
     db.exec(`
@@ -309,18 +359,16 @@ function initDB() {
             description TEXT,
             related_invoice_id INTEGER, -- Optional: Link to sales/purchase invoice
             related_type TEXT, -- 'sales' or 'purchase'
-            customer_id INTEGER, -- Link to customer (for direct payments)
-            supplier_id INTEGER, -- Link to supplier (for direct payments)
+            customer_id INTEGER, -- Link to party (for direct payments)
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES customers(id),
-            FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+            FOREIGN KEY (customer_id) REFERENCES parties(id)
         )
     `);
 
     // Add columns if they don't exist
-    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN customer_id INTEGER REFERENCES customers(id)", 'treasury_transactions', 'customer_id');
-    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id)", 'treasury_transactions', 'supplier_id');
+    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN customer_id INTEGER REFERENCES parties(id)", 'treasury_transactions', 'customer_id');
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN voucher_number TEXT", 'treasury_transactions', 'voucher_number');
+    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'treasury_transactions', 'created_at');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS petty_expenses (
@@ -456,7 +504,7 @@ function initDB() {
             total REAL NOT NULL DEFAULT 0,
             statement TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES customers(id)
+            FOREIGN KEY (customer_id) REFERENCES parties(id)
         )
     `);
 
@@ -536,66 +584,6 @@ function initDB() {
         // Column likely exists
     }
 
-    // 15. Sales Returns Table (جدول مردودات المبيعات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS sales_returns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_number TEXT,
-            original_invoice_id INTEGER NOT NULL,
-            customer_id INTEGER NOT NULL,
-            return_date TEXT DEFAULT CURRENT_DATE,
-            total_amount REAL DEFAULT 0,
-            notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (original_invoice_id) REFERENCES sales_invoices(id),
-            FOREIGN KEY (customer_id) REFERENCES customers(id)
-        )
-    `);
-
-    // 16. Sales Return Details Table (جدول تفاصيل مردودات المبيعات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS sales_return_details (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_id INTEGER NOT NULL,
-            item_id INTEGER NOT NULL,
-            quantity REAL NOT NULL,
-            price REAL NOT NULL,
-            total_price REAL NOT NULL,
-            FOREIGN KEY (return_id) REFERENCES sales_returns(id) ON DELETE CASCADE,
-            FOREIGN KEY (item_id) REFERENCES items(id)
-        )
-    `);
-
-    // 17. Purchase Returns Table (جدول مردودات المشتريات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS purchase_returns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_number TEXT,
-            original_invoice_id INTEGER NOT NULL,
-            supplier_id INTEGER NOT NULL,
-            return_date TEXT DEFAULT CURRENT_DATE,
-            total_amount REAL DEFAULT 0,
-            notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (original_invoice_id) REFERENCES purchase_invoices(id),
-            FOREIGN KEY (supplier_id) REFERENCES customers(id)
-        )
-    `);
-
-    // 18. Purchase Return Details Table (جدول تفاصيل مردودات المشتريات)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS purchase_return_details (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            return_id INTEGER NOT NULL,
-            item_id INTEGER NOT NULL,
-            quantity REAL NOT NULL,
-            price REAL NOT NULL,
-            total_price REAL NOT NULL,
-            FOREIGN KEY (return_id) REFERENCES purchase_returns(id) ON DELETE CASCADE,
-            FOREIGN KEY (item_id) REFERENCES items(id)
-        )
-    `);
-
     // 19. User Permissions Table (جدول صلاحيات المستخدمين)
     db.exec(`
         CREATE TABLE IF NOT EXISTS user_permissions (
@@ -635,8 +623,8 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_unit_id ON items(unit_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_is_deleted ON items(is_deleted)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_customers_type ON customers(type)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_parties_name ON parties(name)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_parties_type ON parties(type)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_invoices_customer_id ON sales_invoices(customer_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_invoices_invoice_date ON sales_invoices(invoice_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_invoices_invoice_number ON sales_invoices(invoice_number)`);
@@ -661,14 +649,6 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_customer_id ON local_sales(customer_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_period_end_at ON sales_shift_closings(period_end_at)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_shift_closings_created_at ON sales_shift_closings(created_at)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_returns_customer_id ON sales_returns(customer_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_returns_original_invoice_id ON sales_returns(original_invoice_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_return_details_return_id ON sales_return_details(return_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_return_details_item_id ON sales_return_details(item_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_returns_supplier_id ON purchase_returns(supplier_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_returns_original_invoice_id ON purchase_returns(original_invoice_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_return_details_return_id ON purchase_return_details(return_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_purchase_return_details_item_id ON purchase_return_details(item_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_opening_balances_item_id ON opening_balances(item_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_opening_balances_warehouse_id ON opening_balances(warehouse_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_user_permissions_user_id ON user_permissions(user_id)`);
@@ -783,72 +763,6 @@ function initDB() {
         END
     `);
 
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_sales_return_number_unique_insert
-        BEFORE INSERT ON sales_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM sales_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate sales return number');
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_sales_return_number_unique_update
-        BEFORE UPDATE OF return_number ON sales_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM sales_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-                AND id <> OLD.id
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate sales return number');
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_purchase_return_number_unique_insert
-        BEFORE INSERT ON purchase_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM purchase_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate purchase return number');
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_purchase_return_number_unique_update
-        BEFORE UPDATE OF return_number ON purchase_returns
-        FOR EACH ROW
-        WHEN NEW.return_number IS NOT NULL
-          AND TRIM(NEW.return_number) != ''
-          AND EXISTS (
-              SELECT 1
-              FROM purchase_returns
-              WHERE TRIM(return_number) = TRIM(NEW.return_number)
-                AND id <> OLD.id
-          )
-        BEGIN
-            SELECT RAISE(ABORT, 'duplicate purchase return number');
-        END
-    `);
-
     console.log('Database initialized at:', dbPath);
 }
 
@@ -856,3 +770,4 @@ module.exports = {
     db,
     initDB
 };
+

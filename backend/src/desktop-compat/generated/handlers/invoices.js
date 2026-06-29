@@ -40,19 +40,13 @@ function register() {
             } else if (type === 'purchase') {
                 table = 'purchase_invoices';
                 prefix = 'PC';
-            } else if (type === 'sales_return') {
-                table = 'sales_returns';
-                prefix = 'SR';
-            } else if (type === 'purchase_return') {
-                table = 'purchase_returns';
-                prefix = 'PR';
             } else {
                 // Default fallback
                 table = type === 'sales' ? 'sales_invoices' : 'purchase_invoices';
                 prefix = type === 'sales' ? 'SL' : 'PC';
             }
 
-            const numberField = (type === 'sales_return' || type === 'purchase_return') ? 'return_number' : 'invoice_number';
+            const numberField = 'invoice_number';
             
             // Use COUNT to get actual number of invoices, not MAX(id) which can be misleading after deletions
             const countResult = db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get();
@@ -67,45 +61,6 @@ function register() {
             return `${prefix}-${String(nextNumber).padStart(4, '0')}`;
         } catch (error) {
             return '1';
-        }
-    });
-
-    // Get invoice items with already-returned quantities
-    ipcMain.handle('get-invoice-items-for-return', (event, { invoiceId, type }) => {
-        try {
-            if (type === 'sales') {
-                const items = db.prepare(`
-                    SELECT d.*, i.name as item_name, u.name as unit_name,
-                        COALESCE((
-                            SELECT SUM(srd.quantity)
-                            FROM sales_return_details srd
-                            JOIN sales_returns sr ON srd.return_id = sr.id
-                            WHERE sr.original_invoice_id = d.invoice_id AND srd.item_id = d.item_id
-                        ), 0) as returned_quantity
-                    FROM sales_invoice_details d
-                    LEFT JOIN items i ON d.item_id = i.id
-                    LEFT JOIN units u ON i.unit_id = u.id
-                    WHERE d.invoice_id = ?
-                `).all(invoiceId);
-                return { success: true, items };
-            } else {
-                const items = db.prepare(`
-                    SELECT d.*, i.name as item_name, u.name as unit_name,
-                        COALESCE((
-                            SELECT SUM(prd.quantity)
-                            FROM purchase_return_details prd
-                            JOIN purchase_returns pr ON prd.return_id = pr.id
-                            WHERE pr.original_invoice_id = d.invoice_id AND prd.item_id = d.item_id
-                        ), 0) as returned_quantity
-                    FROM purchase_invoice_details d
-                    LEFT JOIN items i ON d.item_id = i.id
-                    LEFT JOIN units u ON i.unit_id = u.id
-                    WHERE d.invoice_id = ?
-                `).all(invoiceId);
-                return { success: true, items };
-            }
-        } catch (error) {
-            return { success: false, error: error.message };
         }
     });
 
@@ -138,34 +93,6 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-sales-return-details', (event, returnId) => {
-        try {
-            return db.prepare(`
-                SELECT d.*, i.name as item_name
-                FROM sales_return_details d
-                LEFT JOIN items i ON d.item_id = i.id
-                WHERE d.return_id = ?
-            `).all(returnId);
-        } catch (error) {
-            console.error('[get-sales-return-details] Error:', error);
-            return [];
-        }
-    });
-
-    ipcMain.handle('get-purchase-return-details', (event, returnId) => {
-        try {
-            return db.prepare(`
-                SELECT d.*, i.name as item_name
-                FROM purchase_return_details d
-                LEFT JOIN items i ON d.item_id = i.id
-                WHERE d.return_id = ?
-            `).all(returnId);
-        } catch (error) {
-            console.error('[get-purchase-return-details] Error:', error);
-            return [];
-        }
-    });
-
     ipcMain.handle('delete-invoice', (event, { id, type }) => {
         const page = type === 'sales' ? 'sales' : 'purchases';
         const denied = requirePermission(page, 'delete');
@@ -179,6 +106,22 @@ function register() {
         if (!invoice) return { success: false, error: 'Invoice not found' };
 
         const details = db.prepare(`SELECT * FROM ${detailsTable} WHERE invoice_id = ?`).all(id);
+
+        if (!isSales) {
+            const getItemStock = db.prepare('SELECT id, name, stock_quantity FROM items WHERE id = ?');
+            for (const item of details) {
+                const dbItem = getItemStock.get(item.item_id);
+                const currentStock = Number(dbItem?.stock_quantity) || 0;
+                const invoiceQty = Number(item.quantity) || 0;
+                if (currentStock - invoiceQty < 0) {
+                    const itemName = dbItem?.name || `ID: ${item.item_id}`;
+                    return {
+                        success: false,
+                        error: `لا يمكن حذف فاتورة الشراء لأن الصنف "${itemName}" تم بيع جزء من كميته أو استخدامه.`
+                    };
+                }
+            }
+        }
 
         const transaction = db.transaction(() => {
             // 1. Reverse Stock
@@ -196,20 +139,19 @@ function register() {
             if (isSales) {
                 const salesBalanceDelta = (Number(invoice.total_amount) || 0) - (Number(invoice.paid_amount) || 0);
                 if (salesBalanceDelta !== 0) {
-                    db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(salesBalanceDelta, invoice[personIdField]);
+                    db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(salesBalanceDelta, invoice[personIdField]);
                 }
             } else {
                 const purchaseBalanceDelta = (Number(invoice.total_amount) || 0) - (Number(invoice.paid_amount) || 0);
                 if (purchaseBalanceDelta !== 0) {
-                    db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(purchaseBalanceDelta, invoice[personIdField]);
+                    db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(purchaseBalanceDelta, invoice[personIdField]);
                 }
             }
 
             // 3. Reverse Treasury (if paid > 0)
             if (invoice.paid_amount > 0) {
                 // Delete the treasury transaction
-                const tType = isSales ? 'sale' : 'purchase';
-                db.prepare('DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = ?').run(id, tType);
+                db.prepare('DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = ?').run(id, type);
             }
 
             // 4. Delete Details
@@ -230,3 +172,4 @@ function register() {
 }
 
 module.exports = { register };
+

@@ -138,7 +138,7 @@ function register() {
             `);
 
             const updateBalance = db.prepare(`
-                UPDATE customers 
+                UPDATE parties 
                 SET balance = balance + @amount 
                 WHERE id = @id
             `);
@@ -197,7 +197,7 @@ function register() {
             }
 
             const updateBalance = db.prepare(`
-                UPDATE customers
+                UPDATE parties
                 SET balance = balance + @amount
                 WHERE id = @id
             `);
@@ -238,7 +238,7 @@ function register() {
         
         // Sales Updates
         const updateSalesInvoice = db.prepare('UPDATE sales_invoices SET paid_amount = paid_amount - @amount, remaining_amount = remaining_amount + @amount WHERE id = @id');
-        const updateCustomer = db.prepare('UPDATE customers SET balance = balance + @amount WHERE id = @id');
+        const updateCustomer = db.prepare('UPDATE parties SET balance = balance + @amount WHERE id = @id');
         const getSalesInvoice = db.prepare('SELECT customer_id FROM sales_invoices WHERE id = ?');
 
         // Purchase Updates
@@ -293,7 +293,7 @@ function register() {
             const results = db.prepare(`
                 SELECT t.*, c.name as customer_name
                 FROM treasury_transactions t
-                LEFT JOIN customers c ON t.customer_id = c.id
+                LEFT JOIN parties c ON t.customer_id = c.id
                 WHERE t.voucher_number LIKE @search
                 ORDER BY t.transaction_date DESC, t.id DESC
             `).all({ search: `%${voucherNumber}%` });
@@ -305,3 +305,5 @@ function register() {
 }
 
 module.exports = { register };
+
+

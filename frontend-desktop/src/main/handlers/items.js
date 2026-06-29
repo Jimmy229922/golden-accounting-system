@@ -498,7 +498,7 @@ function register() {
                     'وارد - مشتريات' as type_label
                 FROM purchase_invoice_details pid
                 JOIN purchase_invoices pi ON pid.invoice_id = pi.id
-                LEFT JOIN customers c ON pi.supplier_id = c.id
+                LEFT JOIN parties c ON pi.supplier_id = c.id
                 WHERE pid.item_id = ?
                 ORDER BY pi.invoice_date DESC
             `).all(itemId);
@@ -517,7 +517,7 @@ function register() {
                     'صادر - مبيعات' as type_label
                 FROM sales_invoice_details sid
                 JOIN sales_invoices si ON sid.invoice_id = si.id
-                LEFT JOIN customers c ON si.customer_id = c.id
+                LEFT JOIN parties c ON si.customer_id = c.id
                 WHERE sid.item_id = ?
                 ORDER BY si.invoice_date DESC
             `).all(itemId);
@@ -619,7 +619,7 @@ function register() {
                 c.name as party
             FROM purchase_invoice_details pid
             JOIN purchase_invoices pi ON pid.invoice_id = pi.id
-            LEFT JOIN customers c ON pi.supplier_id = c.id
+            LEFT JOIN parties c ON pi.supplier_id = c.id
             WHERE pid.item_id = ?
         `;
         const purchaseParams = [itemId];
@@ -638,7 +638,7 @@ function register() {
                 c.name as party
             FROM sales_invoice_details sid
             JOIN sales_invoices si ON sid.invoice_id = si.id
-            LEFT JOIN customers c ON si.customer_id = c.id
+            LEFT JOIN parties c ON si.customer_id = c.id
             WHERE sid.item_id = ?
         `;
         const salesParams = [itemId];
@@ -684,3 +684,4 @@ function register() {
 }
 
 module.exports = { register };
+

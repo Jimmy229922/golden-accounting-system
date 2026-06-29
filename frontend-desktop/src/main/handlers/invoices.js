@@ -139,12 +139,12 @@ function register() {
             if (isSales) {
                 const salesBalanceDelta = (Number(invoice.total_amount) || 0) - (Number(invoice.paid_amount) || 0);
                 if (salesBalanceDelta !== 0) {
-                    db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(salesBalanceDelta, invoice[personIdField]);
+                    db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(salesBalanceDelta, invoice[personIdField]);
                 }
             } else {
                 const purchaseBalanceDelta = (Number(invoice.total_amount) || 0) - (Number(invoice.paid_amount) || 0);
                 if (purchaseBalanceDelta !== 0) {
-                    db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(purchaseBalanceDelta, invoice[personIdField]);
+                    db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(purchaseBalanceDelta, invoice[personIdField]);
                 }
             }
 
@@ -172,3 +172,4 @@ function register() {
 }
 
 module.exports = { register };
+

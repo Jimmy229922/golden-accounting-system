@@ -20,63 +20,9 @@ function getCustomerStatementTransactionEffect(trans) {
     if (trans.type === 'payment_out') {
         return Number(trans.paid_amount) || 0;
     }
-    if (trans.type === 'sales_return') {
-        return -(Number(trans.total_amount) || 0);
-    }
-    if (trans.type === 'purchase_return') {
-        return Number(trans.total_amount) || 0;
-    }
     return 0;
 }
 
-function getCustomerStatementMovementAfterDate(customerId, afterDate) {
-    if (!afterDate) return 0;
-
-    const custId = Number(customerId);
-    const row = db.prepare(`
-        SELECT COALESCE(SUM(
-            CASE
-                WHEN sub_type = 'sales' THEN amount
-                WHEN sub_type = 'purchase' THEN -amount
-                WHEN sub_type = 'payment_in' THEN -amount
-                WHEN sub_type = 'payment_out' THEN amount
-                WHEN sub_type = 'sales_return' THEN -amount
-                WHEN sub_type = 'purchase_return' THEN amount
-                ELSE 0
-            END
-        ), 0) as net
-        FROM (
-            SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount, invoice_date as trans_date
-            FROM sales_invoices WHERE customer_id = @custId
-
-            UNION ALL
-            SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount, invoice_date as trans_date
-            FROM purchase_invoices WHERE supplier_id = @custId
-
-            UNION ALL
-            SELECT CASE WHEN type = 'income' THEN 'payment_in' ELSE 'payment_out' END as sub_type,
-                   amount, transaction_date as trans_date
-            FROM treasury_transactions
-            WHERE customer_id = @custId
-              AND COALESCE(related_type, '') NOT IN ('sales', 'purchase', 'sales_return', 'purchase_return')
-
-            UNION ALL
-            SELECT 'sales_return' as sub_type, total_amount as amount, return_date as trans_date
-            FROM sales_returns
-            WHERE customer_id = @custId
-              AND original_invoice_id IN (SELECT id FROM sales_invoices WHERE payment_type = 'credit')
-
-            UNION ALL
-            SELECT 'purchase_return' as sub_type, total_amount as amount, return_date as trans_date
-            FROM purchase_returns
-            WHERE supplier_id = @custId
-              AND original_invoice_id IN (SELECT id FROM purchase_invoices WHERE payment_type = 'credit')
-        ) sub
-        WHERE trans_date > @afterDate
-    `).get({ custId, afterDate });
-
-    return Number(row && row.net) || 0;
-}
 
 async function prepareShellFrameForPdfCapture(webContents) {
     if (!webContents || webContents.isDestroyed()) {
@@ -241,10 +187,9 @@ function register() {
         
         // Helper to build query parts
         const buildQuery = (table, typeLabel) => {
-            const isReturn = typeLabel === 'sales_return' || typeLabel === 'purchase_return';
-            const dateCol = isReturn ? 'return_date' : 'invoice_date';
-            const numCol = isReturn ? 'return_number' : 'invoice_number';
-            const joinCol = (typeLabel === 'sales' || typeLabel === 'sales_return') ? 'customer_id' : 'supplier_id';
+            const dateCol = 'invoice_date';
+            const numCol = 'invoice_number';
+            const joinCol = typeLabel === 'sales' ? 'customer_id' : 'supplier_id';
             let sql = `
                 SELECT 
                     '${typeLabel}' as type,
@@ -253,9 +198,11 @@ function register() {
                     i.${dateCol} as invoice_date,
                     i.total_amount,
                     c.name as customer_name,
-                    i.created_at
+                    i.created_at,
+                    i.paid_amount,
+                    i.remaining_amount
                 FROM ${table} i
-                LEFT JOIN customers c ON i.${joinCol} = c.id
+                LEFT JOIN parties c ON i.${joinCol} = c.id
                 WHERE 1=1
             `;
             
@@ -278,12 +225,6 @@ function register() {
         if (type === 'all' || type === 'purchase') {
             queries.push(buildQuery('purchase_invoices', 'purchase'));
         }
-        if (type === 'all' || type === 'sales_return') {
-            queries.push(buildQuery('sales_returns', 'sales_return'));
-        }
-        if (type === 'all' || type === 'purchase_return') {
-            queries.push(buildQuery('purchase_returns', 'purchase_return'));
-        }
 
         // Treasury transactions (receipt/payment)
         const buildTreasuryQuery = (treasuryType, typeLabel) => {
@@ -295,9 +236,11 @@ function register() {
                     t.transaction_date as invoice_date,
                     t.amount as total_amount,
                     c.name as customer_name,
-                    t.created_at
+                    t.created_at,
+                    t.amount as paid_amount,
+                    0 as remaining_amount
                 FROM treasury_transactions t
-                LEFT JOIN customers c ON t.customer_id = c.id
+                LEFT JOIN parties c ON t.customer_id = c.id
                 WHERE t.type = '${treasuryType}' AND t.customer_id IS NOT NULL
             `;
             if (startDate) {
@@ -321,12 +264,12 @@ function register() {
 
         if (queries.length === 0) return [];
 
-        const finalQuery = queries.join(' UNION ALL ') + ' ORDER BY created_at DESC, id DESC';
+        const finalQuery = queries.join(' UNION ALL ') + ' ORDER BY 7 DESC, 2 DESC';
         
         return db.prepare(finalQuery).all({ startDate, endDate, customerId });
         } catch (error) {
             console.error('[get-all-reports] Error:', error);
-            return [];
+            return { error: error.message, stack: error.stack };
         }
     });
 
@@ -339,18 +282,21 @@ function register() {
                 si.invoice_number,
                 si.invoice_date,
                 si.total_amount,
+                si.paid_amount,
+                si.remaining_amount,
                 si.notes
             FROM sales_invoices si
             WHERE si.customer_id = ?
         `;
-        
         const purchaseQuery = `
             SELECT 
                 'purchase' as type,
                 pi.id,
                 pi.invoice_number,
                 pi.invoice_date,
-                pi.remaining_amount as total_amount,
+                pi.total_amount,
+                pi.paid_amount,
+                pi.remaining_amount,
                 pi.notes
             FROM purchase_invoices pi
             WHERE pi.supplier_id = ?
@@ -363,6 +309,8 @@ function register() {
                 COALESCE(voucher_number, '-') as invoice_number,
                 transaction_date as invoice_date,
                 amount as total_amount,
+                amount as paid_amount,
+                0 as remaining_amount,
                 description as notes
             FROM treasury_transactions
             WHERE (customer_id = ?
@@ -382,10 +330,10 @@ function register() {
         }
     });
 
-    // كشف حساب تفصيلي للعميل (محدث - يشمل المردودات)
+    // كشف حساب تفصيلي للعميل
     ipcMain.handle('get-customer-detailed-statement', (event, { customerId, startDate, endDate }) => {
         try {
-            const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
+            const customer = db.prepare('SELECT * FROM parties WHERE id = ?').get(customerId);
             if (!customer) {
                 return { success: false, error: 'العميل غير موجود' };
             }
@@ -402,8 +350,6 @@ function register() {
                             WHEN sub_type = 'purchase' THEN -amount
                             WHEN sub_type = 'payment_in' THEN -amount
                             WHEN sub_type = 'payment_out' THEN amount
-                            WHEN sub_type = 'sales_return' THEN -amount
-                            WHEN sub_type = 'purchase_return' THEN amount
                             ELSE 0
                         END
                     ), 0) as net
@@ -420,26 +366,10 @@ function register() {
                                amount
                         FROM treasury_transactions
                         WHERE customer_id = ?
-                          AND COALESCE(related_type, '') NOT IN ('sales', 'purchase', 'sales_return', 'purchase_return')
+                          AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')
                           AND transaction_date < ?
-
-                        UNION ALL
-                        SELECT 'sales_return' as sub_type, total_amount as amount
-                        FROM sales_returns
-                        WHERE customer_id = ?
-                          AND return_date < ?
-                          AND original_invoice_id IN (SELECT id FROM sales_invoices WHERE payment_type = 'credit')
-
-                        UNION ALL
-                        SELECT 'purchase_return' as sub_type, total_amount as amount
-                        FROM purchase_returns
-                        WHERE supplier_id = ?
-                          AND return_date < ?
-                          AND original_invoice_id IN (SELECT id FROM purchase_invoices WHERE payment_type = 'credit')
                     ) sub
                 `).get(
-                    custId, startDate,
-                    custId, startDate,
                     custId, startDate,
                     custId, startDate,
                     custId, startDate
@@ -470,41 +400,18 @@ function register() {
                     voucher_number as doc_number, transaction_date as trans_date, 0.0 as total_amount, amount as paid_amount, 0.0 as remaining_amount, description as notes, 2 as sort_order
                 FROM treasury_transactions
                 WHERE customer_id = ?
-                  AND COALESCE(related_type, '') NOT IN ('sales', 'purchase', 'sales_return', 'purchase_return')`;
+                  AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')`;
             params.push(custId);
             if (startDate) { query += ' AND transaction_date >= ?'; params.push(startDate); }
             if (endDate) { query += ' AND transaction_date <= ?'; params.push(endDate); }
 
-            query += `
-                UNION ALL
-                SELECT id, 'sales_return' as type, return_number as doc_number, return_date as trans_date, total_amount, 0.0 as paid_amount, total_amount as remaining_amount, notes, 3 as sort_order
-                FROM sales_returns
-                WHERE customer_id = ?
-                  AND original_invoice_id IN (SELECT id FROM sales_invoices WHERE payment_type = 'credit')`;
-            params.push(custId);
-            if (startDate) { query += ' AND return_date >= ?'; params.push(startDate); }
-            if (endDate) { query += ' AND return_date <= ?'; params.push(endDate); }
-
-            query += `
-                UNION ALL
-                SELECT id, 'purchase_return' as type, return_number as doc_number, return_date as trans_date, total_amount, 0.0 as paid_amount, total_amount as remaining_amount, notes, 3 as sort_order
-                FROM purchase_returns
-                WHERE supplier_id = ?
-                  AND original_invoice_id IN (SELECT id FROM purchase_invoices WHERE payment_type = 'credit')`;
-            params.push(custId);
-            if (startDate) { query += ' AND return_date >= ?'; params.push(startDate); }
-            if (endDate) { query += ' AND return_date <= ?'; params.push(endDate); }
-
             query += ' ORDER BY trans_date ASC, sort_order ASC, id ASC';
 
             const transactions = db.prepare(query).all(...params);
-            let closingBalance = Number(customer.balance) || 0;
-            if (endDate) {
-                closingBalance -= getCustomerStatementMovementAfterDate(custId, endDate);
-            }
+            // لا نعتمد على رصيد العميل الحالي في كشف الحساب لضمان عدم حدوث تباين بسبب أخطاء تراكمية قديمة
+            // وإنما نعتمد على الرصيد الافتتاحي المحسوب من إجمالي الحركات السابقة للفترة
             const periodMovement = transactions.reduce((sum, trans) => sum + getCustomerStatementTransactionEffect(trans), 0);
-            openingBalance = closingBalance - periodMovement;
-
+            
             // حساب الرصيد الجاري لكل حركة في الفترة
             let runningBalance = openingBalance;
             for (const trans of transactions) {
@@ -519,8 +426,8 @@ function register() {
                                     transactions.filter(t => t.type === 'sales').reduce((s, t) => s + Number(t.paid_amount || 0), 0);
             const totalPaymentsOut = transactions.filter(t => t.type === 'payment_out').reduce((s, t) => s + Number(t.paid_amount || 0), 0) +
                                      transactions.filter(t => t.type === 'purchase').reduce((s, t) => s + Number(t.paid_amount || 0), 0);
-            const totalSalesReturns = transactions.filter(t => t.type === 'sales_return').reduce((s, t) => s + Number(t.total_amount || 0), 0);
-            const totalPurchaseReturns = transactions.filter(t => t.type === 'purchase_return').reduce((s, t) => s + Number(t.total_amount || 0), 0);
+            const totalSalesReturns = 0;
+            const totalPurchaseReturns = 0;
 
             const totals = {
                 totalSales,
@@ -570,26 +477,6 @@ function register() {
                     WHERE pid.invoice_id = ?
                     ORDER BY pid.id ASC
                 `).all(id);
-            } else if (type === 'sales_return') {
-                details = db.prepare(`
-                    SELECT srd.quantity, srd.price, srd.total_price,
-                           i.name as item_name, u.name as unit_name
-                    FROM sales_return_details srd
-                    JOIN items i ON srd.item_id = i.id
-                    LEFT JOIN units u ON i.unit_id = u.id
-                    WHERE srd.return_id = ?
-                    ORDER BY srd.id ASC
-                `).all(id);
-            } else if (type === 'purchase_return') {
-                details = db.prepare(`
-                    SELECT prd.quantity, prd.price, prd.total_price,
-                           i.name as item_name, u.name as unit_name
-                    FROM purchase_return_details prd
-                    JOIN items i ON prd.item_id = i.id
-                    LEFT JOIN units u ON i.unit_id = u.id
-                    WHERE prd.return_id = ?
-                    ORDER BY prd.id ASC
-                `).all(id);
             }
             return { success: true, details };
         } catch (error) {
@@ -600,7 +487,7 @@ function register() {
     // كشف حساب مجمع للعميل - يجمع كل الأصناف من كل الفواتير في جدول واحد
     ipcMain.handle('get-customer-summary-statement', (event, { customerId, startDate, endDate }) => {
         try {
-            const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
+            const customer = db.prepare('SELECT * FROM parties WHERE id = ?').get(customerId);
             if (!customer) {
                 return { success: false, error: 'العميل غير موجود' };
             }
@@ -639,42 +526,10 @@ function register() {
             if (endDate) { purchaseItemsQuery += ' AND pi.invoice_date <= ?'; purchaseParams.push(endDate); }
             purchaseItemsQuery += ' GROUP BY i.id ORDER BY i.name ASC';
 
-            // --- جلب أصناف مردودات المبيعات ---
-            let salesReturnItemsQuery = `
-                SELECT i.name as item_name, u.name as unit_name,
-                       SUM(srd.quantity) as total_qty,
-                       ROUND(SUM(srd.total_price) * 1.0 / SUM(srd.quantity), 2) as avg_price,
-                       SUM(srd.total_price) as total_amount
-                FROM sales_return_details srd
-                JOIN sales_returns sr ON srd.return_id = sr.id
-                JOIN items i ON srd.item_id = i.id
-                LEFT JOIN units u ON i.unit_id = u.id
-                WHERE sr.customer_id = ?`;
-            const salesReturnParams = [custId];
-            if (startDate) { salesReturnItemsQuery += ' AND sr.return_date >= ?'; salesReturnParams.push(startDate); }
-            if (endDate) { salesReturnItemsQuery += ' AND sr.return_date <= ?'; salesReturnParams.push(endDate); }
-            salesReturnItemsQuery += ' GROUP BY i.id ORDER BY i.name ASC';
-
-            // --- جلب أصناف مردودات المشتريات ---
-            let purchaseReturnItemsQuery = `
-                SELECT i.name as item_name, u.name as unit_name,
-                       SUM(prd.quantity) as total_qty,
-                       ROUND(SUM(prd.total_price) * 1.0 / SUM(prd.quantity), 2) as avg_price,
-                       SUM(prd.total_price) as total_amount
-                FROM purchase_return_details prd
-                JOIN purchase_returns pr ON prd.return_id = pr.id
-                JOIN items i ON prd.item_id = i.id
-                LEFT JOIN units u ON i.unit_id = u.id
-                WHERE pr.supplier_id = ?`;
-            const purchaseReturnParams = [custId];
-            if (startDate) { purchaseReturnItemsQuery += ' AND pr.return_date >= ?'; purchaseReturnParams.push(startDate); }
-            if (endDate) { purchaseReturnItemsQuery += ' AND pr.return_date <= ?'; purchaseReturnParams.push(endDate); }
-            purchaseReturnItemsQuery += ' GROUP BY i.id ORDER BY i.name ASC';
-
             const salesItems = db.prepare(salesItemsQuery).all(...salesParams);
             const purchaseItems = db.prepare(purchaseItemsQuery).all(...purchaseParams);
-            const salesReturnItems = db.prepare(salesReturnItemsQuery).all(...salesReturnParams);
-            const purchaseReturnItems = db.prepare(purchaseReturnItemsQuery).all(...purchaseReturnParams);
+            const salesReturnItems = [];
+            const purchaseReturnItems = [];
 
             // --- إجماليات التحصيلات والسداد ---
             let paymentsQuery = `
@@ -682,7 +537,7 @@ function register() {
                 FROM treasury_transactions
                 WHERE (customer_id = ?
                    OR (related_type = 'purchase' AND related_invoice_id IN (SELECT id FROM purchase_invoices WHERE supplier_id = ?)))
-                AND COALESCE(related_type, '') NOT IN ('sales', 'purchase', 'sales_return', 'purchase_return')`;
+                AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')`;
             const paymentParams = [custId, custId];
             if (startDate) { paymentsQuery += ' AND transaction_date >= ?'; paymentParams.push(startDate); }
             if (endDate) { paymentsQuery += ' AND transaction_date <= ?'; paymentParams.push(endDate); }
@@ -715,8 +570,6 @@ function register() {
                             WHEN sub_type = 'purchase' THEN -amount
                             WHEN sub_type = 'payment_in' THEN -amount
                             WHEN sub_type = 'payment_out' THEN amount
-                            WHEN sub_type = 'sales_return' THEN -amount
-                            WHEN sub_type = 'purchase_return' THEN amount
                             ELSE 0
                         END
                     ), 0) as net
@@ -733,26 +586,10 @@ function register() {
                                amount
                         FROM treasury_transactions
                         WHERE customer_id = ?
-                          AND COALESCE(related_type, '') NOT IN ('sales', 'purchase', 'sales_return', 'purchase_return')
+                          AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')
                           AND transaction_date < ?
-
-                        UNION ALL
-                        SELECT 'sales_return' as sub_type, total_amount as amount
-                        FROM sales_returns
-                        WHERE customer_id = ?
-                          AND return_date < ?
-                          AND original_invoice_id IN (SELECT id FROM sales_invoices WHERE payment_type = 'credit')
-
-                        UNION ALL
-                        SELECT 'purchase_return' as sub_type, total_amount as amount
-                        FROM purchase_returns
-                        WHERE supplier_id = ?
-                          AND return_date < ?
-                          AND original_invoice_id IN (SELECT id FROM purchase_invoices WHERE payment_type = 'credit')
                     ) sub
                 `).get(
-                    custId, startDate,
-                    custId, startDate,
                     custId, startDate,
                     custId, startDate,
                     custId, startDate
@@ -762,16 +599,15 @@ function register() {
 
             const totalSales = salesItems.reduce((s, i) => s + i.total_amount, 0);
             const totalPurchases = purchaseItems.reduce((s, i) => s + i.total_amount, 0);
-            const totalSalesReturns = salesReturnItems.reduce((s, i) => s + i.total_amount, 0);
-            const totalPurchaseReturns = purchaseReturnItems.reduce((s, i) => s + i.total_amount, 0);
+            const totalSalesReturns = 0;
+            const totalPurchaseReturns = 0;
 
-            const totalDebit = totalSales + totalPaymentsOut + totalPurchaseReturns;
-            const totalCredit = totalPurchases + totalPaymentsIn + totalSalesReturns;
-            let closingBalance = Number(customer.balance) || 0;
-            if (endDate) {
-                closingBalance -= getCustomerStatementMovementAfterDate(custId, endDate);
-            }
-            openingBalance = closingBalance - (totalDebit - totalCredit);
+            const totalDebit = totalSales + totalPaymentsOut;
+            const totalCredit = totalPurchases + totalPaymentsIn;
+            
+            // حساب الرصيد الختامي بشكل تصاعدي بناءً على رصيد أول المدة المحسوب من الاستعلام والحركات خلال الفترة
+            // لضمان دقة كشف الحساب واستقلاليته عن الرصيد الإجمالي المخزن للعميل
+            let closingBalance = openingBalance + (totalDebit - totalCredit);
 
             return {
                 success: true,
@@ -988,3 +824,4 @@ function register() {
 }
 
 module.exports = { register };
+

@@ -7,7 +7,6 @@ const warehouses = require('./warehouses');
 const openingBalances = require('./openingBalances');
 const items = require('./items');
 const customers = require('./customers');
-const suppliers = require('./suppliers');
 const purchases = require('./purchases');
 const sales = require('./sales');
 const treasury = require('./treasury');
@@ -38,7 +37,6 @@ function setupIPC() {
     openingBalances.register();
     items.register();
     customers.register();
-    suppliers.register();
     purchases.register();
     sales.register();
     treasury.register();

@@ -209,7 +209,7 @@ function register() {
             return db.prepare(`
                 SELECT si.*, c.name as customer_name 
                 FROM sales_invoices si
-                LEFT JOIN customers c ON si.customer_id = c.id
+                LEFT JOIN parties c ON si.customer_id = c.id
                 ORDER BY si.id DESC
             `).all();
         } catch (error) {
@@ -593,7 +593,7 @@ function register() {
         `);
 
         const updateCustomerBalance = db.prepare(`
-            UPDATE customers 
+            UPDATE parties 
             SET balance = balance + @amount 
             WHERE id = @id
         `);
@@ -703,7 +703,7 @@ function register() {
 
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.customer_id);
+                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.customer_id);
             }
 
             // Delete old Details
@@ -753,7 +753,7 @@ function register() {
             }
 
             if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(financials.balance_delta, customer_id);
+                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(financials.balance_delta, customer_id);
             }
 
         });
@@ -769,3 +769,5 @@ function register() {
 }
 
 module.exports = { register };
+
+

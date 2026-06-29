@@ -74,8 +74,8 @@ function register() {
             const salesInvoiceRange = buildRangeClause('si.invoice_date', startDate, endDate);
 
             // --- Basic counts ---
-            const customersCount = db.prepare("SELECT COUNT(*) as count FROM customers WHERE type IN ('customer', 'both')").get().count;
-            const suppliersCount = db.prepare("SELECT COUNT(*) as count FROM customers WHERE type IN ('supplier', 'both')").get().count;
+            const customersCount = db.prepare("SELECT COUNT(*) as count FROM parties WHERE type IN ('customer', 'both')").get().count;
+            const suppliersCount = db.prepare("SELECT COUNT(*) as count FROM parties WHERE type IN ('supplier', 'both')").get().count;
             const itemsCount = db.prepare("SELECT COUNT(*) as count FROM items WHERE is_deleted = 0").get().count;
             const stockValue = db.prepare("SELECT COALESCE(SUM(cost_price * stock_quantity), 0) as total FROM items WHERE is_deleted = 0").get().total;
 
@@ -120,8 +120,8 @@ function register() {
             const treasuryBalance = treasuryIncome - treasuryExpense;
 
             // --- Receivables & Payables (Using standard balances calculation) ---
-            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM customers WHERE type IN ('customer', 'both') AND balance > 0").get().total;
-            const payables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM customers WHERE type IN ('supplier', 'both') AND balance > 0").get().total;
+            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE type IN ('customer', 'both') AND balance > 0").get().total;
+            const payables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE type IN ('supplier', 'both') AND balance > 0").get().total;
 
             // --- Chart data (last 30 days) ---
             const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
@@ -141,14 +141,14 @@ function register() {
                 SELECT si.id, si.invoice_number, si.invoice_date as date,
                        si.total_amount as amount, c.name as party_name, 'sale' as type
                 FROM sales_invoices si
-                LEFT JOIN customers c ON si.customer_id = c.id
+                LEFT JOIN parties c ON si.customer_id = c.id
                 ORDER BY si.created_at DESC LIMIT 5
             `).all();
             const recentPurchases = db.prepare(`
                 SELECT pi.id, pi.invoice_number, pi.invoice_date as date,
                        pi.total_amount as amount, c.name as party_name, 'purchase' as type
                 FROM purchase_invoices pi
-                LEFT JOIN customers c ON pi.supplier_id = c.id
+                LEFT JOIN parties c ON pi.supplier_id = c.id
                 ORDER BY pi.created_at DESC LIMIT 5
             `).all();
             const recentTransactions = [...recentSales, ...recentPurchases]
@@ -163,7 +163,7 @@ function register() {
             const highReceivables = db.prepare(`
                 SELECT c.name, COALESCE(SUM(si.remaining_amount), 0) as amount
                 FROM sales_invoices si
-                JOIN customers c ON si.customer_id = c.id
+                JOIN parties c ON si.customer_id = c.id
                 WHERE si.remaining_amount > 0
                 GROUP BY si.customer_id ORDER BY amount DESC LIMIT 3
             `).all();
@@ -264,3 +264,4 @@ function register() {
 }
 
 module.exports = { register };
+

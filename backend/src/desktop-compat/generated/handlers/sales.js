@@ -209,7 +209,7 @@ function register() {
             return db.prepare(`
                 SELECT si.*, c.name as customer_name 
                 FROM sales_invoices si
-                LEFT JOIN customers c ON si.customer_id = c.id
+                LEFT JOIN parties c ON si.customer_id = c.id
                 ORDER BY si.id DESC
             `).all();
         } catch (error) {
@@ -593,7 +593,7 @@ function register() {
         `);
 
         const updateCustomerBalance = db.prepare(`
-            UPDATE customers 
+            UPDATE parties 
             SET balance = balance + @amount 
             WHERE id = @id
         `);
@@ -703,7 +703,7 @@ function register() {
 
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.customer_id);
+                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.customer_id);
             }
 
             // Delete old Details
@@ -721,17 +721,17 @@ function register() {
                 WHERE id = @id
             `).run({
                 id,
-                customer_id: customer_id || null,
-                invoice_number: invoice_number || null,
-                invoice_date: invoice_date || null,
-                total_amount: financials.total_amount || 0,
-                discount_type: financials.discount_type || null,
-                discount_value: financials.discount_value || 0,
-                discount_amount: financials.discount_amount || 0,
-                paid_amount: financials.paid_amount || 0,
-                remaining_amount: financials.remaining_amount || 0,
-                payment_type: payment_type || null,
-                notes: notes || null
+                customer_id,
+                invoice_number,
+                invoice_date,
+                total_amount: financials.total_amount,
+                discount_type: financials.discount_type,
+                discount_value: financials.discount_value,
+                discount_amount: financials.discount_amount,
+                paid_amount: financials.paid_amount,
+                remaining_amount: financials.remaining_amount,
+                payment_type,
+                notes
             });
 
             // Insert New Details & Update Stock
@@ -753,7 +753,7 @@ function register() {
             }
 
             if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(financials.balance_delta, customer_id);
+                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(financials.balance_delta, customer_id);
             }
 
         });
@@ -769,3 +769,5 @@ function register() {
 }
 
 module.exports = { register };
+
+

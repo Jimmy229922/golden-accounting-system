@@ -7,7 +7,7 @@ function register() {
 
     ipcMain.handle('get-customers', () => {
         try {
-            return db.prepare('SELECT * FROM customers ORDER BY name ASC').all();
+            return db.prepare('SELECT * FROM parties ORDER BY name ASC').all();
         } catch (error) {
             console.error('[get-customers] Error:', error);
             return [];
@@ -16,7 +16,7 @@ function register() {
 
     ipcMain.handle('get-debtor-creditor-report', (event, { startDate, endDate }) => {
         try {
-        const customers = db.prepare('SELECT id, name, type, balance as current_balance, phone FROM customers ORDER BY name ASC').all();
+        const customers = db.prepare('SELECT id, name, type, balance as current_balance, phone FROM parties ORDER BY name ASC').all();
         
         const sDate = startDate || '1900-01-01';
         const eDate = endDate || '9999-12-31';
@@ -163,10 +163,10 @@ function register() {
         const denied = requirePermission('customers', 'add');
         if (denied) return denied;
         try {
-            const nextCode = db.prepare('SELECT COALESCE(MAX(code), 0) + 1 AS next FROM customers').get().next;
+            const nextCode = db.prepare('SELECT COALESCE(MAX(code), 0) + 1 AS next FROM parties').get().next;
             customer.code = nextCode;
             customer.balance = customer.opening_balance;
-            const stmt = db.prepare('INSERT INTO customers (name, phone, address, balance, opening_balance, type, code) VALUES (@name, @phone, @address, @balance, @opening_balance, @type, @code)');
+            const stmt = db.prepare('INSERT INTO parties (name, phone, address, balance, opening_balance, type, code) VALUES (@name, @phone, @address, @balance, @opening_balance, @type, @code)');
             const info = stmt.run(customer);
             return { success: true, id: info.lastInsertRowid };
         } catch (error) {
@@ -178,11 +178,11 @@ function register() {
         const denied = requirePermission('customers', 'edit');
         if (denied) return denied;
         try {
-            const existing = db.prepare('SELECT opening_balance FROM customers WHERE id = ?').get(customer.id);
+            const existing = db.prepare('SELECT opening_balance FROM parties WHERE id = ?').get(customer.id);
             const oldOpening = existing ? (existing.opening_balance || 0) : 0;
             const newOpening = customer.opening_balance || 0;
             const diff = newOpening - oldOpening;
-            const stmt = db.prepare('UPDATE customers SET name = @name, phone = @phone, address = @address, opening_balance = @opening_balance, balance = balance + @diff, type = @type WHERE id = @id');
+            const stmt = db.prepare('UPDATE parties SET name = @name, phone = @phone, address = @address, opening_balance = @opening_balance, balance = balance + @diff, type = @type WHERE id = @id');
             stmt.run({ ...customer, diff });
             return { success: true };
         } catch (error) {
@@ -194,7 +194,7 @@ function register() {
         const denied = requirePermission('customers', 'delete');
         if (denied) return denied;
         try {
-            db.prepare('DELETE FROM customers WHERE id = ?').run(id);
+            db.prepare('DELETE FROM parties WHERE id = ?').run(id);
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
@@ -203,3 +203,4 @@ function register() {
 }
 
 module.exports = { register };
+

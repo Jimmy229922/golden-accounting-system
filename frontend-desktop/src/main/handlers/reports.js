@@ -202,7 +202,7 @@ function register() {
                     i.paid_amount,
                     i.remaining_amount
                 FROM ${table} i
-                LEFT JOIN customers c ON i.${joinCol} = c.id
+                LEFT JOIN parties c ON i.${joinCol} = c.id
                 WHERE 1=1
             `;
             
@@ -240,7 +240,7 @@ function register() {
                     t.amount as paid_amount,
                     0 as remaining_amount
                 FROM treasury_transactions t
-                LEFT JOIN customers c ON t.customer_id = c.id
+                LEFT JOIN parties c ON t.customer_id = c.id
                 WHERE t.type = '${treasuryType}' AND t.customer_id IS NOT NULL
             `;
             if (startDate) {
@@ -333,7 +333,7 @@ function register() {
     // كشف حساب تفصيلي للعميل
     ipcMain.handle('get-customer-detailed-statement', (event, { customerId, startDate, endDate }) => {
         try {
-            const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
+            const customer = db.prepare('SELECT * FROM parties WHERE id = ?').get(customerId);
             if (!customer) {
                 return { success: false, error: 'العميل غير موجود' };
             }
@@ -487,7 +487,7 @@ function register() {
     // كشف حساب مجمع للعميل - يجمع كل الأصناف من كل الفواتير في جدول واحد
     ipcMain.handle('get-customer-summary-statement', (event, { customerId, startDate, endDate }) => {
         try {
-            const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
+            const customer = db.prepare('SELECT * FROM parties WHERE id = ?').get(customerId);
             if (!customer) {
                 return { success: false, error: 'العميل غير موجود' };
             }
@@ -824,3 +824,4 @@ function register() {
 }
 
 module.exports = { register };
+

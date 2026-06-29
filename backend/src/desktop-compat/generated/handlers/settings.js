@@ -71,44 +71,32 @@ function register() {
             }
 
             const invoiceRange = buildRangeClause('invoice_date', startDate, endDate);
-            const returnRange = buildRangeClause('return_date', startDate, endDate);
             const salesInvoiceRange = buildRangeClause('si.invoice_date', startDate, endDate);
-            const salesReturnRange = buildRangeClause('sr.return_date', startDate, endDate);
 
             // --- Basic counts ---
-            const customersCount = db.prepare("SELECT COUNT(*) as count FROM customers WHERE type IN ('customer', 'both')").get().count;
-            const suppliersCount = db.prepare("SELECT COUNT(*) as count FROM customers WHERE type IN ('supplier', 'both')").get().count;
+            const customersCount = db.prepare("SELECT COUNT(*) as count FROM parties WHERE type IN ('customer', 'both')").get().count;
+            const suppliersCount = db.prepare("SELECT COUNT(*) as count FROM parties WHERE type IN ('supplier', 'both')").get().count;
             const itemsCount = db.prepare("SELECT COUNT(*) as count FROM items WHERE is_deleted = 0").get().count;
             const stockValue = db.prepare("SELECT COALESCE(SUM(cost_price * stock_quantity), 0) as total FROM items WHERE is_deleted = 0").get().total;
 
             // --- Sales & Purchases ---
             const salesTotalToday = db.prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM sales_invoices WHERE invoice_date = ?").get(today).total;
-            const salesReturnsTotalToday = db.prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM sales_returns WHERE return_date = ?").get(today).total;
-            const salesToday = Math.max(0, salesTotalToday - salesReturnsTotalToday);
+            const salesToday = salesTotalToday;
 
             const salesTotalMonth = db.prepare(`
                 SELECT COALESCE(SUM(total_amount), 0) as total
                 FROM sales_invoices WHERE 1=1${invoiceRange.clause}
             `).get(...invoiceRange.params).total;
-            const salesReturnsTotalMonth = db.prepare(`
-                SELECT COALESCE(SUM(total_amount), 0) as total
-                FROM sales_returns WHERE 1=1${returnRange.clause}
-            `).get(...returnRange.params).total;
-            const salesMonth = Math.max(0, salesTotalMonth - salesReturnsTotalMonth);
+            const salesMonth = salesTotalMonth;
 
             const purchasesTotalToday = db.prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM purchase_invoices WHERE invoice_date = ?").get(today).total;
-            const purchaseReturnsTotalToday = db.prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM purchase_returns WHERE return_date = ?").get(today).total;
-            const purchasesToday = Math.max(0, purchasesTotalToday - purchaseReturnsTotalToday);
+            const purchasesToday = purchasesTotalToday;
 
             const purchasesTotalMonth = db.prepare(`
                 SELECT COALESCE(SUM(total_amount), 0) as total
                 FROM purchase_invoices WHERE 1=1${invoiceRange.clause}
             `).get(...invoiceRange.params).total;
-            const purchaseReturnsTotalMonth = db.prepare(`
-                SELECT COALESCE(SUM(total_amount), 0) as total
-                FROM purchase_returns WHERE 1=1${returnRange.clause}
-            `).get(...returnRange.params).total;
-            const purchasesMonth = Math.max(0, purchasesTotalMonth - purchaseReturnsTotalMonth);
+            const purchasesMonth = purchasesTotalMonth;
 
             // --- Net profit (sales revenue - COGS this month) ---
             const cogsMonthSales = db.prepare(`
@@ -118,14 +106,7 @@ function register() {
                 JOIN items i ON sid.item_id = i.id
                 WHERE 1=1${salesInvoiceRange.clause}
             `).get(...salesInvoiceRange.params).total;
-            const cogsMonthReturns = db.prepare(`
-                SELECT COALESCE(SUM(srd.quantity * i.cost_price), 0) as total
-                FROM sales_return_details srd
-                JOIN sales_returns sr ON srd.return_id = sr.id
-                JOIN items i ON srd.item_id = i.id
-                WHERE 1=1${salesReturnRange.clause}
-            `).get(...salesReturnRange.params).total;
-            const cogsMonth = Math.max(0, cogsMonthSales - cogsMonthReturns);
+            const cogsMonth = cogsMonthSales;
             const netProfit = salesMonth - cogsMonth;
 
             // --- Treasury balance ---
@@ -139,8 +120,8 @@ function register() {
             const treasuryBalance = treasuryIncome - treasuryExpense;
 
             // --- Receivables & Payables (Using standard balances calculation) ---
-            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM customers WHERE type IN ('customer', 'both') AND balance > 0").get().total;
-            const payables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM customers WHERE type IN ('supplier', 'both') AND balance > 0").get().total;
+            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE type IN ('customer', 'both') AND balance > 0").get().total;
+            const payables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE type IN ('supplier', 'both') AND balance > 0").get().total;
 
             // --- Chart data (last 30 days) ---
             const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
@@ -160,14 +141,14 @@ function register() {
                 SELECT si.id, si.invoice_number, si.invoice_date as date,
                        si.total_amount as amount, c.name as party_name, 'sale' as type
                 FROM sales_invoices si
-                LEFT JOIN customers c ON si.customer_id = c.id
+                LEFT JOIN parties c ON si.customer_id = c.id
                 ORDER BY si.created_at DESC LIMIT 5
             `).all();
             const recentPurchases = db.prepare(`
                 SELECT pi.id, pi.invoice_number, pi.invoice_date as date,
                        pi.total_amount as amount, c.name as party_name, 'purchase' as type
                 FROM purchase_invoices pi
-                LEFT JOIN customers c ON pi.supplier_id = c.id
+                LEFT JOIN parties c ON pi.supplier_id = c.id
                 ORDER BY pi.created_at DESC LIMIT 5
             `).all();
             const recentTransactions = [...recentSales, ...recentPurchases]
@@ -182,7 +163,7 @@ function register() {
             const highReceivables = db.prepare(`
                 SELECT c.name, COALESCE(SUM(si.remaining_amount), 0) as amount
                 FROM sales_invoices si
-                JOIN customers c ON si.customer_id = c.id
+                JOIN parties c ON si.customer_id = c.id
                 WHERE si.remaining_amount > 0
                 GROUP BY si.customer_id ORDER BY amount DESC LIMIT 3
             `).all();
@@ -229,27 +210,18 @@ function register() {
                     const prevStartStr = formatDateOnly(prevStart);
                     const prevEndStr = formatDateOnly(prevEnd);
                     const prevInvoiceRange = buildRangeClause('invoice_date', prevStartStr, prevEndStr);
-                    const prevReturnRange = buildRangeClause('return_date', prevStartStr, prevEndStr);
 
                     const prevSalesTotal = db.prepare(`
                         SELECT COALESCE(SUM(total_amount), 0) as total
                         FROM sales_invoices WHERE 1=1${prevInvoiceRange.clause}
                     `).get(...prevInvoiceRange.params).total;
-                    const prevSalesReturns = db.prepare(`
-                        SELECT COALESCE(SUM(total_amount), 0) as total
-                        FROM sales_returns WHERE 1=1${prevReturnRange.clause}
-                    `).get(...prevReturnRange.params).total;
-                    prevSalesMonth = Math.max(0, prevSalesTotal - prevSalesReturns);
+                    prevSalesMonth = prevSalesTotal;
 
                     const prevPurchasesTotal = db.prepare(`
                         SELECT COALESCE(SUM(total_amount), 0) as total
                         FROM purchase_invoices WHERE 1=1${prevInvoiceRange.clause}
                     `).get(...prevInvoiceRange.params).total;
-                    const prevPurchasesReturns = db.prepare(`
-                        SELECT COALESCE(SUM(total_amount), 0) as total
-                        FROM purchase_returns WHERE 1=1${prevReturnRange.clause}
-                    `).get(...prevReturnRange.params).total;
-                    prevPurchasesMonth = Math.max(0, prevPurchasesTotal - prevPurchasesReturns);
+                    prevPurchasesMonth = prevPurchasesTotal;
                 }
             }
 
@@ -266,10 +238,8 @@ function register() {
                 recentTransactions,
                 profitDetails: {
                     salesTotalMonth,
-                    salesReturnsTotalMonth,
                     salesMonth,
                     cogsMonthSales,
-                    cogsMonthReturns,
                     cogsMonth,
                     netProfit
                 },
@@ -294,3 +264,4 @@ function register() {
 }
 
 module.exports = { register };
+

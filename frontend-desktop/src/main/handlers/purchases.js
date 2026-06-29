@@ -179,7 +179,7 @@ function register() {
             return db.prepare(`
                 SELECT pi.*, c.name as supplier_name 
                 FROM purchase_invoices pi
-                LEFT JOIN customers c ON pi.supplier_id = c.id
+                LEFT JOIN parties c ON pi.supplier_id = c.id
                 ORDER BY pi.id DESC
             `).all();
         } catch (error) {
@@ -234,7 +234,7 @@ function register() {
         `);
 
         const updateSupplierBalance = db.prepare(`
-            UPDATE customers
+            UPDATE parties
             SET balance = balance - @amount
             WHERE id = @id
         `);
@@ -355,7 +355,7 @@ function register() {
 
             const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
             if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
+                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
             }
             // Delete Details
             db.prepare('DELETE FROM purchase_invoice_details WHERE invoice_id = ?').run(id);
@@ -408,7 +408,7 @@ function register() {
             }
 
             if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE customers SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
+                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
             }
 
         });
@@ -424,3 +424,5 @@ function register() {
 }
 
 module.exports = { register };
+
+

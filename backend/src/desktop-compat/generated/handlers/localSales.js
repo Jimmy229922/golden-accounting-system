@@ -60,7 +60,7 @@ function validatePayload(payload) {
 }
 
 function ensureCustomerExists(customerId) {
-    const customer = db.prepare('SELECT id FROM customers WHERE id = ?').get(customerId);
+    const customer = db.prepare('SELECT id FROM parties WHERE id = ?').get(customerId);
     return Boolean(customer);
 }
 
@@ -104,7 +104,7 @@ function register() {
                 SELECT l.id, l.document_number, l.record_date, l.customer_id,
                        c.name as customer_name, l.quantity, l.price, l.total, l.statement, l.created_at
                 FROM local_sales l
-                LEFT JOIN customers c ON c.id = l.customer_id
+                LEFT JOIN parties c ON c.id = l.customer_id
                 ${whereSql}
                 ORDER BY l.id ASC
                 LIMIT @limit OFFSET @offset
@@ -250,3 +250,4 @@ function register() {
 }
 
 module.exports = { register };
+

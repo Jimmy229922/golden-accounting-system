@@ -92,11 +92,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateCustomer: (customer) => invokeChannel('update-customer', customer),
     deleteCustomer: (id) => invokeChannel('delete-customer', id),
 
-    // Suppliers API
-    getSuppliers: () => invokeChannel('get-suppliers'),
-    addSupplier: (supplier) => invokeChannel('add-supplier', supplier),
-    deleteSupplier: (id) => invokeChannel('delete-supplier', id),
-
     // Purchase Invoices API
     getPurchaseInvoices: () => invokeChannel('get-purchase-invoices'),
     savePurchaseInvoice: (data) => invokeChannel('save-purchase-invoice', data),
