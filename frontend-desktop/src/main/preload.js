@@ -199,6 +199,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Settings API
     getSettings: () => invokeChannel('get-settings'),
     saveSettings: (settings) => invokeChannel('save-settings', settings),
+    getAppVersion: () => invokeChannel('get-app-version'),
+    checkAppUpdate: () => invokeChannel('check-app-update'),
+    downloadAppUpdate: () => invokeChannel('download-app-update'),
+    openAppReleasePage: () => invokeChannel('open-app-release-page'),
 
     // Invite Code API
     getMachineId: () => invokeChannel('get-machine-id'),

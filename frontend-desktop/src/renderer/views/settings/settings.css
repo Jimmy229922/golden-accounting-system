@@ -394,6 +394,7 @@
         }
         .action-card.theme-card::before { background: linear-gradient(135deg, #8b5cf6, #6366f1); }
         .action-card.backup-card::before { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+        .action-card.update-card::before { background: linear-gradient(135deg, #0f766e, #14b8a6); }
         .action-card.restore-card::before { background: linear-gradient(135deg, #f97316, #ea580c); }
         .action-card:hover {
             transform: translateY(-2px);
@@ -416,6 +417,7 @@
         }
         .action-card-icon.theme { background: rgba(139,92,246,0.1); color: #8b5cf6; }
         .action-card-icon.backup { background: rgba(37,99,235,0.1); color: #2563eb; }
+        .action-card-icon.update { background: rgba(20,184,166,0.12); color: #0f766e; }
         .action-card-icon.restore { background: rgba(249,115,22,0.1); color: #f97316; }
         .action-card-header h3 {
             font-size: 1rem;
@@ -455,6 +457,10 @@
             background: linear-gradient(135deg, #2563eb, #3b82f6);
         }
         .btn-action.backup-btn:hover { box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+        .btn-action.update-btn {
+            background: linear-gradient(135deg, #0f766e, #14b8a6);
+        }
+        .btn-action.update-btn:hover { box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
         .btn-action.restore-btn {
             background: linear-gradient(135deg, #f97316, #ea580c);
         }

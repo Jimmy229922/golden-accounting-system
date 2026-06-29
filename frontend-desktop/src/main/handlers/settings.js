@@ -1,9 +1,127 @@
-const { ipcMain } = require('electron');
+const { ipcMain, app, shell } = require('electron');
+const fs = require('fs');
+const path = require('path');
 const { db } = require('../db');
 const { requirePermission } = require('./auth');
 
 const CUSTOMER_COLLECTION_PENDING_RELATED_TYPE = 'customer_collection_pending';
 const CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE = 'customer_collection_shift_close';
+const GITHUB_REPOSITORY_OWNER = 'Jimmy229922';
+const GITHUB_REPOSITORY_NAME = 'golden-accounting-system';
+const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases/latest`;
+const GITHUB_RELEASES_PAGE_URL = `https://github.com/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases`;
+
+function normalizeVersion(versionValue) {
+    return String(versionValue || '')
+        .trim()
+        .replace(/^v/i, '');
+}
+
+function compareVersions(leftValue, rightValue) {
+    const leftParts = normalizeVersion(leftValue).split('.').map((part) => Number(part) || 0);
+    const rightParts = normalizeVersion(rightValue).split('.').map((part) => Number(part) || 0);
+    const maxLength = Math.max(leftParts.length, rightParts.length);
+
+    for (let index = 0; index < maxLength; index += 1) {
+        const left = leftParts[index] || 0;
+        const right = rightParts[index] || 0;
+        if (left > right) return 1;
+        if (left < right) return -1;
+    }
+
+    return 0;
+}
+
+function getCurrentAppVersion() {
+    return normalizeVersion(app.getVersion ? app.getVersion() : '0.0.0') || '0.0.0';
+}
+
+function getPortableUpdatesPath() {
+    const portableRoot = String(process.env.ACCOUNTING_SYSTEM_ROOT || '').trim();
+    if (portableRoot) {
+        return path.join(portableRoot, 'UPDATES');
+    }
+
+    return path.join(app.getPath('downloads'), 'Accounting System Updates');
+}
+
+function selectWindowsInstallerAsset(assets = []) {
+    const validAssets = Array.isArray(assets) ? assets.filter((asset) => {
+        const name = String(asset?.name || '');
+        return /\.exe$/i.test(name) && !/blockmap/i.test(name);
+    }) : [];
+
+    if (validAssets.length === 0) {
+        return null;
+    }
+
+    const setupAsset = validAssets.find((asset) => /setup/i.test(String(asset.name || '')));
+    return setupAsset || validAssets[0];
+}
+
+async function fetchLatestReleaseDetails() {
+    if (typeof fetch !== 'function') {
+        return { success: false, error: 'خدمة التحديث غير متاحة في هذا الإصدار.' };
+    }
+
+    try {
+        const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
+            headers: {
+                Accept: 'application/vnd.github+json',
+                'User-Agent': 'Accounting-System-Desktop-Updater'
+            }
+        });
+
+        const rawBody = await response.text();
+        const payload = rawBody ? JSON.parse(rawBody) : {};
+
+        if (!response.ok) {
+            return {
+                success: false,
+                error: payload?.message || `تعذر قراءة آخر إصدار من GitHub (${response.status}).`
+            };
+        }
+
+        const latestVersion = normalizeVersion(payload.tag_name || payload.name || '');
+        if (!latestVersion) {
+            return { success: false, error: 'لم يتم العثور على رقم إصدار صالح داخل GitHub Releases.' };
+        }
+
+        const installerAsset = selectWindowsInstallerAsset(payload.assets);
+        const currentVersion = getCurrentAppVersion();
+
+        return {
+            success: true,
+            currentVersion,
+            latestVersion,
+            updateAvailable: compareVersions(latestVersion, currentVersion) > 0,
+            releaseName: String(payload.name || payload.tag_name || latestVersion),
+            publishedAt: payload.published_at || '',
+            releaseUrl: String(payload.html_url || GITHUB_RELEASES_PAGE_URL),
+            assetName: installerAsset?.name || '',
+            downloadUrl: installerAsset?.browser_download_url || ''
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function downloadFileFromUrl(downloadUrl, destinationPath) {
+    const response = await fetch(downloadUrl, {
+        headers: {
+            Accept: 'application/octet-stream',
+            'User-Agent': 'Accounting-System-Desktop-Updater'
+        }
+    });
+
+    if (!response.ok) {
+        const rawBody = await response.text();
+        throw new Error(rawBody || `تعذر تنزيل ملف التحديث (${response.status}).`);
+    }
+
+    const fileBuffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(destinationPath, fileBuffer);
+}
 
 function register() {
     // --- Settings Handlers ---
@@ -32,6 +150,74 @@ function register() {
                 }
             });
             transaction(settings);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-app-version', () => {
+        return {
+            success: true,
+            version: getCurrentAppVersion()
+        };
+    });
+
+    ipcMain.handle('check-app-update', async () => {
+        return fetchLatestReleaseDetails();
+    });
+
+    ipcMain.handle('download-app-update', async () => {
+        const releaseResult = await fetchLatestReleaseDetails();
+        if (!releaseResult.success) {
+            return releaseResult;
+        }
+
+        if (!releaseResult.updateAvailable) {
+            return {
+                success: true,
+                updateAvailable: false,
+                currentVersion: releaseResult.currentVersion,
+                latestVersion: releaseResult.latestVersion
+            };
+        }
+
+        if (!releaseResult.downloadUrl || !releaseResult.assetName) {
+            return {
+                success: false,
+                error: 'تم العثور على إصدار جديد لكن بدون ملف تثبيت لويندوز داخل GitHub Releases.',
+                releaseUrl: releaseResult.releaseUrl
+            };
+        }
+
+        try {
+            const updatesDir = getPortableUpdatesPath();
+            fs.mkdirSync(updatesDir, { recursive: true });
+
+            const targetPath = path.join(updatesDir, releaseResult.assetName);
+            await downloadFileFromUrl(releaseResult.downloadUrl, targetPath);
+
+            const openError = await shell.openPath(targetPath);
+            return {
+                success: openError === '',
+                updateAvailable: true,
+                path: targetPath,
+                assetName: releaseResult.assetName,
+                latestVersion: releaseResult.latestVersion,
+                error: openError || ''
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                releaseUrl: releaseResult.releaseUrl
+            };
+        }
+    });
+
+    ipcMain.handle('open-app-release-page', async () => {
+        try {
+            await shell.openExternal(GITHUB_RELEASES_PAGE_URL);
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

@@ -1,7 +1,7 @@
 let companyNameInput, companyAddressInput, companyPhoneInput, invoiceFooterInput, settingsForm;
-let backupBtn, restoreBtn, backupStatusEl, restoreStatusEl, themeToggleBtn;
+let backupBtn, restoreBtn, updateBtn, backupStatusEl, restoreStatusEl, updateStatusEl, themeToggleBtn;
 let profileImageInput, profileImagePreview, removeImageBtn, saveBtn;
-let changeLogLastModifiedEl, changeLogModifiedByEl, changeLogSummaryEl;
+let changeLogLastModifiedEl, changeLogModifiedByEl, changeLogSummaryEl, appVersionValueEl;
 let saveStateTimer = null;
 let initialFormSnapshot = '';
 const SETTINGS_TRACKING_FIELDS = [
@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderPage();
     initializeElements();
     await loadSettings();
+    await loadAppVersion();
     } catch (error) {
         console.error('Initialization Error:', error);
         if (window.toast && typeof window.toast.error === 'function') {
@@ -183,6 +184,16 @@ function renderPage() {
                         <button id="backupBtn" class="btn-action backup-btn"><i class="fas fa-download"></i> ${t('settings.backupNow', 'إنشاء نسخة احتياطية الآن')}</button>
                         <small id="backupStatus" class="status-text"></small>
                     </div>
+                    <!-- Update Card -->
+                    <div class="action-card update-card">
+                        <div class="action-card-header">
+                            <div class="action-card-icon update"><i class="fas fa-sync-alt"></i></div>
+                            <h3>${t('settings.updateTitle', 'تحديث البرنامج')}</h3>
+                        </div>
+                        <p class="action-card-desc">${t('settings.updateDesc', 'تحقق من آخر إصدار من GitHub Releases ونزل ملف التحديث على جهاز العميل.')}</p>
+                        <button id="updateBtn" class="btn-action update-btn"><i class="fas fa-cloud-download-alt"></i> <span class="update-btn-text">${t('settings.updateNow', 'فحص وتنزيل التحديث')}</span></button>
+                        <small id="updateStatus" class="status-text"></small>
+                    </div>
                     <!-- Restore Card -->
                     <div class="action-card restore-card">
                         <div class="action-card-header">
@@ -207,7 +218,7 @@ function renderPage() {
                         <div class="info-item-icon"><i class="fas fa-code-branch"></i></div>
                         <div>
                             <div class="info-item-label">${t('settings.version', 'إصدار التطبيق')}</div>
-                            <div class="info-item-value">3.0.0</div>
+                            <div class="info-item-value" id="appVersionValue">-</div>
                         </div>
                     </div>
                     <div class="info-item">
@@ -231,8 +242,10 @@ function initializeElements() {
     settingsForm = document.getElementById('settingsForm');
     backupBtn = document.getElementById('backupBtn');
     restoreBtn = document.getElementById('restoreBtn');
+    updateBtn = document.getElementById('updateBtn');
     backupStatusEl = document.getElementById('backupStatus');
     restoreStatusEl = document.getElementById('restoreStatus');
+    updateStatusEl = document.getElementById('updateStatus');
     themeToggleBtn = document.getElementById('themeToggleBtn');
     profileImageInput = document.getElementById('profileImageInput');
     profileImagePreview = document.getElementById('profileImagePreview');
@@ -241,10 +254,14 @@ function initializeElements() {
     changeLogLastModifiedEl = document.getElementById('settingsAuditLastModified');
     changeLogModifiedByEl = document.getElementById('settingsAuditModifiedBy');
     changeLogSummaryEl = document.getElementById('settingsAuditSummary');
+    appVersionValueEl = document.getElementById('appVersionValue');
 
     settingsForm.addEventListener('submit', saveSettings);
     backupBtn.addEventListener('click', handleBackup);
     restoreBtn.addEventListener('click', handleRestore);
+    if (updateBtn) {
+        updateBtn.addEventListener('click', handleAppUpdate);
+    }
 
     profileImageInput.addEventListener('change', handleImageUpload);
     removeImageBtn.addEventListener('click', handleImageRemove);
@@ -273,6 +290,20 @@ async function loadSettings() {
         });
     }
     resetDirtyTracking();
+}
+
+async function loadAppVersion() {
+    if (!appVersionValueEl || !window.electronAPI || typeof window.electronAPI.getAppVersion !== 'function') {
+        return;
+    }
+
+    try {
+        const result = await window.electronAPI.getAppVersion();
+        if (result && result.success && result.version) {
+            appVersionValueEl.textContent = result.version;
+        }
+    } catch (_) {
+    }
 }
 
 function showProfileImage(dataUrl) {
@@ -480,6 +511,24 @@ function setStatus(element, message, isError = false) {
     element.style.color = isError ? '#b91c1c' : '#111827';
 }
 
+function setUpdateButtonState(state, buttonText = '') {
+    if (!updateBtn) return;
+
+    const iconEl = updateBtn.querySelector('i');
+    const textEl = updateBtn.querySelector('.update-btn-text');
+
+    updateBtn.disabled = state === 'loading';
+
+    if (state === 'loading') {
+        if (iconEl) iconEl.className = 'fas fa-spinner fa-spin';
+        if (textEl) textEl.textContent = buttonText || 'جاري الفحص...';
+        return;
+    }
+
+    if (iconEl) iconEl.className = 'fas fa-cloud-download-alt';
+    if (textEl) textEl.textContent = buttonText || t('settings.updateNow', 'فحص وتنزيل التحديث');
+}
+
 async function handleBackup() {
     setStatus(backupStatusEl, t('settings.status.creatingBackup'));
     const result = await window.electronAPI.backupDatabase();
@@ -547,6 +596,57 @@ async function handleRestore() {
             }
             await window.electronAPI.restartApp();
         }
+    }
+}
+
+async function handleAppUpdate() {
+    if (!window.electronAPI || typeof window.electronAPI.checkAppUpdate !== 'function') {
+        setStatus(updateStatusEl, 'ميزة التحديث غير متاحة في هذا الإصدار.', true);
+        return;
+    }
+
+    try {
+        setUpdateButtonState('loading', 'جاري فحص التحديث...');
+        setStatus(updateStatusEl, 'جاري فحص آخر إصدار من GitHub Releases...');
+
+        const checkResult = await window.electronAPI.checkAppUpdate();
+        if (!checkResult || !checkResult.success) {
+            setStatus(updateStatusEl, checkResult?.error || 'تعذر فحص التحديث.', true);
+            return;
+        }
+
+        if (!checkResult.updateAvailable) {
+            const latestMessage = checkResult.currentVersion
+                ? `أنت تستخدم أحدث إصدار (${checkResult.currentVersion}).`
+                : 'أنت تستخدم أحدث إصدار.';
+            setStatus(updateStatusEl, latestMessage);
+            if (window.showToast) window.showToast(latestMessage, 'success');
+            return;
+        }
+
+        setUpdateButtonState('loading', 'جاري تنزيل التحديث...');
+        setStatus(updateStatusEl, `تم العثور على الإصدار ${checkResult.latestVersion}. جاري تنزيل ملف التحديث...`);
+
+        const downloadResult = await window.electronAPI.downloadAppUpdate();
+        if (downloadResult && downloadResult.success) {
+            const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} وفتح ملف التثبيت: ${downloadResult.path}`.trim();
+            setStatus(updateStatusEl, successMessage);
+            if (window.showToast) window.showToast('تم تنزيل التحديث وفتح ملف التثبيت.', 'success');
+            return;
+        }
+
+        const errorMessage = downloadResult?.error || 'تعذر تنزيل ملف التحديث.';
+        setStatus(updateStatusEl, errorMessage, true);
+        if (downloadResult?.releaseUrl && typeof window.electronAPI.openAppReleasePage === 'function') {
+            await window.electronAPI.openAppReleasePage();
+        }
+        if (window.showToast) window.showToast(errorMessage, 'error');
+    } catch (error) {
+        const fallbackMessage = error.message || 'حدث خطأ أثناء التحديث.';
+        setStatus(updateStatusEl, fallbackMessage, true);
+        if (window.showToast) window.showToast(fallbackMessage, 'error');
+    } finally {
+        setUpdateButtonState('idle');
     }
 }
 
