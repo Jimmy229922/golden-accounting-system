@@ -20,6 +20,10 @@
         return window.electronAPI.getItems();
     }
 
+    async function getWarehouses() {
+        return window.electronAPI.getWarehouses();
+    }
+
     async function savePurchaseInvoice(invoiceData) {
         return window.electronAPI.savePurchaseInvoice(invoiceData);
     }
@@ -40,6 +44,7 @@
         getItems,
         savePurchaseInvoice,
         updatePurchaseInvoice,
-        deletePurchaseInvoice
+        deletePurchaseInvoice,
+        getWarehouses
     };
 })();

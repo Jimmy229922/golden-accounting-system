@@ -50,26 +50,9 @@ function buildVisibleStatementData(transactions, totals) {
     const visibleTransactions = (Array.isArray(transactions) ? transactions : [])
         .map((item) => ({ ...item }));
 
-    const visibleTotals = {
-        ...safeTotals,
-        totalSales: visibleTransactions.filter((item) => item.type === 'sales').reduce((sum, item) => sum + Number(item.total_amount || 0), 0),
-        totalPurchases: visibleTransactions.filter((item) => item.type === 'purchase').reduce((sum, item) => sum + Number(item.total_amount || 0), 0),
-        totalPaymentsIn: visibleTransactions.filter((item) => item.type === 'payment_in').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0)
-            + visibleTransactions.filter((item) => item.type === 'sales').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0),
-        totalPaymentsOut: visibleTransactions.filter((item) => item.type === 'payment_out').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0)
-            + visibleTransactions.filter((item) => item.type === 'purchase').reduce((sum, item) => sum + Number(item.paid_amount || 0), 0),
-        totalSalesReturns: 0,
-        totalPurchaseReturns: 0
-    };
-
-    let runningBalance = Number(visibleTotals.openingBalance) || 0;
-    visibleTransactions.forEach((item) => {
-        runningBalance += getVisibleStatementEffect(item);
-        item.running_balance = runningBalance;
-    });
-    visibleTotals.closingBalance = runningBalance;
-
-    return { transactions: visibleTransactions, totals: visibleTotals };
+    // The backend now provides 100% accurate totals and running balances from the party_ledger.
+    // There is no need to recalculate them on the frontend.
+    return { transactions: visibleTransactions, totals: safeTotals };
 }
 
 function buildTopNavHTML() {

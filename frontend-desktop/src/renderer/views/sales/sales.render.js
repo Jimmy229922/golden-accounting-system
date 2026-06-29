@@ -91,7 +91,8 @@
                                     <tr>
                                         <th style="width: 4%; text-align: center;">#</th>
                                         <th style="width: 14%;">${t('items.barcode', 'الباركود')}</th>
-                                        <th style="width: 24%;">${t('sales.tableHeaders.item', 'الصنف')}</th>
+                                        <th style="width: 20%;">${t('sales.tableHeaders.item', 'الصنف')}</th>
+                                        <th style="width: 10%;">${t('sales.tableHeaders.warehouse', 'المخزن')}</th>
                                         <th style="width: 10%;">${t('sales.tableHeaders.unit', 'الوحدة')}</th>
                                         <th style="width: 14%;">${t('sales.tableHeaders.qty', 'الكمية')}</th>
                                         <th style="width: 14%;">${t('sales.tableHeaders.price', 'سعر البيع')}</th>
@@ -284,7 +285,15 @@
         return itemsOptions;
     }
 
-    function createInvoiceRow({ allItems, existingItem, t, fmt }) {
+    function buildWarehousesOptions({ allWarehouses, existingItem, t }) {
+        if (!allWarehouses || allWarehouses.length === 0) return `<option value="1">${t('purchases.mainWarehouse', 'المخزن الرئيسي')}</option>`;
+        const selectedId = existingItem ? existingItem.warehouse_id : 1;
+        return allWarehouses.map(w => 
+            `<option value="${w.id}" ${w.id == selectedId ? 'selected' : ''}>${w.name}</option>`
+        ).join('');
+    }
+
+    function createInvoiceRow({ allItems, allWarehouses, existingItem, t, fmt }) {
         const row = document.createElement('tr');
         row.dataset.id = String(Date.now());
 
@@ -314,6 +323,11 @@
                 </select>
                 <span class="item-stock-badge empty"></span>
             </div>
+        </td>
+        <td>
+            <select class="form-control warehouse-select" data-fs-size="sm">
+                ${buildWarehousesOptions({ allWarehouses, existingItem, t })}
+            </select>
         </td>
         <td>
             <span class="unit-label">${unitName}</span>

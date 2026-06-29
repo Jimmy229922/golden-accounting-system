@@ -582,8 +582,8 @@ function register() {
         `);
 
         const insertDetail = db.prepare(`
-            INSERT INTO sales_invoice_details (invoice_id, item_id, quantity, sale_price, total_price)
-            VALUES (@invoice_id, @item_id, @quantity, @sale_price, @total_price)
+            INSERT INTO sales_invoice_details (invoice_id, item_id, warehouse_id, quantity, sale_price, total_price)
+            VALUES (@invoice_id, @item_id, @warehouse_id, @quantity, @sale_price, @total_price)
         `);
 
         const updateItemStock = db.prepare(`
@@ -618,6 +618,7 @@ function register() {
                 insertDetail.run({
                     invoice_id: invoiceId,
                     item_id: item.item_id,
+                    warehouse_id: item.warehouse_id || 1, // Default to 1 if not provided
                     quantity: item.quantity,
                     sale_price: item.sale_price,
                     total_price: item.total_price
@@ -736,8 +737,8 @@ function register() {
 
             // Insert New Details & Update Stock
             const insertDetail = db.prepare(`
-                INSERT INTO sales_invoice_details (invoice_id, item_id, quantity, sale_price, total_price)
-                VALUES (@invoice_id, @item_id, @quantity, @sale_price, @total_price)
+                INSERT INTO sales_invoice_details (invoice_id, item_id, warehouse_id, quantity, sale_price, total_price)
+                VALUES (@invoice_id, @item_id, @warehouse_id, @quantity, @sale_price, @total_price)
             `);
             const updateItemStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity - @quantity WHERE id = @item_id');
 
@@ -745,6 +746,7 @@ function register() {
                 insertDetail.run({
                     invoice_id: id,
                     item_id: item.item_id,
+                    warehouse_id: item.warehouse_id || 1,
                     quantity: item.quantity,
                     sale_price: item.sale_price,
                     total_price: item.total_price

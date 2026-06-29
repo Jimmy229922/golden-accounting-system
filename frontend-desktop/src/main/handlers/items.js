@@ -681,7 +681,65 @@ function register() {
             return { openingQty: 0, transactions: [] };
         }
     });
+
+    // Get item ledger from inventory_transactions table
+    ipcMain.handle('get-item-ledger', (event, payload) => {
+        try {
+            const { itemId, startDate, endDate } = payload;
+            
+            let query = `
+                SELECT 
+                    it.id,
+                    it.transaction_type as type,
+                    it.quantity,
+                    it.created_at as date,
+                    it.reference_id,
+                    CASE 
+                        WHEN it.transaction_type = 'purchase' THEN (SELECT invoice_number FROM purchase_invoices WHERE id = it.reference_id)
+                        WHEN it.transaction_type = 'sale' THEN (SELECT invoice_number FROM sales_invoices WHERE id = it.reference_id)
+                        WHEN it.transaction_type = 'damaged' THEN 'DAM-' || CAST(it.reference_id AS TEXT)
+                        WHEN it.transaction_type = 'opening_balance' THEN 'OPEN-' || CAST(it.reference_id AS TEXT)
+                    END as ref,
+                    CASE 
+                        WHEN it.transaction_type = 'purchase' THEN (SELECT parties.name FROM purchase_invoices JOIN parties ON purchase_invoices.supplier_id = parties.id WHERE purchase_invoices.id = it.reference_id)
+                        WHEN it.transaction_type = 'sale' THEN (SELECT parties.name FROM sales_invoices JOIN parties ON sales_invoices.customer_id = parties.id WHERE sales_invoices.id = it.reference_id)
+                        ELSE ''
+                    END as party,
+                    CASE
+                        WHEN it.transaction_type = 'purchase' THEN (SELECT cost_price FROM purchase_invoice_details WHERE invoice_id = it.reference_id AND item_id = it.item_id LIMIT 1)
+                        WHEN it.transaction_type = 'sale' THEN (SELECT sale_price FROM sales_invoice_details WHERE invoice_id = it.reference_id AND item_id = it.item_id LIMIT 1)
+                        WHEN it.transaction_type = 'damaged' THEN (SELECT cost_price FROM damaged_stock_logs WHERE id = it.reference_id)
+                        WHEN it.transaction_type = 'opening_balance' THEN (SELECT cost_price FROM opening_balances WHERE id = it.reference_id)
+                    END as price
+                FROM inventory_transactions it
+                WHERE it.item_id = ?
+            `;
+            const params = [itemId];
+            if (startDate) { query += " AND date(it.created_at) >= date(?)"; params.push(startDate); }
+            if (endDate) { query += " AND date(it.created_at) <= date(?)"; params.push(endDate); }
+            
+            query += " ORDER BY it.created_at ASC, it.id ASC";
+            
+            const transactions = db.prepare(query).all(...params);
+            
+            let balance = 0;
+            const formattedTx = transactions.map(tx => {
+                balance += tx.quantity;
+                return {
+                    ...tx,
+                    qty_in: tx.quantity > 0 ? tx.quantity : 0,
+                    qty_out: tx.quantity < 0 ? Math.abs(tx.quantity) : 0,
+                    balance: balance
+                };
+            });
+            
+            return { success: true, transactions: formattedTx, finalBalance: balance };
+        } catch (error) {
+            console.error('[get-item-ledger] Error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
 }
 
 module.exports = { register };
-

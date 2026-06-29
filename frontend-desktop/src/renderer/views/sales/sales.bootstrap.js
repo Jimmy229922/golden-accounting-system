@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         salesState.dom.invoiceDateInput.valueAsDate = new Date();
     }
 
-    Promise.all([loadCustomers(), loadItems(), loadInvoiceNumberSuggestions()]).then(async () => {
+    Promise.all([loadCustomers(), loadItems(), loadInvoiceNumberSuggestions(), loadWarehouses()]).then(async () => {
         const urlParams = new URLSearchParams(window.location.search);
         const editId = urlParams.get('editId');
         if (editId) {
@@ -1303,6 +1303,16 @@ async function displayCustomerBalance() {
 
 async function loadItems() {
     salesState.allItems = await salesApi.getItems();
+}
+
+async function loadWarehouses() {
+    try {
+        const warehouses = await salesApi.getWarehouses();
+        salesState.allWarehouses = Array.isArray(warehouses) ? warehouses : [];
+    } catch (e) {
+        console.error('Failed to load warehouses', e);
+        salesState.allWarehouses = [];
+    }
 }
 
 function normalizeBarcodeInput(value) {

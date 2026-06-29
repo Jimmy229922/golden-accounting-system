@@ -102,6 +102,7 @@
                                         <th style="width: 4%; text-align: center;">#</th>
                                         <th style="width: 13%;">${t('items.barcode', 'الباركود')}</th>
                                         <th style="width: 19%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
+                                        <th style="width: 10%;">${t('purchases.tableHeaders.warehouse', 'المخزن')}</th>
                                         <th style="width: 8%;">${t('purchases.tableHeaders.unit', 'الوحدة')}</th>
                                         <th style="width: 11%;">${t('purchases.raw_quantity', 'خام')}</th>
                                         <th style="width: 11%;">${t('purchases.net_1_percent', 'صافي 1%')}</th>
@@ -253,7 +254,15 @@
         return itemsOptions;
     }
 
-    function createInvoiceRow({ allItems, existingItem, t, fmt }) {
+    function buildWarehousesOptions({ allWarehouses, existingItem, t }) {
+        if (!allWarehouses || allWarehouses.length === 0) return `<option value="1">${t('purchases.mainWarehouse', 'المخزن الرئيسي')}</option>`;
+        const selectedId = existingItem ? existingItem.warehouse_id : 1;
+        return allWarehouses.map(w => 
+            `<option value="${w.id}" ${w.id == selectedId ? 'selected' : ''}>${w.name}</option>`
+        ).join('');
+    }
+
+    function createInvoiceRow({ allItems, allWarehouses, existingItem, t, fmt }) {
         const row = document.createElement('tr');
         row.dataset.id = String(Date.now());
 
@@ -297,6 +306,11 @@
                 </select>
                 <span class="item-stock-badge empty"></span>
             </div>
+        </td>
+        <td>
+            <select class="form-control warehouse-select" data-fs-size="sm">
+                ${buildWarehousesOptions({ allWarehouses, existingItem, t })}
+            </select>
         </td>
         <td>
             <span class="unit-label">${unitName}</span>

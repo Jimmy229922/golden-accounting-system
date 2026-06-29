@@ -330,7 +330,7 @@ function register() {
         }
     });
 
-    // كشف حساب تفصيلي للعميل
+    // كشف حساب تفصيلي للعميل (يعتمد على دفتر الأستاذ)
     ipcMain.handle('get-customer-detailed-statement', (event, { customerId, startDate, endDate }) => {
         try {
             const customer = db.prepare('SELECT * FROM parties WHERE id = ?').get(customerId);
@@ -339,83 +339,59 @@ function register() {
             }
 
             const custId = Number(customerId);
-            let openingBalance = customer.opening_balance || 0;
+            let openingBalance = 0;
 
-            // حساب الرصيد الافتتاحي من جميع الحركات قبل تاريخ البداية باستخدام UNION ALL
             if (startDate) {
                 const obResult = db.prepare(`
-                    SELECT COALESCE(SUM(
-                        CASE
-                            WHEN sub_type = 'sales' THEN amount
-                            WHEN sub_type = 'purchase' THEN -amount
-                            WHEN sub_type = 'payment_in' THEN -amount
-                            WHEN sub_type = 'payment_out' THEN amount
-                            ELSE 0
-                        END
-                    ), 0) as net
-                    FROM (
-                        SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount
-                        FROM sales_invoices WHERE customer_id = ? AND invoice_date < ?
-
-                        UNION ALL
-                        SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount
-                        FROM purchase_invoices WHERE supplier_id = ? AND invoice_date < ?
-
-                        UNION ALL
-                        SELECT CASE WHEN type = 'income' THEN 'payment_in' ELSE 'payment_out' END as sub_type,
-                               amount
-                        FROM treasury_transactions
-                        WHERE customer_id = ?
-                          AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')
-                          AND transaction_date < ?
-                    ) sub
-                `).get(
-                    custId, startDate,
-                    custId, startDate,
-                    custId, startDate
-                );
-                openingBalance += obResult.net;
+                    SELECT COALESCE(SUM(amount), 0) as net
+                    FROM party_ledger
+                    WHERE party_id = ? AND transaction_date < ?
+                `).get(custId, startDate);
+                openingBalance = obResult.net;
             }
 
-            // جلب جميع الحركات داخل الفترة باستخدام UNION ALL
-            const params = [];
-            let query = `
-                SELECT id, 'sales' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, (total_amount - paid_amount) as remaining_amount, notes, 1 as sort_order
-                FROM sales_invoices WHERE customer_id = ?`;
-            params.push(custId);
-            if (startDate) { query += ' AND invoice_date >= ?'; params.push(startDate); }
-            if (endDate) { query += ' AND invoice_date <= ?'; params.push(endDate); }
+            const params = [custId];
+            let dateFilter = '';
+            if (startDate) {
+                dateFilter += ' AND pl.transaction_date >= ?';
+                params.push(startDate);
+            }
+            if (endDate) {
+                dateFilter += ' AND pl.transaction_date <= ?';
+                params.push(endDate);
+            }
 
-            query += `
-                UNION ALL
-                SELECT id, 'purchase' as type, invoice_number as doc_number, invoice_date as trans_date, total_amount, paid_amount, (total_amount - paid_amount) as remaining_amount, notes, 1 as sort_order
-                FROM purchase_invoices WHERE supplier_id = ?`;
-            params.push(custId);
-            if (startDate) { query += ' AND invoice_date >= ?'; params.push(startDate); }
-            if (endDate) { query += ' AND invoice_date <= ?'; params.push(endDate); }
-
-            query += `
-                UNION ALL
-                SELECT id, CASE WHEN type = 'income' THEN 'payment_in' ELSE 'payment_out' END as type,
-                    voucher_number as doc_number, transaction_date as trans_date, 0.0 as total_amount, amount as paid_amount, 0.0 as remaining_amount, description as notes, 2 as sort_order
-                FROM treasury_transactions
-                WHERE customer_id = ?
-                  AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')`;
-            params.push(custId);
-            if (startDate) { query += ' AND transaction_date >= ?'; params.push(startDate); }
-            if (endDate) { query += ' AND transaction_date <= ?'; params.push(endDate); }
-
-            query += ' ORDER BY trans_date ASC, sort_order ASC, id ASC';
+            const query = `
+                SELECT 
+                    CASE 
+                        WHEN pl.transaction_type = 'sales_invoice' THEN 'sales'
+                        WHEN pl.transaction_type = 'purchase_invoice' THEN 'purchase'
+                        WHEN pl.transaction_type = 'treasury_income' THEN 'payment_in'
+                        WHEN pl.transaction_type = 'treasury_expense' THEN 'payment_out'
+                        WHEN pl.transaction_type = 'opening_balance' THEN 'opening_balance'
+                    END as type,
+                    COALESCE(si.invoice_number, pi.invoice_number, tt.voucher_number, '-') as doc_number,
+                    pl.transaction_date as trans_date,
+                    CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE COALESCE(si.total_amount, pi.total_amount, 0) END as total_amount,
+                    CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE COALESCE(si.paid_amount, pi.paid_amount, tt.amount, 0) END as paid_amount,
+                    CASE WHEN pl.transaction_type = 'opening_balance' THEN ABS(pl.amount) ELSE COALESCE(si.total_amount - si.paid_amount, pi.total_amount - pi.paid_amount, 0) END as remaining_amount,
+                    COALESCE(si.notes, pi.notes, tt.description, 'رصيد افتتاحي') as notes,
+                    pl.amount as effect_amount,
+                    pl.id as ledger_id,
+                    pl.reference_id as id
+                FROM party_ledger pl
+                LEFT JOIN sales_invoices si ON pl.transaction_type = 'sales_invoice' AND pl.reference_id = si.id
+                LEFT JOIN purchase_invoices pi ON pl.transaction_type = 'purchase_invoice' AND pl.reference_id = pi.id
+                LEFT JOIN treasury_transactions tt ON pl.transaction_type IN ('treasury_income', 'treasury_expense') AND pl.reference_id = tt.id
+                WHERE pl.party_id = ? ${dateFilter}
+                ORDER BY pl.transaction_date ASC, pl.id ASC
+            `;
 
             const transactions = db.prepare(query).all(...params);
-            // لا نعتمد على رصيد العميل الحالي في كشف الحساب لضمان عدم حدوث تباين بسبب أخطاء تراكمية قديمة
-            // وإنما نعتمد على الرصيد الافتتاحي المحسوب من إجمالي الحركات السابقة للفترة
-            const periodMovement = transactions.reduce((sum, trans) => sum + getCustomerStatementTransactionEffect(trans), 0);
             
-            // حساب الرصيد الجاري لكل حركة في الفترة
             let runningBalance = openingBalance;
             for (const trans of transactions) {
-                runningBalance += getCustomerStatementTransactionEffect(trans);
+                runningBalance += trans.effect_amount;
                 trans.running_balance = runningBalance;
             }
 
@@ -426,17 +402,15 @@ function register() {
                                     transactions.filter(t => t.type === 'sales').reduce((s, t) => s + Number(t.paid_amount || 0), 0);
             const totalPaymentsOut = transactions.filter(t => t.type === 'payment_out').reduce((s, t) => s + Number(t.paid_amount || 0), 0) +
                                      transactions.filter(t => t.type === 'purchase').reduce((s, t) => s + Number(t.paid_amount || 0), 0);
-            const totalSalesReturns = 0;
-            const totalPurchaseReturns = 0;
 
             const totals = {
                 totalSales,
                 totalPurchases,
                 totalPaymentsIn,
                 totalPaymentsOut,
-                totalSalesReturns,
-                totalPurchaseReturns,
-                openingBalance: openingBalance,
+                totalSalesReturns: 0,
+                totalPurchaseReturns: 0,
+                openingBalance,
                 closingBalance: runningBalance
             };
 
@@ -560,41 +534,15 @@ function register() {
             const invoicePaymentRow = db.prepare(invoicePaymentsQuery).get(...invoicePaymentParams);
             totalPaymentsIn += invoicePaymentRow.total_amount || 0;
 
-            // --- حساب الرصيد الافتتاحي ---
-            let openingBalance = customer.opening_balance || 0;
+            // --- حساب الرصيد الافتتاحي من دفتر الأستاذ ---
+            let openingBalance = 0;
             if (startDate) {
                 const obResult = db.prepare(`
-                    SELECT COALESCE(SUM(
-                        CASE
-                            WHEN sub_type = 'sales' THEN amount
-                            WHEN sub_type = 'purchase' THEN -amount
-                            WHEN sub_type = 'payment_in' THEN -amount
-                            WHEN sub_type = 'payment_out' THEN amount
-                            ELSE 0
-                        END
-                    ), 0) as net
-                    FROM (
-                        SELECT 'sales' as sub_type, (total_amount - paid_amount) as amount
-                        FROM sales_invoices WHERE customer_id = ? AND invoice_date < ?
-
-                        UNION ALL
-                        SELECT 'purchase' as sub_type, (total_amount - paid_amount) as amount
-                        FROM purchase_invoices WHERE supplier_id = ? AND invoice_date < ?
-
-                        UNION ALL
-                        SELECT CASE WHEN type = 'income' THEN 'payment_in' ELSE 'payment_out' END as sub_type,
-                               amount
-                        FROM treasury_transactions
-                        WHERE customer_id = ?
-                          AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')
-                          AND transaction_date < ?
-                    ) sub
-                `).get(
-                    custId, startDate,
-                    custId, startDate,
-                    custId, startDate
-                );
-                openingBalance += obResult.net;
+                    SELECT COALESCE(SUM(amount), 0) as net
+                    FROM party_ledger
+                    WHERE party_id = ? AND transaction_date < ?
+                `).get(custId, startDate);
+                openingBalance = obResult.net;
             }
 
             const totalSales = salesItems.reduce((s, i) => s + i.total_amount, 0);
@@ -605,8 +553,7 @@ function register() {
             const totalDebit = totalSales + totalPaymentsOut;
             const totalCredit = totalPurchases + totalPaymentsIn;
             
-            // حساب الرصيد الختامي بشكل تصاعدي بناءً على رصيد أول المدة المحسوب من الاستعلام والحركات خلال الفترة
-            // لضمان دقة كشف الحساب واستقلاليته عن الرصيد الإجمالي المخزن للعميل
+            // حساب الرصيد الختامي بشكل تصاعدي
             let closingBalance = openingBalance + (totalDebit - totalCredit);
 
             return {

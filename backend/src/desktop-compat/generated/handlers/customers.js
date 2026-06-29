@@ -7,7 +7,16 @@ function register() {
 
     ipcMain.handle('get-customers', () => {
         try {
-            return db.prepare('SELECT * FROM parties ORDER BY name ASC').all();
+            const query = `
+                SELECT p.*, 
+                       COALESCE((SELECT SUM(amount) FROM party_ledger WHERE party_id = p.id), 0) as ledger_balance
+                FROM parties p 
+                ORDER BY p.name ASC
+            `;
+            return db.prepare(query).all().map(c => ({
+                ...c,
+                balance: c.ledger_balance
+            }));
         } catch (error) {
             console.error('[get-customers] Error:', error);
             return [];
@@ -16,7 +25,12 @@ function register() {
 
     ipcMain.handle('get-debtor-creditor-report', (event, { startDate, endDate }) => {
         try {
-        const customers = db.prepare('SELECT id, name, type, balance as current_balance, phone FROM parties ORDER BY name ASC').all();
+        const customers = db.prepare(`
+            SELECT id, name, type, phone,
+                   COALESCE((SELECT SUM(amount) FROM party_ledger WHERE party_id = parties.id), 0) as current_balance
+            FROM parties 
+            ORDER BY name ASC
+        `).all();
         
         const sDate = startDate || '1900-01-01';
         const eDate = endDate || '9999-12-31';
@@ -194,7 +208,10 @@ function register() {
         const denied = requirePermission('customers', 'delete');
         if (denied) return denied;
         try {
-            db.prepare('DELETE FROM parties WHERE id = ?').run(id);
+            db.transaction(() => {
+                db.prepare('DELETE FROM party_ledger WHERE party_id = ?').run(id);
+                db.prepare('DELETE FROM parties WHERE id = ?').run(id);
+            })();
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

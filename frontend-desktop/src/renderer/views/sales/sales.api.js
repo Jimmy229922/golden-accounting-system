@@ -20,6 +20,10 @@
         return window.electronAPI.getItems();
     }
 
+    async function getWarehouses() {
+        return window.electronAPI.getWarehouses();
+    }
+
     async function saveInvoice(invoiceData) {
         return window.electronAPI.saveSalesInvoice(invoiceData);
     }
@@ -60,7 +64,8 @@
         createShiftClosing,
         getShiftClosings,
         updateShiftClosing,
-        deleteShiftClosing
+        deleteShiftClosing,
+        getWarehouses
     };
 })();
 

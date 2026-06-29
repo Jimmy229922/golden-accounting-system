@@ -48,6 +48,7 @@
   "get-inspection-expenses",
   "get-invite-status",
   "get-invoice-with-details",
+  "get-item-ledger",
   "get-item-movements",
   "get-item-stock-details",
   "get-item-transactions",

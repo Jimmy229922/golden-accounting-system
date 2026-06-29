@@ -2,6 +2,7 @@
     function createInitialState() {
         return {
             allItems: [],
+            allWarehouses: [],
             editingInvoiceId: null,
             isEditLocked: false,
             originalInvoiceItemTotalsByItemId: {},

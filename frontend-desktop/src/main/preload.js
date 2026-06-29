@@ -174,6 +174,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Inventory API
     getItemTransactions: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-transactions', { itemId, startDate, endDate }),
+    getItemLedger: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-ledger', { itemId, startDate, endDate }),
     getDamagedStockEntries: (filters = {}) => invokeChannel('get-damaged-stock-entries', filters),
     addDamagedStockEntry: (data) => invokeChannel('add-damaged-stock-entry', data),
     updateDamagedStockEntry: (data) => invokeChannel('update-damaged-stock-entry', data),
