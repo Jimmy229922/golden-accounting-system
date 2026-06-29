@@ -5,6 +5,7 @@ let endDateInput;
 let applyFilterBtn;
 let clearFilterBtn;
 let periodLabelEl;
+let appVersionEl;
 let lastStats = null;
 let chartPeriod = '7';
 let ar = {};
@@ -102,6 +103,7 @@ function bindEvents() {
     applyFilterBtn = document.getElementById('dashboardApplyBtn');
     clearFilterBtn = document.getElementById('dashboardClearBtn');
     periodLabelEl = document.getElementById('dashboardPeriod');
+    appVersionEl = document.getElementById('dashboardAppVersion');
 
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => loadDashboardStats(currentFilters));
@@ -118,6 +120,7 @@ function bindEvents() {
     updatePeriodLabel();
 
     startRealTimeClock();
+    loadAppVersion();
 
     document.querySelectorAll('.chart-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -131,6 +134,20 @@ function bindEvents() {
     window.addEventListener('resize', () => {
         if (lastStats && lastStats.chartData) renderChart(lastStats.chartData);
     });
+}
+
+async function loadAppVersion() {
+    if (!appVersionEl || !window.electronAPI || typeof window.electronAPI.getAppVersion !== 'function') {
+        return;
+    }
+
+    try {
+        const result = await window.electronAPI.getAppVersion();
+        if (result && result.success && result.version) {
+            appVersionEl.textContent = result.version;
+        }
+    } catch (_) {
+    }
 }
 
 function startRealTimeClock() {

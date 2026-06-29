@@ -202,6 +202,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAppVersion: () => invokeChannel('get-app-version'),
     checkAppUpdate: () => invokeChannel('check-app-update'),
     downloadAppUpdate: () => invokeChannel('download-app-update'),
+    quitAndInstallAppUpdate: (installerPath) => invokeChannel('quit-and-install-app-update', installerPath),
     openAppReleasePage: () => invokeChannel('open-app-release-page'),
 
     // Invite Code API

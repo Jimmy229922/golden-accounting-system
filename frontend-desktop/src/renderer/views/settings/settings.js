@@ -629,9 +629,12 @@ async function handleAppUpdate() {
 
         const downloadResult = await window.electronAPI.downloadAppUpdate();
         if (downloadResult && downloadResult.success) {
-            const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} وفتح ملف التثبيت: ${downloadResult.path}`.trim();
+            const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} بنجاح. سيتم الآن إغلاق البرنامج وبدء التثبيت: ${downloadResult.path}`.trim();
             setStatus(updateStatusEl, successMessage);
-            if (window.showToast) window.showToast('تم تنزيل التحديث وفتح ملف التثبيت.', 'success');
+            if (window.showToast) window.showToast('تم تنزيل التحديث. سيتم الآن إغلاق البرنامج وبدء التثبيت.', 'success');
+            if (downloadResult.closeForInstall && typeof window.electronAPI.quitAndInstallAppUpdate === 'function') {
+                await window.electronAPI.quitAndInstallAppUpdate(downloadResult.path);
+            }
             return;
         }
 

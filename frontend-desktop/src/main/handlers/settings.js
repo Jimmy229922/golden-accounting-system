@@ -197,14 +197,13 @@ function register() {
             const targetPath = path.join(updatesDir, releaseResult.assetName);
             await downloadFileFromUrl(releaseResult.downloadUrl, targetPath);
 
-            const openError = await shell.openPath(targetPath);
             return {
-                success: openError === '',
+                success: true,
                 updateAvailable: true,
                 path: targetPath,
                 assetName: releaseResult.assetName,
                 latestVersion: releaseResult.latestVersion,
-                error: openError || ''
+                closeForInstall: true
             };
         } catch (error) {
             return {
@@ -212,6 +211,25 @@ function register() {
                 error: error.message,
                 releaseUrl: releaseResult.releaseUrl
             };
+        }
+    });
+
+    ipcMain.handle('quit-and-install-app-update', async (event, installerPath) => {
+        try {
+            const targetPath = String(installerPath || '').trim();
+            if (!targetPath) {
+                return { success: false, error: 'مسار ملف التثبيت غير صالح.' };
+            }
+
+            app.once('quit', () => {
+                shell.openPath(targetPath).catch(() => {});
+            });
+
+            app.quit();
+
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
         }
     });
 
