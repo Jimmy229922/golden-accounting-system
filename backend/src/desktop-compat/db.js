@@ -191,6 +191,11 @@ function initDB() {
         )
     `);
 
+    runAddColumnMigration("ALTER TABLE units ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", "units", "created_at");
+    runAddColumnMigration("ALTER TABLE units ADD COLUMN updated_at TEXT", "units", "updated_at");
+    runAddColumnMigration("ALTER TABLE units ADD COLUMN created_by TEXT", "units", "created_by");
+    runAddColumnMigration("ALTER TABLE units ADD COLUMN updated_by TEXT", "units", "updated_by");
+
     // 2. Items Table (جدول الأصناف)
     db.exec(`
         CREATE TABLE IF NOT EXISTS items (
@@ -233,6 +238,11 @@ function initDB() {
             opening_balance REAL DEFAULT 0
         )
     `);
+
+    runAddColumnMigration("ALTER TABLE parties ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", "parties", "created_at");
+    runAddColumnMigration("ALTER TABLE parties ADD COLUMN updated_at TEXT", "parties", "updated_at");
+    runAddColumnMigration("ALTER TABLE parties ADD COLUMN created_by TEXT", "parties", "created_by");
+    runAddColumnMigration("ALTER TABLE parties ADD COLUMN updated_by TEXT", "parties", "updated_by");
 
     // Attempt to add 'type' column if it doesn't exist (for existing databases)
     try {
@@ -287,6 +297,9 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'purchase_invoices', 'discount_value');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN discount_amount REAL DEFAULT 0", 'purchase_invoices', 'discount_amount');
     runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'purchase_invoices', 'created_at');
+    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN updated_at TEXT", 'purchase_invoices', 'updated_at');
+    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN created_by TEXT", 'purchase_invoices', 'created_by');
+    runAddColumnMigration("ALTER TABLE purchase_invoices ADD COLUMN updated_by TEXT", 'purchase_invoices', 'updated_by');
 
     // 6. Purchase Invoice Details Table (جدول تفاصيل فاتورة المشتريات)
     db.exec(`
@@ -334,6 +347,9 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_value REAL DEFAULT 0", 'sales_invoices', 'discount_value');
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN discount_amount REAL DEFAULT 0", 'sales_invoices', 'discount_amount');
     runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'sales_invoices', 'created_at');
+    runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN updated_at TEXT", 'sales_invoices', 'updated_at');
+    runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN created_by TEXT", 'sales_invoices', 'created_by');
+    runAddColumnMigration("ALTER TABLE sales_invoices ADD COLUMN updated_by TEXT", 'sales_invoices', 'updated_by');
 
     // 8. Sales Invoice Details Table (جدول تفاصيل فاتورة المبيعات)
     db.exec(`
@@ -366,9 +382,12 @@ function initDB() {
     `);
 
     // Add columns if they don't exist
-    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN customer_id INTEGER REFERENCES parties(id)", 'treasury_transactions', 'customer_id');
+    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN customer_id INTEGER REFERENCES parties(id) ON DELETE CASCADE", 'treasury_transactions', 'customer_id');
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN voucher_number TEXT", 'treasury_transactions', 'voucher_number');
     runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'treasury_transactions', 'created_at');
+    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN updated_at TEXT", 'treasury_transactions', 'updated_at');
+    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN created_by TEXT", 'treasury_transactions', 'created_by');
+    runAddColumnMigration("ALTER TABLE treasury_transactions ADD COLUMN updated_by TEXT", 'treasury_transactions', 'updated_by');
 
     db.exec("DROP TABLE IF EXISTS petty_expenses_bags");
     db.exec("DROP TABLE IF EXISTS petty_expenses_inspection");
@@ -391,6 +410,9 @@ function initDB() {
     `);
 
     runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN category TEXT DEFAULT 'general'", 'petty_expenses', 'category');
+    runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN updated_at TEXT", 'petty_expenses', 'updated_at');
+    runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN created_by TEXT", 'petty_expenses', 'created_by');
+    runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN updated_by TEXT", 'petty_expenses', 'updated_by');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS under_collection_records (
@@ -460,6 +482,10 @@ function initDB() {
         )
     `);
 
+    runAddColumnMigration("ALTER TABLE local_sales ADD COLUMN updated_at TEXT", 'local_sales', 'updated_at');
+    runAddColumnMigration("ALTER TABLE local_sales ADD COLUMN created_by TEXT", 'local_sales', 'created_by');
+    runAddColumnMigration("ALTER TABLE local_sales ADD COLUMN updated_by TEXT", 'local_sales', 'updated_by');
+
     // 10. Sales Shift Closings Table (جدول إقفالات ورديات المبيعات)
     db.exec(`
         CREATE TABLE IF NOT EXISTS sales_shift_closings (
@@ -489,6 +515,7 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE sales_shift_closings ADD COLUMN treasury_transaction_id INTEGER", 'sales_shift_closings', 'treasury_transaction_id');
     runAddColumnMigration("ALTER TABLE sales_shift_closings ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'sales_shift_closings', 'created_at');
     runAddColumnMigration("ALTER TABLE sales_shift_closings ADD COLUMN updated_at TEXT", 'sales_shift_closings', 'updated_at');
+    runAddColumnMigration("ALTER TABLE sales_shift_closings ADD COLUMN updated_by TEXT", 'sales_shift_closings', 'updated_by');
 
     // 11. Settings Table (جدول الإعدادات)
     db.exec(`
@@ -507,6 +534,11 @@ function initDB() {
         )
     `);
 
+    runAddColumnMigration("ALTER TABLE warehouses ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'warehouses', 'created_at');
+    runAddColumnMigration("ALTER TABLE warehouses ADD COLUMN updated_at TEXT", 'warehouses', 'updated_at');
+    runAddColumnMigration("ALTER TABLE warehouses ADD COLUMN created_by TEXT", 'warehouses', 'created_by');
+    runAddColumnMigration("ALTER TABLE warehouses ADD COLUMN updated_by TEXT", 'warehouses', 'updated_by');
+
     // 13. Opening Balances Table (أرصدة أول المدة)
     db.exec(`
         CREATE TABLE IF NOT EXISTS opening_balances (
@@ -520,6 +552,10 @@ function initDB() {
             FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
         )
     `);
+
+    runAddColumnMigration("ALTER TABLE opening_balances ADD COLUMN updated_at TEXT", 'opening_balances', 'updated_at');
+    runAddColumnMigration("ALTER TABLE opening_balances ADD COLUMN created_by TEXT", 'opening_balances', 'created_by');
+    runAddColumnMigration("ALTER TABLE opening_balances ADD COLUMN updated_by TEXT", 'opening_balances', 'updated_by');
 
     // 14. Opening Balance Groups (مجموعات أرصدة أول المدة)
     db.exec(`
@@ -570,6 +606,9 @@ function initDB() {
             FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
         )
     `);
+
+    runAddColumnMigration("ALTER TABLE damaged_stock_logs ADD COLUMN created_by TEXT", 'damaged_stock_logs', 'created_by');
+    runAddColumnMigration("ALTER TABLE damaged_stock_logs ADD COLUMN updated_by TEXT", 'damaged_stock_logs', 'updated_by');
 
     // ── Performance Indexes ──
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_unit_id ON items(unit_id)`);
@@ -730,6 +769,10 @@ function initDB() {
         )
     `);
 
+    runAddColumnMigration("ALTER TABLE inventory_transactions ADD COLUMN updated_at TEXT", 'inventory_transactions', 'updated_at');
+    runAddColumnMigration("ALTER TABLE inventory_transactions ADD COLUMN created_by TEXT", 'inventory_transactions', 'created_by');
+    runAddColumnMigration("ALTER TABLE inventory_transactions ADD COLUMN updated_by TEXT", 'inventory_transactions', 'updated_by');
+
     // Add triggers to automatically record inventory transactions
     // 1. Opening Balances
     db.exec(`
@@ -853,6 +896,10 @@ function initDB() {
             FOREIGN KEY (party_id) REFERENCES parties(id)
         )
     `);
+
+    runAddColumnMigration("ALTER TABLE party_ledger ADD COLUMN updated_at TEXT", 'party_ledger', 'updated_at');
+    runAddColumnMigration("ALTER TABLE party_ledger ADD COLUMN created_by TEXT", 'party_ledger', 'created_by');
+    runAddColumnMigration("ALTER TABLE party_ledger ADD COLUMN updated_by TEXT", 'party_ledger', 'updated_by');
 
     // 1. Sales Invoices
     db.exec(`
