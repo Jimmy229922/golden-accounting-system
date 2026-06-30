@@ -82,6 +82,7 @@ function ensurePortableRootStructure(portableRoot) {
     fs.mkdirSync(portableRoot, { recursive: true });
     fs.mkdirSync(path.join(portableRoot, 'PIC'), { recursive: true });
     fs.mkdirSync(path.join(portableRoot, 'DATA'), { recursive: true });
+    fs.mkdirSync(path.join(portableRoot, 'DATA', 'userData'), { recursive: true });
 
     if (!app.isPackaged) {
         return;
@@ -94,6 +95,26 @@ function ensurePortableRootStructure(portableRoot) {
         iconIndex: 0,
         description: 'تشغيل نظام الحسابات'
     });
+}
+
+function getPortablePrimaryDataPath(portableRoot) {
+    return path.join(portableRoot, 'DATA');
+}
+
+function getPortableMirrorUserDataPath(portableRoot) {
+    return path.join(portableRoot, 'DATA', 'userData');
+}
+
+function removePortableFileIfExists(filePath) {
+    if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+}
+
+function configurePortableUserDataPath(portableRoot) {
+    const primaryDataPath = getPortablePrimaryDataPath(portableRoot);
+    fs.mkdirSync(primaryDataPath, { recursive: true });
+    app.setPath('userData', primaryDataPath);
 }
 
 function getLegacyPortableUserDataPath() {
@@ -164,13 +185,40 @@ function migrateLegacyPortableUserDataIfNeeded() {
     console.log('[startup] migrated legacy portable userData to default userData path');
 }
 
+function restorePrimaryDatabaseFromMirrorIfNeeded(portableRoot) {
+    const primaryDbPath = path.join(getPortablePrimaryDataPath(portableRoot), 'accounting.db');
+    const mirrorDbPath = path.join(getPortableMirrorUserDataPath(portableRoot), 'accounting.db');
+
+    if (fs.existsSync(primaryDbPath)) {
+        try {
+            const stats = fs.statSync(primaryDbPath);
+            if (stats.size > 0) {
+                return;
+            }
+        } catch (_) {
+        }
+    }
+
+    if (!fs.existsSync(mirrorDbPath)) {
+        return;
+    }
+
+    fs.mkdirSync(path.dirname(primaryDbPath), { recursive: true });
+    removePortableFileIfExists(`${primaryDbPath}-shm`);
+    removePortableFileIfExists(`${primaryDbPath}-wal`);
+    fs.copyFileSync(mirrorDbPath, primaryDbPath);
+    console.log('[startup] restored primary database from DATA/userData/accounting.db');
+}
+
 try {
     const portableRoot = getPortableRootPath();
     ensurePortableRootStructure(portableRoot);
     persistPortableRootToMarker(portableRoot);
     process.env.ACCOUNTING_SYSTEM_ROOT = portableRoot;
+    configurePortableUserDataPath(portableRoot);
 
     migrateLegacyPortableUserDataIfNeeded();
+    restorePrimaryDatabaseFromMirrorIfNeeded(portableRoot);
 } catch (error) {
     console.error('[startup] portable root initialization failed:', error.message);
 }

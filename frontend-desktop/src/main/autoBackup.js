@@ -115,15 +115,24 @@ function notifyQuitFallbackOnStartup() {
 
 function getUserDataBackupPath() {
     try {
-        const dbDir = path.dirname(db.name);
-        return path.join(dbDir, AUTO_BACKUP_FILE_NAME);
+        const { backupRootPath } = getBackupPaths();
+        return path.join(backupRootPath, 'userData', 'accounting.db');
     } catch (e) {
         return null;
     }
 }
 
 function copyBackupToUserData(sourceBackupPath) {
-    return sourceBackupPath;
+    const mirrorDbPath = getUserDataBackupPath();
+    if (!mirrorDbPath || !sourceBackupPath || !fs.existsSync(sourceBackupPath)) {
+        return sourceBackupPath;
+    }
+
+    fs.mkdirSync(path.dirname(mirrorDbPath), { recursive: true });
+    removeFileIfExists(`${mirrorDbPath}-shm`);
+    removeFileIfExists(`${mirrorDbPath}-wal`);
+    fs.copyFileSync(sourceBackupPath, mirrorDbPath);
+    return mirrorDbPath;
 }
 
 function cleanupLegacyAutoBackups(backupRootPath) {
@@ -177,12 +186,12 @@ function autoRestoreFromDataBackup() {
     const { backupFilePath } = getBackupPaths();
     const userDataBackup = getUserDataBackupPath();
 
-    // Check both locations: DATA folder and next to the database
+    // Check both locations: DATA/userData mirror first, then DATA auto-backup
     let sourceBackup = null;
-    if (fs.existsSync(backupFilePath)) {
-        sourceBackup = backupFilePath;
-    } else if (userDataBackup && fs.existsSync(userDataBackup)) {
+    if (userDataBackup && fs.existsSync(userDataBackup)) {
         sourceBackup = userDataBackup;
+    } else if (fs.existsSync(backupFilePath)) {
+        sourceBackup = backupFilePath;
     }
 
     if (!sourceBackup) {
