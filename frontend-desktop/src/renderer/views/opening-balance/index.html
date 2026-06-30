@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="../../assets/vendor/fontawesome/css/all.min.css">
     <script src="../../assets/js/theme.js"></script>
 </head>
-<body  dir="rtl">
+<body dir="rtl">
     <div id="app">
         <nav id="main-nav" class="top-nav"></nav>
 
@@ -22,7 +22,6 @@
                 <h1 class="page-title" data-i18n="openingBalance.title">بيانات أول المدة</h1>
             </div>
 
-            <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon">
@@ -44,76 +43,6 @@
                 </div>
             </div>
 
-            <!-- Global Warehouse Selection -->
-            <div class="warehouse-selection-box">
-                <div class="warehouse-selection-main">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-color);" data-i18n="openingBalance.defaultWarehouseLabel">المخزن الافتراضي للإضافة</label>
-                    <div style="display: flex; gap: 10px;">
-                        <select id="global-warehouse-select" class="form-control" style="font-size: 1.1rem;">
-                            <option value="" data-i18n="openingBalance.selectWarehousePlaceholder">اختر المخزن...</option>
-                        </select>
-                        <button id="add-warehouse-btn" class="btn btn-primary" title="إضافة مخزن جديد" style="white-space: nowrap;">
-                            <i class="fas fa-plus"></i>
-                            <span data-i18n="openingBalance.addWarehouseBtn">إضافة مخزن</span>
-                        </button>
-                        <button id="manage-warehouses-btn" class="btn btn-outline" title="إدارة المخازن" style="white-space: nowrap;">
-                            <i class="fas fa-cog"></i>
-                            <span data-i18n="openingBalance.manageWarehouses">إدارة المخازن</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="warehouse-selection-info">
-                    <i class="fas fa-info-circle" style="font-size: 1.5rem; color: var(--items-accent);"></i>
-                    <span data-i18n="openingBalance.warehouseInfoText">يمكنك تغيير المخزن لكل صنف على حدة، ولكن سيتم استخدام هذا المخزن بشكل افتراضي.</span>
-                </div>
-            </div>
-
-            <!-- Manage Warehouses Modal -->
-            <div id="manage-warehouses-modal" class="modal">
-                <div class="modal-content" style="width: 600px; max-height: 80vh; display: flex; flex-direction: column;">
-                    <div class="card-header">
-                        <h3 data-i18n="openingBalance.manageWarehousesTitle">إدارة المخازن</h3>
-                        <button id="close-manage-modal" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-color);"><i class="fas fa-times"></i></button>
-                    </div>
-                    <div class="card-body" style="overflow-y: auto;">
-                        <div class="table-container">
-                            <table class="entry-table">
-                                <thead>
-                                    <tr>
-                                        <th data-i18n="openingBalance.warehouseName">اسم المخزن</th>
-                                        <th style="width: 200px;" data-i18n="openingBalance.warehouseTableActions">إجراءات</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="warehouses-tbody">
-                                    <!-- Populated by JS -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Add/Edit Warehouse Modal -->
-            <div id="warehouse-modal" class="modal">
-                <div class="modal-content" style="width: 400px; padding: 0;">
-                    <div class="card-header">
-                        <h3 id="modal-title" data-i18n="openingBalance.addWarehouse">إضافة مخزن جديد</h3>
-                    </div>
-                    <div class="card-body opening-balance-unified-body">
-                        <input type="hidden" id="warehouse-id">
-                        <div class="form-group" style="margin-bottom: 20px;">
-                            <label data-i18n="openingBalance.warehouseName">اسم المخزن</label>
-                            <input type="text" id="new-warehouse-name" class="form-control" placeholder="أدخل اسم المخزن..." data-i18n-placeholder="openingBalance.warehouseNamePlaceholder">
-                        </div>
-                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                            <button id="cancel-warehouse-btn" class="btn btn-outline" data-i18n="openingBalance.cancelWarehouse">إلغاء</button>
-                            <button id="save-warehouse-btn" class="btn btn-primary" data-i18n="openingBalance.saveWarehouse">حفظ</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Edit Entry Modal -->
             <div id="edit-entry-modal" class="modal">
                 <div class="modal-content" style="width: 400px; padding: 0;">
                     <div class="card-header">
@@ -124,10 +53,6 @@
                         <div class="form-group">
                             <label data-i18n="openingBalance.editEntryItemLabel">الصنف</label>
                             <input type="text" id="edit-entry-item" class="form-control" readonly disabled>
-                        </div>
-                        <div class="form-group">
-                            <label data-i18n="openingBalance.editEntryWarehouseLabel">المخزن</label>
-                            <select id="edit-entry-warehouse" class="form-control"></select>
                         </div>
                         <div class="form-group">
                             <label data-i18n="openingBalance.editEntryQtyLabel">الكمية</label>
@@ -145,7 +70,6 @@
                 </div>
             </div>
 
-            <!-- Delete Confirmation Modal -->
             <div id="delete-entry-modal" class="modal">
                 <div class="modal-content" style="width: 400px; padding: 0;">
                     <div class="card-header" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
@@ -166,7 +90,6 @@
             </div>
 
             <div class="main-grid" style="display: grid; grid-template-columns: 1fr; gap: 30px; margin-top: 30px;">
-                <!-- New Entry Card -->
                 <div class="card">
                     <div class="card-header">
                         <h3 id="form-title"><i class="fas fa-plus-circle"></i> <span data-i18n="openingBalance.formTitle">تسجيل رصيد أول المدة</span></h3>
@@ -212,7 +135,6 @@
                                         <tr>
                                             <th>#</th>
                                             <th>الصنف</th>
-                                            <th>المخزن</th>
                                             <th>الوحدة</th>
                                             <th>الكمية</th>
                                             <th>سعر الشراء</th>
@@ -222,7 +144,7 @@
                                     </thead>
                                     <tbody id="pending-items-tbody">
                                         <tr>
-                                            <td colspan="8" class="empty-state">اختر الصنف في السطر لإضافة سطر جديد تلقائيًا</td>
+                                            <td colspan="7" class="empty-state">اختر الصنف في السطر لإضافة سطر جديد تلقائيًا</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -238,18 +160,16 @@
                     </div>
                 </div>
 
-                <!-- History Section -->
                 <div class="card">
                     <div class="card-header">
                         <h3><i class="fas fa-history"></i> <span data-i18n="openingBalance.historyArchiveTitle">السجل والأرشيف</span></h3>
                     </div>
-                    
-                    <!-- Filters -->
+
                     <div class="card-body" style="padding-bottom: 0; border-bottom: 1px solid var(--border-color);">
                         <div class="entry-form" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end;">
                             <div class="form-group">
                                 <label data-i18n="openingBalance.searchLabel">بحث</label>
-                                <input type="text" id="history-search" class="form-control" placeholder="اسم الصنف، المخزن، الملاحظات..." data-i18n-placeholder="openingBalance.searchPlaceholder">
+                                <input type="text" id="history-search" class="form-control" placeholder="اسم الصنف..." data-i18n-placeholder="openingBalance.searchPlaceholder">
                             </div>
                             <div class="form-group">
                                 <label data-i18n="openingBalance.historyDateFrom">من تاريخ</label>
@@ -268,13 +188,11 @@
                     </div>
 
                     <div class="card-body" style="padding: 0;">
-                        <!-- Items History Table -->
                         <div id="items-history-view" class="table-container" style="max-height: 500px; overflow-y: auto; border: none; border-radius: 0;">
                             <table class="entry-table history-table">
                                 <thead>
                                     <tr>
                                         <th data-i18n="openingBalance.tableHeaders.item">الصنف</th>
-                                        <th data-i18n="openingBalance.tableHeaders.warehouse">المخزن</th>
                                         <th data-i18n="openingBalance.tableHeaders.qty">الكمية</th>
                                         <th data-i18n="openingBalance.tableHeaders.cost">سعر الشراء</th>
                                         <th data-i18n="openingBalance.tableHeaders.total">الإجمالي</th>
@@ -282,9 +200,7 @@
                                         <th data-i18n="openingBalance.tableHeaders.actions">إجراءات</th>
                                     </tr>
                                 </thead>
-                                <tbody id="history-tbody">
-                                    <!-- Populated by JS -->
-                                </tbody>
+                                <tbody id="history-tbody"></tbody>
                             </table>
                         </div>
                     </div>
@@ -292,17 +208,15 @@
             </div>
         </div>
     </div>
-    
+
     <script src="../../assets/js/autocomplete.js"></script>
     <script src="../../assets/js/toast.js"></script>
     <script src="../../assets/js/i18n.js"></script>
     <script src="../../assets/js/shared/navManager.js"></script>
     <script src="../../assets/js/permissionManager.js"></script>
     <script src="../../assets/js/globalSearch.bootstrap.js"></script>
-
     <script src="../../assets/js/globalSearch.js"></script>
     <script src="../../assets/js/globalSearch.details.bootstrap.js"></script>
-
     <script src="../../assets/js/globalSearch.details.js"></script>
     <script src="./opening-balance.utils.js"></script>
     <script src="./opening-balance.render.js"></script>

@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const { db } = require('../db');
 const { DEFAULT_WAREHOUSE_NAME } = require('./utils');
 const { requirePermission } = require('./auth');
+const MAIN_WAREHOUSE_ID = 1;
 
 function register() {
     // Get all items
@@ -272,7 +273,7 @@ function register() {
         const itemId = Number(payload.item_id);
         const quantity = Number(payload.quantity);
         const reason = String(payload.reason || '').trim();
-        const warehouseId = payload.warehouse_id ? Number(payload.warehouse_id) : null;
+        const warehouseId = MAIN_WAREHOUSE_ID;
         const batchNo = String(payload.batch_no || '').trim() || null;
         const expiryDate = String(payload.expiry_date || '').trim() || null;
         const notes = String(payload.notes || '').trim() || null;
@@ -349,7 +350,7 @@ function register() {
         const itemId = Number(payload.item_id);
         const quantity = Number(payload.quantity);
         const reason = String(payload.reason || '').trim();
-        const warehouseId = payload.warehouse_id ? Number(payload.warehouse_id) : null;
+        const warehouseId = MAIN_WAREHOUSE_ID;
         const batchNo = String(payload.batch_no || '').trim() || null;
         const expiryDate = String(payload.expiry_date || '').trim() || null;
         const notes = String(payload.notes || '').trim() || null;

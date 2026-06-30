@@ -179,10 +179,14 @@ function register() {
         try {
             const nextCode = db.prepare('SELECT COALESCE(MAX(code), 0) + 1 AS next FROM parties').get().next;
             customer.code = nextCode;
-            customer.balance = customer.opening_balance;
-            const stmt = db.prepare('INSERT INTO parties (name, phone, address, balance, opening_balance, type, code) VALUES (@name, @phone, @address, @balance, @opening_balance, @type, @code)');
-            const info = stmt.run(customer);
-            return { success: true, id: info.lastInsertRowid };
+            customer.balance = 0;
+            let id;
+            db.transaction(() => {
+                const stmt = db.prepare('INSERT INTO parties (name, phone, address, balance, opening_balance, type, code) VALUES (@name, @phone, @address, @balance, @opening_balance, @type, @code)');
+                const info = stmt.run(customer);
+                id = info.lastInsertRowid;
+            })();
+            return { success: true, id };
         } catch (error) {
             return { success: false, error: error.message };
         }
@@ -192,12 +196,10 @@ function register() {
         const denied = requirePermission('customers', 'edit');
         if (denied) return denied;
         try {
-            const existing = db.prepare('SELECT opening_balance FROM parties WHERE id = ?').get(customer.id);
-            const oldOpening = existing ? (existing.opening_balance || 0) : 0;
-            const newOpening = customer.opening_balance || 0;
-            const diff = newOpening - oldOpening;
-            const stmt = db.prepare('UPDATE parties SET name = @name, phone = @phone, address = @address, opening_balance = @opening_balance, balance = balance + @diff, type = @type WHERE id = @id');
-            stmt.run({ ...customer, diff });
+            db.transaction(() => {
+                const stmt = db.prepare('UPDATE parties SET name = @name, phone = @phone, address = @address, opening_balance = @opening_balance, type = @type WHERE id = @id');
+                stmt.run(customer);
+            })();
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

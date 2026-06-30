@@ -592,12 +592,6 @@ function register() {
             WHERE id = @item_id
         `);
 
-        const updateCustomerBalance = db.prepare(`
-            UPDATE parties 
-            SET balance = balance + @amount 
-            WHERE id = @id
-        `);
-
         const transaction = db.transaction((data) => {
             const info = insertInvoice.run({
                 customer_id: data.customer_id,
@@ -627,13 +621,6 @@ function register() {
                 updateItemStock.run({
                     quantity: item.quantity,
                     item_id: item.item_id
-                });
-            }
-
-            if (financials.balance_delta !== 0) {
-                updateCustomerBalance.run({
-                    amount: financials.balance_delta,
-                    id: data.customer_id
                 });
             }
 
@@ -701,11 +688,6 @@ function register() {
                 }
             }
 
-            const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
-            if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.customer_id);
-            }
-
             // Delete old Details
             db.prepare('DELETE FROM sales_invoice_details WHERE invoice_id = ?').run(id);
 
@@ -750,10 +732,6 @@ function register() {
                     total_price: item.total_price
                 });
                 updateItemStock.run({ quantity: item.quantity, item_id: item.item_id });
-            }
-
-            if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(financials.balance_delta, customer_id);
             }
 
         });

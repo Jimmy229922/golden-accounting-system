@@ -33,6 +33,9 @@ function getVisibleStatementEffect(item) {
     if (item.type === 'sales') {
         return (Number(item.total_amount) - Number(item.paid_amount)) || 0;
     }
+    if (item.type === 'local_sale') {
+        return Number(item.total_amount) || 0;
+    }
     if (item.type === 'purchase') {
         return -((Number(item.total_amount) - Number(item.paid_amount)) || 0);
     }
@@ -297,11 +300,16 @@ async function loadCustomerReport(customerId) {
             let paidVal = '—';
             let remainingVal = '—';
 
-            const hasDetails = ['sales', 'purchase'].includes(item.type);
+            const hasDetails = ['sales', 'purchase', 'local_sale'].includes(item.type);
             const rowId = `items-${idx}`;
 
             if (item.type === 'sales') {
                 typeBadge = `<span class="badge badge-sales"><i class="fas fa-shopping-cart"></i> ${t('customerReports.salesBadge', 'مبيعات')}</span>`;
+                totalInvoiceVal = formatCurrency(item.total_amount);
+                paidVal = formatCurrency(item.paid_amount);
+                remainingVal = formatCurrency(item.remaining_amount);
+            } else if (item.type === 'local_sale') {
+                typeBadge = `<span class="badge badge-sales"><i class="fas fa-store"></i> ${t('customerReports.localSalesBadge', 'مبيعات محلية')}</span>`;
                 totalInvoiceVal = formatCurrency(item.total_amount);
                 paidVal = formatCurrency(item.paid_amount);
                 remainingVal = formatCurrency(item.remaining_amount);
@@ -595,6 +603,7 @@ window.saveSummaryPDF = async () => {
     // Type labels
     const typeLabels = {
         sales: t('customerReports.salesBadge', 'مبيعات'),
+        local_sale: t('customerReports.localSalesBadge', 'مبيعات محلية'),
         purchase: t('customerReports.purchaseBadge', 'مشتريات'),
         payment_in: t('customerReports.receiptBadge', 'تحصيل'),
         payment_out: t('customerReports.paymentBadge', 'سداد')
@@ -625,7 +634,7 @@ window.saveSummaryPDF = async () => {
     for (const trans of transactions) {
         idx++;
         const typeLabel = typeLabels[trans.type] || trans.type;
-        const invoiceTotal = (trans.type === 'sales' || trans.type === 'payment_out')
+        const invoiceTotal = (trans.type === 'sales' || trans.type === 'local_sale' || trans.type === 'payment_out')
             ? formatCurrency(trans.total_amount)
             : '';
         const paymentAmount = (trans.type === 'purchase' || trans.type === 'payment_in')

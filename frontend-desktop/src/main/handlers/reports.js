@@ -11,6 +11,9 @@ function getCustomerStatementTransactionEffect(trans) {
     if (trans.type === 'sales') {
         return (Number(trans.total_amount) - Number(trans.paid_amount)) || 0;
     }
+    if (trans.type === 'local_sale') {
+        return Number(trans.total_amount) || 0;
+    }
     if (trans.type === 'purchase') {
         return -((Number(trans.total_amount) - Number(trans.paid_amount)) || 0);
     }
@@ -365,22 +368,35 @@ function register() {
                 SELECT 
                     CASE 
                         WHEN pl.transaction_type = 'sales_invoice' THEN 'sales'
+                        WHEN pl.transaction_type = 'local_sale' THEN 'local_sale'
                         WHEN pl.transaction_type = 'purchase_invoice' THEN 'purchase'
                         WHEN pl.transaction_type = 'treasury_income' THEN 'payment_in'
                         WHEN pl.transaction_type = 'treasury_expense' THEN 'payment_out'
                         WHEN pl.transaction_type = 'opening_balance' THEN 'opening_balance'
                     END as type,
-                    COALESCE(si.invoice_number, pi.invoice_number, tt.voucher_number, '-') as doc_number,
+                    COALESCE(si.invoice_number, pi.invoice_number, tt.voucher_number, ls.document_number, '-') as doc_number,
                     pl.transaction_date as trans_date,
-                    CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE COALESCE(si.total_amount, pi.total_amount, 0) END as total_amount,
-                    CASE WHEN pl.transaction_type = 'opening_balance' THEN 0 ELSE COALESCE(si.paid_amount, pi.paid_amount, tt.amount, 0) END as paid_amount,
-                    CASE WHEN pl.transaction_type = 'opening_balance' THEN ABS(pl.amount) ELSE COALESCE(si.total_amount - si.paid_amount, pi.total_amount - pi.paid_amount, 0) END as remaining_amount,
-                    COALESCE(si.notes, pi.notes, tt.description, 'رصيد افتتاحي') as notes,
+                    CASE
+                        WHEN pl.transaction_type = 'opening_balance' THEN 0
+                        WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
+                        ELSE COALESCE(si.total_amount, pi.total_amount, 0)
+                    END as total_amount,
+                    CASE
+                        WHEN pl.transaction_type IN ('opening_balance', 'local_sale') THEN 0
+                        ELSE COALESCE(si.paid_amount, pi.paid_amount, tt.amount, 0)
+                    END as paid_amount,
+                    CASE
+                        WHEN pl.transaction_type = 'opening_balance' THEN ABS(pl.amount)
+                        WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
+                        ELSE COALESCE(si.total_amount - si.paid_amount, pi.total_amount - pi.paid_amount, 0)
+                    END as remaining_amount,
+                    COALESCE(si.notes, pi.notes, tt.description, ls.statement, 'رصيد افتتاحي') as notes,
                     pl.amount as effect_amount,
                     pl.id as ledger_id,
                     pl.reference_id as id
                 FROM party_ledger pl
                 LEFT JOIN sales_invoices si ON pl.transaction_type = 'sales_invoice' AND pl.reference_id = si.id
+                LEFT JOIN local_sales ls ON pl.transaction_type = 'local_sale' AND pl.reference_id = ls.id
                 LEFT JOIN purchase_invoices pi ON pl.transaction_type = 'purchase_invoice' AND pl.reference_id = pi.id
                 LEFT JOIN treasury_transactions tt ON pl.transaction_type IN ('treasury_income', 'treasury_expense') AND pl.reference_id = tt.id
                 WHERE pl.party_id = ? ${dateFilter}
@@ -396,7 +412,7 @@ function register() {
             }
 
             // حساب الإجماليات
-            const totalSales = transactions.filter(t => t.type === 'sales').reduce((s, t) => s + Number(t.total_amount || 0), 0);
+            const totalSales = transactions.filter(t => t.type === 'sales' || t.type === 'local_sale').reduce((s, t) => s + Number(t.total_amount || 0), 0);
             const totalPurchases = transactions.filter(t => t.type === 'purchase').reduce((s, t) => s + Number(t.total_amount || 0), 0);
             const totalPaymentsIn = transactions.filter(t => t.type === 'payment_in').reduce((s, t) => s + Number(t.paid_amount || 0), 0) +
                                     transactions.filter(t => t.type === 'sales').reduce((s, t) => s + Number(t.paid_amount || 0), 0);
@@ -451,6 +467,13 @@ function register() {
                     WHERE pid.invoice_id = ?
                     ORDER BY pid.id ASC
                 `).all(id);
+            } else if (type === 'local_sale') {
+                details = db.prepare(`
+                    SELECT quantity, price, total as total_price,
+                           statement as item_name, '' as unit_name
+                    FROM local_sales
+                    WHERE id = ?
+                `).all(id);
             }
             return { success: true, details };
         } catch (error) {
@@ -504,6 +527,14 @@ function register() {
             const purchaseItems = db.prepare(purchaseItemsQuery).all(...purchaseParams);
             const salesReturnItems = [];
             const purchaseReturnItems = [];
+            let localSalesTotalsQuery = `
+                SELECT COALESCE(SUM(total), 0) as total_amount
+                FROM local_sales
+                WHERE customer_id = ?`;
+            const localSalesParams = [custId];
+            if (startDate) { localSalesTotalsQuery += ' AND record_date >= ?'; localSalesParams.push(startDate); }
+            if (endDate) { localSalesTotalsQuery += ' AND record_date <= ?'; localSalesParams.push(endDate); }
+            const localSalesTotalsRow = db.prepare(localSalesTotalsQuery).get(...localSalesParams);
 
             // --- إجماليات التحصيلات والسداد ---
             let paymentsQuery = `
@@ -545,7 +576,7 @@ function register() {
                 openingBalance = obResult.net;
             }
 
-            const totalSales = salesItems.reduce((s, i) => s + i.total_amount, 0);
+            const totalSales = salesItems.reduce((s, i) => s + i.total_amount, 0) + Number(localSalesTotalsRow?.total_amount || 0);
             const totalPurchases = purchaseItems.reduce((s, i) => s + i.total_amount, 0);
             const totalSalesReturns = 0;
             const totalPurchaseReturns = 0;
@@ -771,4 +802,3 @@ function register() {
 }
 
 module.exports = { register };
-

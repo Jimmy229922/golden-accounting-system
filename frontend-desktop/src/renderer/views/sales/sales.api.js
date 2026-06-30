@@ -21,7 +21,7 @@
     }
 
     async function getWarehouses() {
-        return window.electronAPI.getWarehouses();
+        return [{ id: 1, name: 'المخزن الرئيسي' }];
     }
 
     async function saveInvoice(invoiceData) {

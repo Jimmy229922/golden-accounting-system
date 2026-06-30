@@ -233,12 +233,6 @@ function register() {
             WHERE id = @item_id
         `);
 
-        const updateSupplierBalance = db.prepare(`
-            UPDATE parties
-            SET balance = balance - @amount
-            WHERE id = @id
-        `);
-
         const transaction = db.transaction((data) => {
             const info = insertInvoice.run({
                 supplier_id: data.supplier_id,
@@ -271,13 +265,6 @@ function register() {
                     quantity: item.quantity,
                     cost_price: item.cost_price,
                     item_id: item.item_id
-                });
-            }
-
-            if (financials.balance_delta !== 0) {
-                updateSupplierBalance.run({
-                    amount: financials.balance_delta,
-                    id: data.supplier_id
                 });
             }
 
@@ -352,11 +339,6 @@ function register() {
         const transaction = db.transaction(() => {
             // --- REVERSE OLD ---
             // Stock reversal moved to the end to prevent temporary negative values.
-
-            const oldBalanceDelta = roundMoney((Number(oldInvoice.total_amount) || 0) - (Number(oldInvoice.paid_amount) || 0));
-            if (oldBalanceDelta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance + ? WHERE id = ?').run(oldBalanceDelta, oldInvoice.supplier_id);
-            }
             // Delete Details
             db.prepare('DELETE FROM purchase_invoice_details WHERE invoice_id = ?').run(id);
 
@@ -405,10 +387,6 @@ function register() {
             // Reverse Stock (Remove old purchased items)
             for (const item of oldDetails) {
                 db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
-            }
-
-            if (financials.balance_delta !== 0) {
-                db.prepare('UPDATE parties SET balance = balance - ? WHERE id = ?').run(financials.balance_delta, supplier_id);
             }
 
         });

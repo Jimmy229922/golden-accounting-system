@@ -223,8 +223,8 @@ function register() {
         `);
 
         const insertDetail = db.prepare(`
-            INSERT INTO purchase_invoice_details (invoice_id, item_id, warehouse_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
-            VALUES (@invoice_id, @item_id, @warehouse_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
+            INSERT INTO purchase_invoice_details (invoice_id, item_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
+            VALUES (@invoice_id, @item_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
         `);
 
         const updateItemStock = db.prepare(`
@@ -256,7 +256,6 @@ function register() {
                 insertDetail.run({
                     invoice_id: invoiceId,
                     item_id: item.item_id,
-                    warehouse_id: item.warehouse_id || 1,
                     raw_quantity: item.raw_quantity,
                     raw_weights: item.raw_weights,
                     quantity: item.quantity,
@@ -371,8 +370,8 @@ function register() {
             });
 
             const insertDetail = db.prepare(`
-                INSERT INTO purchase_invoice_details (invoice_id, item_id, warehouse_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
-                VALUES (@invoice_id, @item_id, @warehouse_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
+                INSERT INTO purchase_invoice_details (invoice_id, item_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
+                VALUES (@invoice_id, @item_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
             `);
             const updateItemCostPrice = db.prepare('UPDATE items SET cost_price = @cost_price WHERE id = @item_id');
 
@@ -380,7 +379,6 @@ function register() {
                 insertDetail.run({
                     invoice_id: id,
                     item_id: item.item_id,
-                    warehouse_id: item.warehouse_id || 1,
                     raw_quantity: item.raw_quantity,
                     raw_weights: item.raw_weights,
                     quantity: item.quantity,

@@ -70,20 +70,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Warehouses & Opening Balance
     getWarehouses: () => invokeChannel('get-warehouses'),
-    addWarehouse: (name) => invokeChannel('add-warehouse', name),
-    updateWarehouse: (data) => invokeChannel('update-warehouse', data),
-    deleteWarehouse: (id) => invokeChannel('delete-warehouse', id),
     getOpeningBalances: () => invokeChannel('get-opening-balances'),
     saveOpeningBalances: (entries) => invokeChannel('save-opening-balances', { entries }),
     addOpeningBalance: (entry) => invokeChannel('add-opening-balance', entry),
     updateOpeningBalance: (entry) => invokeChannel('update-opening-balance', entry),
     deleteOpeningBalance: (id) => invokeChannel('delete-opening-balance', id),
-    addOpeningBalanceGroup: (data) => invokeChannel('add-opening-balance-group', data),
-    getOpeningBalanceGroups: () => invokeChannel('get-opening-balance-groups'),
-    getOpeningBalanceGroup: (id) => invokeChannel('get-opening-balance-group', id),
-    getGroupDetails: (groupId) => invokeChannel('get-group-details', groupId),
-    updateOpeningBalanceGroup: (data) => invokeChannel('update-opening-balance-group', data),
-    deleteOpeningBalanceGroup: (groupId) => invokeChannel('delete-opening-balance-group', groupId),
 
     // Customers API
     getCustomers: () => invokeChannel('get-customers'),

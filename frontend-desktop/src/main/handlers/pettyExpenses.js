@@ -138,7 +138,7 @@ function register() {
                     const expenseId = expenseInfo.lastInsertRowid;
                     const treasuryInfo = db.prepare(`
                         INSERT INTO treasury_transactions (type, amount, transaction_date, description, related_invoice_id, related_type)
-                        VALUES ('expense', @amount, @transaction_date, @description, @related_invoice_id, 'petty_expense')
+                        VALUES ('expense', @amount, @transaction_date, @description, @related_invoice_id, NULL)
                     `).run({
                         amount,
                         transaction_date: expenseDate,
@@ -227,7 +227,7 @@ function register() {
                     } else {
                         const treasuryInfo = db.prepare(`
                             INSERT INTO treasury_transactions (type, amount, transaction_date, description, related_invoice_id, related_type)
-                            VALUES ('expense', @amount, @transaction_date, @description, @related_invoice_id, 'petty_expense')
+                            VALUES ('expense', @amount, @transaction_date, @description, @related_invoice_id, NULL)
                         `).run({
                             amount,
                             transaction_date: expenseDate,

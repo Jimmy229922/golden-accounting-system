@@ -120,7 +120,6 @@ function buildTopNavItems(prefix) {
                 { key: 'common.nav.units', fallback: 'Units', href: withPrefix('items/units.html') },
                 { key: 'common.nav.items', fallback: 'Items', href: withPrefix('items/items.html') },
                 { key: 'common.nav.customersSuppliers', fallback: 'Customers & Suppliers', href: withPrefix('customers/index.html') },
-                { key: 'common.nav.openingBalance', fallback: 'Opening Balance', href: withPrefix('opening-balance/index.html') },
                 { key: 'common.nav.userManagement', fallback: 'User Management', href: withPrefix('auth-users/index.html') }
             ]
         },

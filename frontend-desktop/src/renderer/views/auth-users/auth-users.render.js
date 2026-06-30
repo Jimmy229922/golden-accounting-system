@@ -21,7 +21,6 @@
                         <a href="../items/units.html">${t('common.nav.units')}</a>
                         <a href="../items/items.html">${t('common.nav.items')}</a>
                         <a href="../customers/index.html">${t('common.nav.customersSuppliers')}</a>
-                        <a href="../opening-balance/index.html">${t('common.nav.openingBalance')}</a>
                         <a href="../auth-users/index.html" class="active">${t('common.nav.userManagement', 'إدارة المستخدمين')}</a>
                     </div>
                 </li>

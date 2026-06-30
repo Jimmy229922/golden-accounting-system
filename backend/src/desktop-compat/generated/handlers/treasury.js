@@ -137,18 +137,8 @@ function register() {
                 VALUES (@type, @amount, @date, @description, @customer_id, @voucher_number, @related_type)
             `);
 
-            const updateBalance = db.prepare(`
-                UPDATE parties 
-                SET balance = balance + @amount 
-                WHERE id = @id
-            `);
-
             const tx = db.transaction(() => {
                 stmt.run({ type: normalizedType, amount: normalizedAmount, date, description, customer_id: normalizedCustomerId, voucher_number, related_type });
-                
-                if (normalizedCustomerId) {
-                    updateBalance.run({ amount: normalizedType === 'expense' ? normalizedAmount : -normalizedAmount, id: normalizedCustomerId });
-                }
             });
 
             tx();
@@ -196,12 +186,6 @@ function register() {
                 }
             }
 
-            const updateBalance = db.prepare(`
-                UPDATE parties
-                SET balance = balance + @amount
-                WHERE id = @id
-            `);
-
             const stmt = db.prepare(`
                 UPDATE treasury_transactions 
                 SET type = @type, amount = @amount, transaction_date = @date, description = @description, customer_id = @customer_id
@@ -209,18 +193,8 @@ function register() {
             `);
 
             const tx = db.transaction(() => {
-                // 1. Revert old balance effect
-                if (existing.customer_id) {
-                    updateBalance.run({ amount: existing.type === 'expense' ? -existing.amount : existing.amount, id: existing.customer_id });
-                }
-
-                // 2. Update transaction
+                // 1. Update transaction
                 stmt.run({ ...transaction, type: normalizedType, amount: normalizedAmount, customer_id: normalizedCustomerId });
-
-                // 3. Apply new balance effect
-                if (normalizedCustomerId) {
-                    updateBalance.run({ amount: normalizedType === 'expense' ? normalizedAmount : -normalizedAmount, id: normalizedCustomerId });
-                }
             });
 
             tx();
@@ -238,7 +212,6 @@ function register() {
         
         // Sales Updates
         const updateSalesInvoice = db.prepare('UPDATE sales_invoices SET paid_amount = paid_amount - @amount, remaining_amount = remaining_amount + @amount WHERE id = @id');
-        const updateCustomer = db.prepare('UPDATE parties SET balance = balance + @amount WHERE id = @id');
         const getSalesInvoice = db.prepare('SELECT customer_id FROM sales_invoices WHERE id = ?');
 
         // Purchase Updates
@@ -250,30 +223,13 @@ function register() {
             if (!trans) return; // Already deleted
             const isInvoiceLinked = trans.related_invoice_id && (trans.related_type === 'sales' || trans.related_type === 'purchase');
 
-            // Handle Direct Payments (linked via customer_id)
-            if (trans.customer_id && !isInvoiceLinked) {
-                // When payment was added, we subtracted amount from balance.
-                // Now we add it back.
-                updateCustomer.run({ amount: trans.type === 'expense' ? -trans.amount : trans.amount, id: trans.customer_id });
-            }
-
             if (trans.related_invoice_id) {
                 if (trans.related_type === 'sales') {
                     // Revert Sales Payment
                     updateSalesInvoice.run({ amount: trans.amount, id: trans.related_invoice_id });
-                    
-                    const invoice = getSalesInvoice.get(trans.related_invoice_id);
-                    if (invoice && invoice.customer_id) {
-                        updateCustomer.run({ amount: trans.type === 'expense' ? -trans.amount : trans.amount, id: invoice.customer_id });
-                    }
                 } else if (trans.related_type === 'purchase') {
                     // Revert Purchase Payment
                     updatePurchaseInvoice.run({ amount: trans.amount, id: trans.related_invoice_id });
-                    
-                    const invoice = getPurchaseInvoice.get(trans.related_invoice_id);
-                    if (invoice && invoice.supplier_id) {
-                        updateCustomer.run({ amount: trans.type === 'expense' ? -trans.amount : trans.amount, id: invoice.supplier_id });
-                    }
                 }
             }
 

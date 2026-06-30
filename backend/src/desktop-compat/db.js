@@ -9,12 +9,33 @@ function isExpectedAddColumnError(error) {
     return /duplicate column name/i.test(String(error?.message || ''));
 }
 
+function isNonConstantDefaultAddColumnError(error) {
+    return /non-constant default/i.test(String(error?.message || ''));
+}
+
+function buildFallbackAddColumnSql(sql) {
+    return String(sql || '').replace(/\s+DEFAULT\s+CURRENT_TIMESTAMP\b/i, '');
+}
+
 function runAddColumnMigration(sql, table, column) {
     try {
         db.exec(sql);
     } catch (error) {
         if (isExpectedAddColumnError(error)) {
             return false;
+        }
+
+        if (isNonConstantDefaultAddColumnError(error)) {
+            const fallbackSql = buildFallbackAddColumnSql(sql);
+            if (fallbackSql && fallbackSql !== sql) {
+                db.exec(fallbackSql);
+
+                if (column === 'created_at') {
+                    db.prepare(`UPDATE ${table} SET ${column} = CURRENT_TIMESTAMP WHERE ${column} IS NULL`).run();
+                }
+
+                return true;
+            }
         }
 
         console.error(`[db-migration] Unexpected error while adding "${column}" to "${table}": ${error.message}`);
@@ -533,6 +554,7 @@ function initDB() {
             name TEXT NOT NULL UNIQUE
         )
     `);
+    db.exec(`INSERT OR IGNORE INTO warehouses (id, name) VALUES (1, '__main_warehouse__')`);
 
     runAddColumnMigration("ALTER TABLE warehouses ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP", 'warehouses', 'created_at');
     runAddColumnMigration("ALTER TABLE warehouses ADD COLUMN updated_at TEXT", 'warehouses', 'updated_at');
@@ -556,22 +578,6 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE opening_balances ADD COLUMN updated_at TEXT", 'opening_balances', 'updated_at');
     runAddColumnMigration("ALTER TABLE opening_balances ADD COLUMN created_by TEXT", 'opening_balances', 'created_by');
     runAddColumnMigration("ALTER TABLE opening_balances ADD COLUMN updated_by TEXT", 'opening_balances', 'updated_by');
-
-    // 14. Opening Balance Groups (مجموعات أرصدة أول المدة)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS opening_balance_groups (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-
-    try {
-        db.exec("ALTER TABLE opening_balances ADD COLUMN group_id INTEGER REFERENCES opening_balance_groups(id) ON DELETE CASCADE");
-    } catch (err) {
-        // Column likely exists
-    }
-
     // 19. User Permissions Table (جدول صلاحيات المستخدمين)
     db.exec(`
         CREATE TABLE IF NOT EXISTS user_permissions (
@@ -772,6 +778,11 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE inventory_transactions ADD COLUMN updated_at TEXT", 'inventory_transactions', 'updated_at');
     runAddColumnMigration("ALTER TABLE inventory_transactions ADD COLUMN created_by TEXT", 'inventory_transactions', 'created_by');
     runAddColumnMigration("ALTER TABLE inventory_transactions ADD COLUMN updated_by TEXT", 'inventory_transactions', 'updated_by');
+    db.exec(`UPDATE opening_balances SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`UPDATE damaged_stock_logs SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`UPDATE inventory_transactions SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`DELETE FROM warehouses WHERE id <> 1`);
+    db.exec(`UPDATE warehouses SET name = 'المخزن الرئيسي' WHERE id = 1`);
 
     // Add triggers to automatically record inventory transactions
     // 1. Opening Balances
@@ -901,6 +912,35 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE party_ledger ADD COLUMN created_by TEXT", 'party_ledger', 'created_by');
     runAddColumnMigration("ALTER TABLE party_ledger ADD COLUMN updated_by TEXT", 'party_ledger', 'updated_by');
 
+    // Keep parties.balance derived from party_ledger so every screen reads the same number.
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_parties_balance_after_ledger_insert
+        AFTER INSERT ON party_ledger
+        FOR EACH ROW
+        BEGIN
+            UPDATE parties SET balance = balance + NEW.amount WHERE id = NEW.party_id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_parties_balance_after_ledger_delete
+        AFTER DELETE ON party_ledger
+        FOR EACH ROW
+        BEGIN
+            UPDATE parties SET balance = balance - OLD.amount WHERE id = OLD.party_id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_parties_balance_after_ledger_update
+        AFTER UPDATE OF amount, party_id ON party_ledger
+        FOR EACH ROW
+        BEGIN
+            UPDATE parties SET balance = balance - OLD.amount WHERE id = OLD.party_id;
+            UPDATE parties SET balance = balance + NEW.amount WHERE id = NEW.party_id;
+        END
+    `);
+
     // 1. Sales Invoices
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_sales_invoice_insert
@@ -912,14 +952,16 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_sales_invoice_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_sales_invoice_update
-        AFTER UPDATE OF total_amount, paid_amount, invoice_date ON sales_invoices
+        AFTER UPDATE OF total_amount, paid_amount, invoice_date, customer_id ON sales_invoices
         FOR EACH ROW
         BEGIN
             UPDATE party_ledger
             SET amount = NEW.total_amount - NEW.paid_amount,
-                transaction_date = NEW.invoice_date
+                transaction_date = NEW.invoice_date,
+                party_id = NEW.customer_id
             WHERE transaction_type = 'sales_invoice' AND reference_id = NEW.id;
         END
     `);
@@ -945,14 +987,16 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_purchase_invoice_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_purchase_invoice_update
-        AFTER UPDATE OF total_amount, paid_amount, invoice_date ON purchase_invoices
+        AFTER UPDATE OF total_amount, paid_amount, invoice_date, supplier_id ON purchase_invoices
         FOR EACH ROW
         BEGIN
             UPDATE party_ledger
             SET amount = -(NEW.total_amount - NEW.paid_amount),
-                transaction_date = NEW.invoice_date
+                transaction_date = NEW.invoice_date,
+                party_id = NEW.supplier_id
             WHERE transaction_type = 'purchase_invoice' AND reference_id = NEW.id;
         END
     `);
@@ -986,17 +1030,39 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_treasury_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_treasury_update
-        AFTER UPDATE OF amount, type, transaction_date ON treasury_transactions
+        AFTER UPDATE OF amount, type, transaction_date, customer_id ON treasury_transactions
         FOR EACH ROW
-        WHEN NEW.customer_id IS NOT NULL
         BEGIN
             UPDATE party_ledger
             SET amount = CASE WHEN NEW.type = 'income' THEN -NEW.amount ELSE NEW.amount END,
                 transaction_type = CASE WHEN NEW.type = 'income' THEN 'treasury_income' ELSE 'treasury_expense' END,
-                transaction_date = NEW.transaction_date
+                transaction_date = NEW.transaction_date,
+                party_id = NEW.customer_id
             WHERE transaction_type IN ('treasury_income', 'treasury_expense') AND reference_id = NEW.id;
+
+            DELETE FROM party_ledger
+            WHERE NEW.customer_id IS NULL
+              AND transaction_type IN ('treasury_income', 'treasury_expense')
+              AND reference_id = NEW.id;
+
+            INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+            SELECT
+                NEW.customer_id,
+                CASE WHEN NEW.type = 'income' THEN 'treasury_income' ELSE 'treasury_expense' END,
+                CASE WHEN NEW.type = 'income' THEN -NEW.amount ELSE NEW.amount END,
+                NEW.transaction_date,
+                NEW.id,
+                NEW.created_at
+            WHERE NEW.customer_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM party_ledger
+                  WHERE transaction_type IN ('treasury_income', 'treasury_expense')
+                    AND reference_id = NEW.id
+              );
         END
     `);
 
@@ -1039,6 +1105,40 @@ function initDB() {
         END
     `);
 
+    // 5. Local Sales
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_insert
+        AFTER INSERT ON local_sales
+        FOR EACH ROW
+        BEGIN
+            INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+            VALUES (NEW.customer_id, 'local_sale', NEW.total, NEW.record_date, NEW.id, NEW.created_at);
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_update
+        AFTER UPDATE OF total, customer_id, record_date ON local_sales
+        FOR EACH ROW
+        BEGIN
+            UPDATE party_ledger
+            SET amount = NEW.total,
+                party_id = NEW.customer_id,
+                transaction_date = NEW.record_date
+            WHERE transaction_type = 'local_sale' AND reference_id = NEW.id;
+        END
+    `);
+
+    db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_delete
+        AFTER DELETE ON local_sales
+        FOR EACH ROW
+        BEGIN
+            DELETE FROM party_ledger
+            WHERE transaction_type = 'local_sale' AND reference_id = OLD.id;
+        END
+    `);
+
     // Migrate old data if party_ledger is empty
     const hasPartyLedger = db.prepare('SELECT 1 FROM party_ledger LIMIT 1').get();
     if (!hasPartyLedger) {
@@ -1072,9 +1172,36 @@ function initDB() {
                 FROM treasury_transactions
                 WHERE customer_id IS NOT NULL AND amount != 0
             `);
+            // Local Sales
+            db.exec(`
+                INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+                SELECT customer_id, 'local_sale', total, record_date, id, created_at
+                FROM local_sales
+            `);
         });
         resetPartyTx();
     }
+
+    db.exec(`
+        INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+        SELECT ls.customer_id, 'local_sale', ls.total, ls.record_date, ls.id, ls.created_at
+        FROM local_sales ls
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM party_ledger pl
+            WHERE pl.transaction_type = 'local_sale'
+              AND pl.reference_id = ls.id
+        )
+    `);
+
+    db.exec(`
+        UPDATE parties
+        SET balance = COALESCE((
+            SELECT SUM(pl.amount)
+            FROM party_ledger pl
+            WHERE pl.party_id = parties.id
+        ), 0)
+    `);
 
     console.log('Database initialized at:', dbPath);
 }
@@ -1083,4 +1210,5 @@ module.exports = {
     db,
     initDB
 };
+
 

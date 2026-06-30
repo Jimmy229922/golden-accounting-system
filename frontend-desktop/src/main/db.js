@@ -9,12 +9,33 @@ function isExpectedAddColumnError(error) {
     return /duplicate column name/i.test(String(error?.message || ''));
 }
 
+function isNonConstantDefaultAddColumnError(error) {
+    return /non-constant default/i.test(String(error?.message || ''));
+}
+
+function buildFallbackAddColumnSql(sql) {
+    return String(sql || '').replace(/\s+DEFAULT\s+CURRENT_TIMESTAMP\b/i, '');
+}
+
 function runAddColumnMigration(sql, table, column) {
     try {
         db.exec(sql);
     } catch (error) {
         if (isExpectedAddColumnError(error)) {
             return false;
+        }
+
+        if (isNonConstantDefaultAddColumnError(error)) {
+            const fallbackSql = buildFallbackAddColumnSql(sql);
+            if (fallbackSql && fallbackSql !== sql) {
+                db.exec(fallbackSql);
+
+                if (column === 'created_at') {
+                    db.prepare(`UPDATE ${table} SET ${column} = CURRENT_TIMESTAMP WHERE ${column} IS NULL`).run();
+                }
+
+                return true;
+            }
         }
 
         console.error(`[db-migration] Unexpected error while adding "${column}" to "${table}": ${error.message}`);
@@ -518,7 +539,7 @@ function initDB() {
     `);
 
     // Ensure default warehouse exists (id = 1)
-    db.exec(`INSERT OR IGNORE INTO warehouses (id, name) VALUES (1, 'المخزن الرئيسي')`);
+    db.exec(`INSERT OR IGNORE INTO warehouses (id, name) VALUES (1, '__main_warehouse__')`);
 
     // 13. Opening Balances Table (أرصدة أول المدة)
     db.exec(`
@@ -528,28 +549,11 @@ function initDB() {
             warehouse_id INTEGER NOT NULL,
             quantity REAL DEFAULT 0,
             cost_price REAL DEFAULT 0,
-            group_id INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (item_id) REFERENCES items(id),
-            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
-            FOREIGN KEY (group_id) REFERENCES opening_balance_groups(id) ON DELETE CASCADE
+            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
         )
     `);
-
-    // 14. Opening Balance Groups (مجموعات أرصدة أول المدة)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS opening_balance_groups (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-
-    try {
-        db.exec("ALTER TABLE opening_balances ADD COLUMN group_id INTEGER REFERENCES opening_balance_groups(id) ON DELETE CASCADE");
-    } catch (err) {
-        // Column likely exists
-    }
 
     // 19. User Permissions Table (جدول صلاحيات المستخدمين)
     db.exec(`
@@ -745,6 +749,13 @@ function initDB() {
             FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
         )
     `);
+    db.exec(`UPDATE purchase_invoice_details SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`UPDATE sales_invoice_details SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`UPDATE opening_balances SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`UPDATE damaged_stock_logs SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`UPDATE inventory_transactions SET warehouse_id = 1 WHERE warehouse_id IS NULL OR warehouse_id <> 1`);
+    db.exec(`DELETE FROM warehouses WHERE id <> 1`);
+    db.exec(`UPDATE warehouses SET name = 'المخزن الرئيسي' WHERE id = 1`);
 
     // Add triggers to auto-update items.stock_quantity from inventory_transactions
     db.exec(`
@@ -1209,7 +1220,6 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sales_invoices_payment_type ON sales_invoices(payment_type)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_is_collected ON under_collection_records(is_collected)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_remaining_under_collection_records_is_collected ON remaining_under_collection_records(is_collected)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_opening_balances_group_id ON opening_balances(group_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_related ON treasury_transactions(related_invoice_id, related_type)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_voucher ON treasury_transactions(voucher_number)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_petty_expenses_category ON petty_expenses(category)`);
