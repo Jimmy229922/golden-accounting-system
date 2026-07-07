@@ -993,10 +993,11 @@ function saveQuickRawModal() {
     const existingBaskeelData = getBaskeelDataFromRow(row);
     const method = existingBaskeelData.method || 'normal';
     const rateValue = existingBaskeelData.rate || 0;
+    const manualNet1 = existingBaskeelData.manualNet1 || 0;
     
     // We just store a single fake weight entry that represents the total, or just empty array
     // Since we want it to be considered as raw quantity but skipping individual weights
-    const newWeightsData = { weights: [rawQuantity], method, rate: rateValue };
+    const newWeightsData = { weights: [rawQuantity], method, rate: rateValue, manualNet1 };
     
     setRowBaskeelData(row, { rawQuantity, rawWeights: newWeightsData });
     closeQuickRawModal();
@@ -1065,8 +1066,9 @@ function saveWeightsFromModal() {
     const existingBaskeelData = getBaskeelDataFromRow(row);
     const method = existingBaskeelData.method || 'normal';
     const rateValue = existingBaskeelData.rate || 0;
+    const manualNet1 = existingBaskeelData.manualNet1 || 0;
     
-    setRowBaskeelData(row, { rawQuantity, rawWeights: { weights, method, rate: rateValue } });
+    setRowBaskeelData(row, { rawQuantity, rawWeights: { weights, method, rate: rateValue, manualNet1 } });
     closeWeightsModal();
 }
 
@@ -1162,7 +1164,32 @@ function addInvoiceRow(existingItem = null) {
             const rateValue = Number.isFinite(val) && val > 0 ? val : 0;
             const method = rateValue > 0 ? 'rate' : 'normal';
             
-            setRowBaskeelData(row, { rawQuantity, rawWeights: { weights: currentBaskeelData.weights, method, rate: rateValue } }, { skipAutoAdd: true });
+            setRowBaskeelData(row, { rawQuantity, rawWeights: { weights: currentBaskeelData.weights, method, rate: rateValue, manualNet1: currentBaskeelData.manualNet1 || 0 } }, { skipAutoAdd: true });
+        });
+    }
+
+    const net1Input = row.querySelector('.net1-input');
+    if (net1Input) {
+        net1Input.addEventListener('input', () => {
+            if (isEditLocked()) return;
+
+            const currentBaskeelData = getBaskeelDataFromRow(row);
+            const rawQuantity = getRowRawQuantity(row);
+            const val = parseLocaleFloat(net1Input.value);
+            const manualNet1 = Number.isFinite(val) && val > 0 ? val : 0;
+
+            setRowBaskeelData(row, {
+                rawQuantity,
+                rawWeights: {
+                    weights: currentBaskeelData.weights,
+                    method: currentBaskeelData.method || 'normal',
+                    rate: currentBaskeelData.rate || 0,
+                    manualNet1
+                }
+            }, { skipAutoAdd: true });
+
+            maybeAutoAddRow(row);
+            updateSelectedItemAvailability(row);
         });
     }
 
@@ -1362,7 +1389,7 @@ function calculateRowTotal(target) {
     const row = target.tagName === 'TR' ? target : target.closest('tr');
     if (!row) return;
 
-    const quantityInput = row.querySelector('.quantity-input');
+    const quantityInput = row.querySelector('.quantity-input.final-net-input');
     const priceInput = row.querySelector('.price-input');
     const quantity = parseLocaleFloat(quantityInput?.value);
     const price = parseLocaleFloat(priceInput?.value);
@@ -1435,9 +1462,9 @@ function formatMoneyWithCommas(value) {
 }
 
 function getBaskeelDataFromRow(row) {
-    if (!row) return { weights: [], method: 'normal', rate: 0 };
+    if (!row) return { weights: [], method: 'normal', rate: 0, manualNet1: 0 };
     const raw = row.dataset.rawWeights || '';
-    if (!raw) return { weights: [], method: 'normal', rate: 0 };
+    if (!raw) return { weights: [], method: 'normal', rate: 0, manualNet1: 0 };
 
     try {
         const parsed = JSON.parse(raw);
@@ -1445,19 +1472,21 @@ function getBaskeelDataFromRow(row) {
             return {
                 weights: parsed.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0),
                 method: 'normal',
-                rate: 0
+                rate: 0,
+                manualNet1: 0
             };
         } else if (parsed && typeof parsed === 'object') {
             return {
                 weights: Array.isArray(parsed.weights) ? parsed.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [],
                 method: parsed.method === 'rate' ? 'rate' : 'normal',
-                rate: Number.isFinite(Number(parsed.rate)) ? Number(parsed.rate) : 0
+                rate: Number.isFinite(Number(parsed.rate)) ? Number(parsed.rate) : 0,
+                manualNet1: Number.isFinite(Number(parsed.manualNet1)) && Number(parsed.manualNet1) > 0 ? Number(parsed.manualNet1) : 0
             };
         }
     } catch (_error) {
-        return { weights: [], method: 'normal', rate: 0 };
+        return { weights: [], method: 'normal', rate: 0, manualNet1: 0 };
     }
-    return { weights: [], method: 'normal', rate: 0 };
+    return { weights: [], method: 'normal', rate: 0, manualNet1: 0 };
 }
 
 function parseWeightsFromRow(row) {
@@ -1480,6 +1509,7 @@ function setRowBaskeelData(row, { rawQuantity, rawWeights }, options = {}) {
     
     let method = 'normal';
     let rateValue = 0;
+    let manualNet1 = 0;
     let weightsArray = [];
 
     if (Array.isArray(rawWeights)) {
@@ -1488,17 +1518,23 @@ function setRowBaskeelData(row, { rawQuantity, rawWeights }, options = {}) {
         weightsArray = Array.isArray(rawWeights.weights) ? rawWeights.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [];
         method = rawWeights.method || 'normal';
         rateValue = rawWeights.rate || 0;
+        manualNet1 = Number.isFinite(Number(rawWeights.manualNet1)) && Number(rawWeights.manualNet1) > 0 ? Number(rawWeights.manualNet1) : 0;
     }
 
     row.dataset.rawQuantity = String(safeRaw || 0);
-    row.dataset.rawWeights = JSON.stringify(method === 'normal' ? weightsArray : { weights: weightsArray, method, rate: rateValue });
+    row.dataset.rawWeights = JSON.stringify(
+        method === 'normal' && manualNet1 <= 0
+            ? weightsArray
+            : { weights: weightsArray, method, rate: rateValue, manualNet1 }
+    );
 
     const rawValueEl = row.querySelector('.raw-qty-value-btn');
     if (rawValueEl) {
         rawValueEl.textContent = safeRaw > 0 ? formatBaskeelNumber(safeRaw) : 'إدخال سريع';
     }
 
-    const net1Quantity = safeRaw > 0 ? safeRaw * PURCHASE_NET_FACTOR : 0;
+    const autoNet1Quantity = safeRaw > 0 ? safeRaw * PURCHASE_NET_FACTOR : 0;
+    const net1Quantity = manualNet1 > 0 ? manualNet1 : autoNet1Quantity;
     const net1Input = row.querySelector('.net1-input');
     if (net1Input) {
         net1Input.value = net1Quantity > 0 ? formatBaskeelNumber(net1Quantity) : '';
@@ -1621,7 +1657,14 @@ function collectInvoiceItemsFromForm() {
         const rawQuantity = getRowRawQuantity(row);
         
         const baskeelData = getBaskeelDataFromRow(row);
-        const rawWeightsStr = baskeelData.method === 'normal' ? JSON.stringify(baskeelData.weights) : JSON.stringify(baskeelData);
+        const rawWeightsStr = baskeelData.method === 'normal' && !(Number(baskeelData.manualNet1) > 0)
+            ? JSON.stringify(baskeelData.weights)
+            : JSON.stringify({
+                weights: baskeelData.weights,
+                method: baskeelData.method,
+                rate: baskeelData.rate,
+                manualNet1: Number(baskeelData.manualNet1) > 0 ? Number(baskeelData.manualNet1) : 0
+            });
         
         let quantity = parseLocaleFloat(quantityInput?.value);
         const cost_price = parseLocaleFloat(row.querySelector('.price-input').value);

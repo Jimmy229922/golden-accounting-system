@@ -43,17 +43,19 @@ function normalizeWeightsList(value) {
                 return {
                     weights: parsed.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0),
                     method: 'normal',
-                    rate: 0
+                    rate: 0,
+                    manualNet1: 0
                 };
             } else if (parsed && typeof parsed === 'object') {
                 return {
                     weights: Array.isArray(parsed.weights) ? parsed.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [],
                     method: parsed.method === 'rate' ? 'rate' : 'normal',
-                    rate: Number.isFinite(Number(parsed.rate)) ? Number(parsed.rate) : 0
+                    rate: Number.isFinite(Number(parsed.rate)) ? Number(parsed.rate) : 0,
+                    manualNet1: Number.isFinite(Number(parsed.manualNet1)) && Number(parsed.manualNet1) > 0 ? Number(parsed.manualNet1) : 0
                 };
             }
         } catch (_error) {
-            return { weights: [], method: 'normal', rate: 0 };
+            return { weights: [], method: 'normal', rate: 0, manualNet1: 0 };
         }
     }
 
@@ -61,7 +63,8 @@ function normalizeWeightsList(value) {
         return {
             weights: value.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0),
             method: 'normal',
-            rate: 0
+            rate: 0,
+            manualNet1: 0
         };
     }
     
@@ -69,11 +72,12 @@ function normalizeWeightsList(value) {
         return {
             weights: Array.isArray(value.weights) ? value.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [],
             method: value.method === 'rate' ? 'rate' : 'normal',
-            rate: Number.isFinite(Number(value.rate)) ? Number(value.rate) : 0
+            rate: Number.isFinite(Number(value.rate)) ? Number(value.rate) : 0,
+            manualNet1: Number.isFinite(Number(value.manualNet1)) && Number(value.manualNet1) > 0 ? Number(value.manualNet1) : 0
         };
     }
 
-    return { weights: [], method: 'normal', rate: 0 };
+    return { weights: [], method: 'normal', rate: 0, manualNet1: 0 };
 }
 
 function sumWeights(weights) {
@@ -96,8 +100,9 @@ function normalizeRawQuantity(rawQuantity, fallbackNetQuantity) {
     return 0;
 }
 
-function calculateNetQuantity(rawQuantity, method = 'normal', rate = 0) {
-    const net1Quantity = rawQuantity * PURCHASE_NET_FACTOR;
+function calculateNetQuantity(rawQuantity, method = 'normal', rate = 0, manualNet1 = 0) {
+    const autoNet1Quantity = rawQuantity * PURCHASE_NET_FACTOR;
+    const net1Quantity = Number.isFinite(Number(manualNet1)) && Number(manualNet1) > 0 ? Number(manualNet1) : autoNet1Quantity;
     if (method === 'rate') {
         const roundedNet1Quantity = Math.round(net1Quantity);
         return roundedNet1Quantity * (rate / 100);
@@ -112,7 +117,7 @@ function normalizePurchaseItems(items) {
         const weightsData = normalizeWeightsList(item.raw_weights);
         const rawFromWeights = sumWeights(weightsData.weights);
         const rawQuantity = normalizeRawQuantity(rawFromWeights || item.raw_quantity, item.quantity);
-        const netQuantity = rawQuantity > 0 ? calculateNetQuantity(rawQuantity, weightsData.method, weightsData.rate) : 0;
+        const netQuantity = rawQuantity > 0 ? calculateNetQuantity(rawQuantity, weightsData.method, weightsData.rate, weightsData.manualNet1) : 0;
         const costPrice = normalizeCostPrice(item.cost_price);
         const rawTotal = rawQuantity * costPrice;
         const totalPrice = netQuantity * costPrice;
@@ -120,7 +125,9 @@ function normalizePurchaseItems(items) {
         return {
             item_id: item.item_id,
             raw_quantity: rawQuantity,
-            raw_weights: weightsData.method === 'normal' ? JSON.stringify(weightsData.weights) : JSON.stringify(weightsData),
+            raw_weights: weightsData.method === 'normal' && !(Number(weightsData.manualNet1) > 0)
+                ? JSON.stringify(weightsData.weights)
+                : JSON.stringify(weightsData),
             quantity: netQuantity,
             cost_price: costPrice,
             total_price: totalPrice,

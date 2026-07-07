@@ -316,7 +316,7 @@
             <button type="button" class="raw-qty-value-btn" data-action="open-quick-raw" title="إدخال الكمية دفعة واحدة">${Number.isFinite(rawQuantity) && rawQuantity > 0 ? rawQuantity : 'إدخال سريع'}</button>
         </td>
         <td>
-            <input type="text" autocomplete="off" class="form-control net1-input" data-fs-size="sm" value="" placeholder="0" readonly title="الكمية الصافية الأساسية بخصم 1%">
+            <input type="text" autocomplete="off" class="form-control net1-input" data-fs-size="sm" value="" placeholder="0" title="الكمية الصافية الأساسية بخصم 1%">
         </td>
         <td>
             <input type="number" autocomplete="off" class="form-control rate-percent-input" data-fs-size="sm" value="${rateValue}" placeholder="%" title="اكتب النسبة فقط مثل 40">

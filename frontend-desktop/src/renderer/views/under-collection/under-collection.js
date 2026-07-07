@@ -498,8 +498,9 @@ async function toggleCollected(id, isCollected) {
 
 async function saveRecord(event) {
     event.preventDefault();
+    const selectedRecordDate = document.getElementById('recordDate').value || today();
     const payload = {
-        record_date: document.getElementById('recordDate').value || today(),
+        record_date: selectedRecordDate,
         container_count: document.getElementById('containerCount').value,
         container_20: document.getElementById('container20').checked ? 1 : 0,
         container_40: document.getElementById('container40').checked ? 1 : 0,
@@ -534,12 +535,12 @@ async function saveRecord(event) {
     }
 
     showMessage('تم حفظ السجل بنجاح', 'success');
-    document.getElementById('addRecordModal').classList.add('hidden');
     document.getElementById('underCollectionForm').reset();
-    document.getElementById('recordDate').value = today();
+    document.getElementById('recordDate').value = selectedRecordDate;
     document.getElementById('remainingType').value = 'percent';
     updateTotalPreview();
     await refreshDocumentNumber();
+    document.getElementById('statement').focus();
     state.page = 1;
     await loadRecords();
 }
