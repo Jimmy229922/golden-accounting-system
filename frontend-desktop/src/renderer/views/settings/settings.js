@@ -1,8 +1,11 @@
 let companyNameInput, companyAddressInput, companyPhoneInput, invoiceFooterInput, settingsForm;
 let backupBtn, restoreBtn, updateBtn, backupStatusEl, restoreStatusEl, updateStatusEl, themeToggleBtn;
+let updateProgressWrapEl, updateProgressBarEl, updateProgressMetaEl;
 let profileImageInput, profileImagePreview, removeImageBtn, saveBtn;
 let changeLogLastModifiedEl, changeLogModifiedByEl, changeLogSummaryEl, appVersionValueEl;
 let saveStateTimer = null;
+let unsubscribeAppUpdateProgress = null;
+let isAppUpdateDownloadRunning = false;
 let initialFormSnapshot = '';
 const SETTINGS_TRACKING_FIELDS = [
     { key: 'companyName', label: 'اسم المؤسسة' },
@@ -192,6 +195,12 @@ function renderPage() {
                         </div>
                         <p class="action-card-desc">${t('settings.updateDesc', 'تحقق من آخر إصدار من GitHub Releases ونزل ملف التحديث على جهاز العميل.')}</p>
                         <button id="updateBtn" class="btn-action update-btn"><i class="fas fa-cloud-download-alt"></i> <span class="update-btn-text">${t('settings.updateNow', 'فحص وتنزيل التحديث')}</span></button>
+                        <div id="updateProgressWrap" class="update-progress" hidden>
+                            <div class="update-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div id="updateProgressBar" class="update-progress-fill"></div>
+                            </div>
+                            <div id="updateProgressMeta" class="update-progress-meta">0%</div>
+                        </div>
                         <small id="updateStatus" class="status-text"></small>
                     </div>
                     <!-- Restore Card -->
@@ -246,6 +255,9 @@ function initializeElements() {
     backupStatusEl = document.getElementById('backupStatus');
     restoreStatusEl = document.getElementById('restoreStatus');
     updateStatusEl = document.getElementById('updateStatus');
+    updateProgressWrapEl = document.getElementById('updateProgressWrap');
+    updateProgressBarEl = document.getElementById('updateProgressBar');
+    updateProgressMetaEl = document.getElementById('updateProgressMeta');
     themeToggleBtn = document.getElementById('themeToggleBtn');
     profileImageInput = document.getElementById('profileImageInput');
     profileImagePreview = document.getElementById('profileImagePreview');
@@ -262,6 +274,7 @@ function initializeElements() {
     if (updateBtn) {
         updateBtn.addEventListener('click', handleAppUpdate);
     }
+    bindAppUpdateProgress();
 
     profileImageInput.addEventListener('change', handleImageUpload);
     removeImageBtn.addEventListener('click', handleImageRemove);
@@ -529,6 +542,97 @@ function setUpdateButtonState(state, buttonText = '') {
     if (textEl) textEl.textContent = buttonText || t('settings.updateNow', 'فحص وتنزيل التحديث');
 }
 
+function bindAppUpdateProgress() {
+    if (unsubscribeAppUpdateProgress) {
+        unsubscribeAppUpdateProgress();
+        unsubscribeAppUpdateProgress = null;
+    }
+
+    if (!window.electronAPI || typeof window.electronAPI.onAppUpdateProgress !== 'function') {
+        return;
+    }
+
+    unsubscribeAppUpdateProgress = window.electronAPI.onAppUpdateProgress(handleAppUpdateProgress);
+}
+
+function setUpdateProgressVisibility(visible) {
+    if (!updateProgressWrapEl) return;
+    updateProgressWrapEl.hidden = !visible;
+}
+
+function setUpdateProgress(percent = 0, metaText = '') {
+    if (updateProgressBarEl) {
+        const safePercent = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
+        updateProgressBarEl.style.width = `${safePercent}%`;
+        const progressTrack = updateProgressBarEl.parentElement;
+        if (progressTrack) {
+            progressTrack.setAttribute('aria-valuenow', String(safePercent));
+        }
+    }
+
+    if (updateProgressMetaEl) {
+        updateProgressMetaEl.textContent = metaText || '';
+    }
+}
+
+function resetUpdateProgress() {
+    setUpdateProgressVisibility(false);
+    setUpdateProgress(0, '0%');
+}
+
+function formatUpdateBytes(bytes) {
+    const value = Number(bytes) || 0;
+    if (value >= 1024 * 1024) {
+        return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    if (value >= 1024) {
+        return `${Math.round(value / 1024)} KB`;
+    }
+    return `${value} B`;
+}
+
+function buildUpdateProgressMeta(progressPayload) {
+    const percentValue = Number(progressPayload?.percent);
+    const hasPercent = Number.isFinite(percentValue);
+    const downloadedBytes = Number(progressPayload?.downloadedBytes) || 0;
+    const totalBytes = Number(progressPayload?.totalBytes) || 0;
+
+    if (hasPercent && totalBytes > 0) {
+        return `${percentValue}% - ${formatUpdateBytes(downloadedBytes)} / ${formatUpdateBytes(totalBytes)}`;
+    }
+
+    if (hasPercent) {
+        return `${percentValue}%`;
+    }
+
+    if (downloadedBytes > 0) {
+        return `${formatUpdateBytes(downloadedBytes)} تم تنزيلها`;
+    }
+
+    return '0%';
+}
+
+function handleAppUpdateProgress(progressPayload = {}) {
+    if (!isAppUpdateDownloadRunning && progressPayload.status !== 'completed') {
+        return;
+    }
+
+    const percentValue = Number(progressPayload.percent);
+    const safePercent = Number.isFinite(percentValue)
+        ? Math.max(0, Math.min(100, percentValue))
+        : 0;
+
+    setUpdateProgressVisibility(true);
+    setUpdateProgress(safePercent, buildUpdateProgressMeta(progressPayload));
+
+    if (progressPayload.status === 'downloading' || progressPayload.status === 'starting') {
+        const statusText = safePercent > 0
+            ? `جاري تنزيل التحديث... ${safePercent}%`
+            : 'جاري تنزيل التحديث...';
+        setStatus(updateStatusEl, statusText);
+    }
+}
+
 async function handleBackup() {
     setStatus(backupStatusEl, t('settings.status.creatingBackup'));
     const result = await window.electronAPI.backupDatabase();
@@ -606,6 +710,8 @@ async function handleAppUpdate() {
     }
 
     try {
+        isAppUpdateDownloadRunning = false;
+        resetUpdateProgress();
         setUpdateButtonState('loading', 'جاري فحص التحديث...');
         setStatus(updateStatusEl, 'جاري فحص آخر إصدار من GitHub Releases...');
 
@@ -619,16 +725,23 @@ async function handleAppUpdate() {
             const latestMessage = checkResult.currentVersion
                 ? `أنت تستخدم أحدث إصدار (${checkResult.currentVersion}).`
                 : 'أنت تستخدم أحدث إصدار.';
+            resetUpdateProgress();
             setStatus(updateStatusEl, latestMessage);
             if (window.showToast) window.showToast(latestMessage, 'success');
             return;
         }
 
+        isAppUpdateDownloadRunning = true;
         setUpdateButtonState('loading', 'جاري تنزيل التحديث...');
+        setUpdateProgressVisibility(true);
+        setUpdateProgress(0, '0%');
         setStatus(updateStatusEl, `تم العثور على الإصدار ${checkResult.latestVersion}. جاري تنزيل ملف التحديث...`);
 
         const downloadResult = await window.electronAPI.downloadAppUpdate();
         if (downloadResult && downloadResult.success) {
+            isAppUpdateDownloadRunning = false;
+            setUpdateProgressVisibility(true);
+            setUpdateProgress(100, '100%');
             const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} بنجاح. سيتم الآن إغلاق البرنامج وبدء التثبيت: ${downloadResult.path}`.trim();
             setStatus(updateStatusEl, successMessage);
             if (window.showToast) window.showToast('تم تنزيل التحديث. سيتم الآن إغلاق البرنامج وبدء التثبيت.', 'success');
@@ -638,6 +751,7 @@ async function handleAppUpdate() {
             return;
         }
 
+        isAppUpdateDownloadRunning = false;
         const errorMessage = downloadResult?.error || 'تعذر تنزيل ملف التحديث.';
         setStatus(updateStatusEl, errorMessage, true);
         if (downloadResult?.releaseUrl && typeof window.electronAPI.openAppReleasePage === 'function') {
@@ -645,10 +759,12 @@ async function handleAppUpdate() {
         }
         if (window.showToast) window.showToast(errorMessage, 'error');
     } catch (error) {
+        isAppUpdateDownloadRunning = false;
         const fallbackMessage = error.message || 'حدث خطأ أثناء التحديث.';
         setStatus(updateStatusEl, fallbackMessage, true);
         if (window.showToast) window.showToast(fallbackMessage, 'error');
     } finally {
+        isAppUpdateDownloadRunning = false;
         setUpdateButtonState('idle');
     }
 }

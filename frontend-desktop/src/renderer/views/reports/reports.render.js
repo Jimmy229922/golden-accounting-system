@@ -57,6 +57,22 @@
                         </div>
                     </article>
 
+                    <article class="summary-card card-purchase-opening">
+                        <div class="sc-icon"><i class="fas fa-hourglass-start"></i></div>
+                        <div>
+                            <div class="sc-label">بداية مدة المشتريات</div>
+                            <div class="sc-value" id="purchaseOpeningBalanceAmount">0.00 ${CUR}</div>
+                        </div>
+                    </article>
+
+                    <article class="summary-card card-purchase-total">
+                        <div class="sc-icon"><i class="fas fa-cash-register"></i></div>
+                        <div>
+                            <div class="sc-label">إجمالي المشتريات</div>
+                            <div class="sc-value" id="purchaseTotalAmount">0.00 ${CUR}</div>
+                        </div>
+                    </article>
+
                     <article class="summary-card card-amount">
                         <div class="sc-icon"><i class="fas fa-coins"></i></div>
                         <div>
@@ -115,6 +131,23 @@
                         <div class="form-group">
                             <label for="endDate"><i class="fas fa-calendar-alt"></i> ${t('reports.toDate', 'إلى تاريخ')}</label>
                             <input type="date" id="endDate" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="period-opening-panel">
+                        <div class="period-opening-copy">
+                            <h3>بداية مدة المشتريات</h3>
+                            <p>قيمة ثابتة تضاف إلى إجمالي المشتريات في التقرير العام عندما تبدأ الفترة من 01-01.</p>
+                        </div>
+                        <div class="period-opening-controls">
+                            <div class="form-group period-opening-field">
+                                <label for="purchaseOpeningBalanceInput"><i class="fas fa-coins"></i> قيمة بداية المدة</label>
+                                <input type="number" id="purchaseOpeningBalanceInput" class="form-control" min="0" step="0.01" value="0">
+                            </div>
+                            <button id="savePurchaseOpeningBalanceBtn" type="button" class="btn-secondary">
+                                <i class="fas fa-save"></i>
+                                <span>حفظ بداية المدة</span>
+                            </button>
                         </div>
                     </div>
 

@@ -193,6 +193,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAppVersion: () => invokeChannel('get-app-version'),
     checkAppUpdate: () => invokeChannel('check-app-update'),
     downloadAppUpdate: () => invokeChannel('download-app-update'),
+    onAppUpdateProgress: (callback) => {
+        if (USE_REMOTE_BACKEND || typeof callback !== 'function') {
+            return () => {};
+        }
+
+        const listener = (_event, payload) => callback(payload || {});
+        ipcRenderer.on('app-update-download-progress', listener);
+        return () => ipcRenderer.removeListener('app-update-download-progress', listener);
+    },
     quitAndInstallAppUpdate: (installerPath) => invokeChannel('quit-and-install-app-update', installerPath),
     openAppReleasePage: () => invokeChannel('open-app-release-page'),
 

@@ -236,6 +236,24 @@
     color: #f59e0b;
 }
 
+.card-purchase-opening .sc-icon {
+    background: rgba(99, 102, 241, 0.12);
+    color: #4f46e5;
+}
+
+.card-purchase-opening .sc-value {
+    color: #4f46e5;
+}
+
+.card-purchase-total .sc-icon {
+    background: rgba(180, 83, 9, 0.12);
+    color: #b45309;
+}
+
+.card-purchase-total .sc-value {
+    color: #b45309;
+}
+
 .card-amount .sc-icon {
     background: rgba(14, 165, 233, 0.14);
     color: #0284c7;
@@ -356,6 +374,48 @@
     flex-wrap: wrap;
 }
 
+.period-opening-panel {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    background: rgba(79, 70, 229, 0.05);
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.period-opening-copy h3 {
+    margin: 0 0 5px;
+    font-size: 0.98rem;
+    color: var(--text-color);
+}
+
+.period-opening-copy p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    line-height: 1.6;
+}
+
+.period-opening-controls {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.period-opening-field {
+    min-width: 220px;
+}
+
+.period-opening-controls .btn-secondary {
+    min-height: 42px;
+    white-space: nowrap;
+}
+
 .btn-primary,
 .btn-secondary {
     border: none;
@@ -404,6 +464,11 @@
 
 [data-theme="dark"] .btn-secondary {
     background: rgba(15, 23, 41, 0.7);
+}
+
+[data-theme="dark"] .period-opening-panel {
+    background: rgba(79, 70, 229, 0.1);
+    border-color: rgba(129, 140, 248, 0.22);
 }
 
 .table-card {
@@ -720,6 +785,15 @@
 
     .filters-actions {
         justify-content: stretch;
+    }
+
+    .period-opening-controls {
+        width: 100%;
+    }
+
+    .period-opening-field {
+        width: 100%;
+        min-width: 0;
     }
 
     .btn-primary,

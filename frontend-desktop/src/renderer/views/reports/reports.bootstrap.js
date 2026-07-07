@@ -22,6 +22,10 @@ let allCustomers = [];
 let currentPage = 1;
 const PAGE_SIZE = 20;
 const CUR = 'ج.م';
+const PURCHASE_OPENING_BALANCE_KEY = 'reports_purchase_opening_balance';
+let purchaseOpeningBalanceValue = 0;
+let purchaseOpeningBalanceInput;
+let savePurchaseOpeningBalanceBtn;
 function formatCurrency(v) {
     const n = Number(v) || 0;
     return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + CUR;
@@ -97,6 +101,87 @@ function updateLastUpdatedLabel() {
     });
 }
 
+function parsePurchaseOpeningBalanceValue(value) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue < 0) {
+        return 0;
+    }
+
+    return Number(numericValue.toFixed(2));
+}
+
+async function loadPurchaseOpeningBalance() {
+    if (!window.electronAPI || typeof window.electronAPI.getSettings !== 'function') {
+        return;
+    }
+
+    try {
+        const settings = await window.electronAPI.getSettings();
+        purchaseOpeningBalanceValue = parsePurchaseOpeningBalanceValue(settings?.[PURCHASE_OPENING_BALANCE_KEY]);
+    } catch (_) {
+        purchaseOpeningBalanceValue = 0;
+    }
+
+    if (purchaseOpeningBalanceInput) {
+        purchaseOpeningBalanceInput.value = String(purchaseOpeningBalanceValue);
+    }
+}
+
+async function savePurchaseOpeningBalance() {
+    if (!purchaseOpeningBalanceInput || !window.electronAPI || typeof window.electronAPI.saveSettings !== 'function') {
+        return;
+    }
+
+    const nextValue = parsePurchaseOpeningBalanceValue(purchaseOpeningBalanceInput.value);
+    purchaseOpeningBalanceInput.value = String(nextValue);
+
+    if (savePurchaseOpeningBalanceBtn) {
+        savePurchaseOpeningBalanceBtn.disabled = true;
+    }
+
+    try {
+        const result = await window.electronAPI.saveSettings({
+            [PURCHASE_OPENING_BALANCE_KEY]: String(nextValue)
+        });
+
+        if (!result || !result.success) {
+            const errorMessage = (result && result.error) || 'تعذر حفظ بداية مدة المشتريات.';
+            setStatus(errorMessage, 'error');
+            if (window.showToast) window.showToast(errorMessage, 'error');
+            return;
+        }
+
+        purchaseOpeningBalanceValue = nextValue;
+        updateSummary(currentReports);
+        setStatus('تم حفظ بداية مدة المشتريات بنجاح.', 'success');
+        if (window.showToast) window.showToast('تم حفظ بداية مدة المشتريات.', 'success');
+    } catch (error) {
+        const errorMessage = error.message || 'تعذر حفظ بداية مدة المشتريات.';
+        setStatus(errorMessage, 'error');
+        if (window.showToast) window.showToast(errorMessage, 'error');
+    } finally {
+        if (savePurchaseOpeningBalanceBtn) {
+            savePurchaseOpeningBalanceBtn.disabled = false;
+        }
+    }
+}
+
+function shouldApplyPurchaseOpeningBalance() {
+    const selectedType = String(typeFilter?.value || 'all');
+    const selectedCustomer = String(customerFilter?.value || '').trim();
+    const startDate = String(startDateInput?.value || '').trim();
+
+    if (selectedCustomer) {
+        return false;
+    }
+
+    if (selectedType !== 'all' && selectedType !== 'purchase') {
+        return false;
+    }
+
+    return /^\d{4}-01-01$/.test(startDate);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     try {
     if (window.i18n && typeof window.i18n.loadArabicDictionary === 'function') {
@@ -106,6 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     reportsRender.renderPage({ t, CUR });
     initializeElements();
     setDefaultDateRange();
+    await loadPurchaseOpeningBalance();
     await loadCustomers();
     await loadReports();
     } catch (error) {
@@ -127,6 +213,8 @@ function initializeElements() {
     reportsStatusEl = document.getElementById('reportsStatus');
     heroResultCountEl = document.getElementById('heroResultCount');
     lastUpdatedLabelEl = document.getElementById('lastUpdatedLabel');
+    purchaseOpeningBalanceInput = document.getElementById('purchaseOpeningBalanceInput');
+    savePurchaseOpeningBalanceBtn = document.getElementById('savePurchaseOpeningBalanceBtn');
 
     voucherModalEl = document.getElementById('voucherModal');
     voucherModalBodyEl = document.getElementById('voucherModalBody');
@@ -149,6 +237,10 @@ function initializeElements() {
             currentPage = 1;
             loadReports();
         });
+    }
+
+    if (savePurchaseOpeningBalanceBtn) {
+        savePurchaseOpeningBalanceBtn.addEventListener('click', savePurchaseOpeningBalance);
     }
 
     if (reportsTableBody) {
@@ -221,10 +313,17 @@ function updateSummary(reports) {
     const receiptCount = safeReports.filter((r) => r.type === 'receipt').length;
     const paymentCount = safeReports.filter((r) => r.type === 'payment').length;
     const totalAmount = safeReports.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+    const purchaseInvoicesAmount = safeReports
+        .filter((r) => r.type === 'purchase')
+        .reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+    const effectivePurchaseOpeningBalance = shouldApplyPurchaseOpeningBalance() ? purchaseOpeningBalanceValue : 0;
+    const purchaseTotalAmount = purchaseInvoicesAmount + effectivePurchaseOpeningBalance;
 
     document.getElementById('totalInvoices').textContent = safeReports.length;
     document.getElementById('salesCount').textContent = salesCount;
     document.getElementById('purchaseCount').textContent = purchaseCount;
+    document.getElementById('purchaseOpeningBalanceAmount').textContent = formatCurrency(purchaseOpeningBalanceValue);
+    document.getElementById('purchaseTotalAmount').textContent = formatCurrency(purchaseTotalAmount);
     document.getElementById('receiptCount').textContent = receiptCount;
     document.getElementById('paymentCount').textContent = paymentCount;
     document.getElementById('totalAmount').textContent = formatCurrency(totalAmount);

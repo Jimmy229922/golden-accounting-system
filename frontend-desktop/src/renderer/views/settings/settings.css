@@ -465,6 +465,36 @@
             background: linear-gradient(135deg, #f97316, #ea580c);
         }
         .btn-action.restore-btn:hover { box-shadow: 0 4px 12px rgba(249,115,22,0.3); }
+        .update-progress {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .update-progress[hidden] {
+            display: none !important;
+        }
+        .update-progress-track {
+            width: 100%;
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(15,118,110,0.12);
+            border: 1px solid rgba(15,118,110,0.16);
+        }
+        .update-progress-fill {
+            width: 0;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #0f766e, #14b8a6);
+            transition: width 0.2s ease;
+        }
+        .update-progress-meta {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #0f766e;
+            text-align: center;
+            direction: ltr;
+        }
         .status-text {
             display: block;
             margin-top: 4px;
@@ -558,6 +588,13 @@
         [data-theme="dark"] .btn-remove-image {
             background: rgba(239,68,68,0.2);
             color: #fca5a5;
+        }
+        [data-theme="dark"] .update-progress-track {
+            background: rgba(20,184,166,0.12);
+            border-color: rgba(45,212,191,0.2);
+        }
+        [data-theme="dark"] .update-progress-meta {
+            color: #5eead4;
         }
         [data-theme="dark"] .btn-save.has-unsaved {
             box-shadow: 0 0 0 3px rgba(250,204,21,0.38);

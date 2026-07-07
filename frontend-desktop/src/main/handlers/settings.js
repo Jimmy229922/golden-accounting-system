@@ -10,6 +10,7 @@ const GITHUB_REPOSITORY_OWNER = 'Jimmy229922';
 const GITHUB_REPOSITORY_NAME = 'golden-accounting-system';
 const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases/latest`;
 const GITHUB_RELEASES_PAGE_URL = `https://github.com/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases`;
+const APP_UPDATE_PROGRESS_CHANNEL = 'app-update-download-progress';
 
 function normalizeVersion(versionValue) {
     return String(versionValue || '')
@@ -106,7 +107,29 @@ async function fetchLatestReleaseDetails() {
     }
 }
 
-async function downloadFileFromUrl(downloadUrl, destinationPath) {
+function emitAppUpdateProgress(target, payload = {}) {
+    if (!target || typeof target.send !== 'function') {
+        return;
+    }
+
+    try {
+        target.send(APP_UPDATE_PROGRESS_CHANNEL, payload);
+    } catch (_) {
+    }
+}
+
+async function writeChunk(stream, chunk) {
+    if (stream.write(chunk)) {
+        return;
+    }
+
+    await new Promise((resolve, reject) => {
+        stream.once('drain', resolve);
+        stream.once('error', reject);
+    });
+}
+
+async function downloadFileFromUrl(downloadUrl, destinationPath, onProgress) {
     const response = await fetch(downloadUrl, {
         headers: {
             Accept: 'application/octet-stream',
@@ -119,8 +142,66 @@ async function downloadFileFromUrl(downloadUrl, destinationPath) {
         throw new Error(rawBody || `تعذر تنزيل ملف التحديث (${response.status}).`);
     }
 
-    const fileBuffer = Buffer.from(await response.arrayBuffer());
-    fs.writeFileSync(destinationPath, fileBuffer);
+    const totalBytesRaw = Number(response.headers.get('content-length') || 0);
+    const totalBytes = Number.isFinite(totalBytesRaw) && totalBytesRaw > 0 ? totalBytesRaw : 0;
+    const reportProgress = (downloadedBytes, forcePercent = null) => {
+        if (typeof onProgress !== 'function') {
+            return;
+        }
+
+        const percent = forcePercent !== null
+            ? forcePercent
+            : (totalBytes > 0 ? Math.max(0, Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))) : null);
+
+        onProgress({
+            downloadedBytes,
+            totalBytes,
+            percent
+        });
+    };
+
+    if (!response.body || typeof response.body.getReader !== 'function') {
+        const fileBuffer = Buffer.from(await response.arrayBuffer());
+        fs.writeFileSync(destinationPath, fileBuffer);
+        reportProgress(fileBuffer.length, 100);
+        return;
+    }
+
+    const reader = response.body.getReader();
+    const fileStream = fs.createWriteStream(destinationPath);
+    let downloadedBytes = 0;
+
+    try {
+        reportProgress(0, 0);
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+
+            const chunk = Buffer.from(value);
+            downloadedBytes += chunk.length;
+            await writeChunk(fileStream, chunk);
+            reportProgress(downloadedBytes);
+        }
+
+        await new Promise((resolve, reject) => {
+            fileStream.once('error', reject);
+            fileStream.end(resolve);
+        });
+
+        reportProgress(downloadedBytes, 100);
+    } catch (error) {
+        fileStream.destroy();
+        try {
+            if (fs.existsSync(destinationPath)) {
+                fs.unlinkSync(destinationPath);
+            }
+        } catch (_) {
+        }
+        throw error;
+    }
 }
 
 function register() {
@@ -167,7 +248,7 @@ function register() {
         return fetchLatestReleaseDetails();
     });
 
-    ipcMain.handle('download-app-update', async () => {
+    ipcMain.handle('download-app-update', async (event) => {
         const releaseResult = await fetchLatestReleaseDetails();
         if (!releaseResult.success) {
             return releaseResult;
@@ -195,7 +276,28 @@ function register() {
             fs.mkdirSync(updatesDir, { recursive: true });
 
             const targetPath = path.join(updatesDir, releaseResult.assetName);
-            await downloadFileFromUrl(releaseResult.downloadUrl, targetPath);
+            emitAppUpdateProgress(event.sender, {
+                status: 'starting',
+                latestVersion: releaseResult.latestVersion,
+                assetName: releaseResult.assetName,
+                downloadedBytes: 0,
+                totalBytes: 0,
+                percent: 0
+            });
+            await downloadFileFromUrl(releaseResult.downloadUrl, targetPath, (progressPayload) => {
+                emitAppUpdateProgress(event.sender, {
+                    status: 'downloading',
+                    latestVersion: releaseResult.latestVersion,
+                    assetName: releaseResult.assetName,
+                    ...progressPayload
+                });
+            });
+            emitAppUpdateProgress(event.sender, {
+                status: 'completed',
+                latestVersion: releaseResult.latestVersion,
+                assetName: releaseResult.assetName,
+                percent: 100
+            });
 
             return {
                 success: true,
@@ -206,6 +308,12 @@ function register() {
                 closeForInstall: true
             };
         } catch (error) {
+            emitAppUpdateProgress(event.sender, {
+                status: 'error',
+                latestVersion: releaseResult.latestVersion,
+                assetName: releaseResult.assetName,
+                error: error.message
+            });
             return {
                 success: false,
                 error: error.message,
