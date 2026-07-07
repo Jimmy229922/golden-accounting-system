@@ -191,6 +191,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSettings: () => invokeChannel('get-settings'),
     saveSettings: (settings) => invokeChannel('save-settings', settings),
     getAppVersion: () => invokeChannel('get-app-version'),
+    getAppUpdateProgressState: () => invokeChannel('get-app-update-progress-state'),
     checkAppUpdate: () => invokeChannel('check-app-update'),
     downloadAppUpdate: () => invokeChannel('download-app-update'),
     onAppUpdateProgress: (callback) => {

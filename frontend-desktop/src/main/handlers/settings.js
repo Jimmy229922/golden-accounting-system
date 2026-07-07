@@ -11,6 +11,15 @@ const GITHUB_REPOSITORY_NAME = 'golden-accounting-system';
 const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases/latest`;
 const GITHUB_RELEASES_PAGE_URL = `https://github.com/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases`;
 const APP_UPDATE_PROGRESS_CHANNEL = 'app-update-download-progress';
+let appUpdateProgressState = {
+    status: 'idle',
+    latestVersion: '',
+    assetName: '',
+    downloadedBytes: 0,
+    totalBytes: 0,
+    percent: 0,
+    error: ''
+};
 
 function normalizeVersion(versionValue) {
     return String(versionValue || '')
@@ -46,6 +55,99 @@ function getPortableUpdatesPath() {
     return path.join(app.getPath('downloads'), 'Accounting System Updates');
 }
 
+function setAppUpdateProgressState(nextState = {}) {
+    appUpdateProgressState = {
+        ...appUpdateProgressState,
+        ...nextState
+    };
+}
+
+function getAppUpdateProgressState() {
+    const status = String(appUpdateProgressState?.status || 'idle');
+    return {
+        ...appUpdateProgressState,
+        isRunning: status === 'starting' || status === 'downloading'
+    };
+}
+
+function translateAppUpdateError(rawMessage, options = {}) {
+    const message = String(rawMessage || '').trim();
+    if (!message) {
+        if (options.context === 'download') {
+            return 'تعذر تنزيل ملف التحديث.';
+        }
+        return 'تعذر فحص التحديث.';
+    }
+
+    if (/[\u0600-\u06FF]/.test(message)) {
+        return message;
+    }
+
+    const normalized = message.toLowerCase();
+    const statusCode = Number(options.statusCode) || 0;
+
+    if (statusCode === 404) {
+        return options.context === 'download'
+            ? 'ملف التحديث غير موجود على GitHub Releases.'
+            : 'تعذر العثور على الإصدار المطلوب على GitHub Releases.';
+    }
+
+    if (statusCode === 403 || normalized.includes('rate limit')) {
+        return 'GitHub رفض الطلب مؤقتًا. حاول مرة أخرى بعد قليل.';
+    }
+
+    if (statusCode === 429) {
+        return 'تم تجاوز عدد طلبات التحديث المسموح بها مؤقتًا. حاول مرة أخرى بعد قليل.';
+    }
+
+    if (
+        normalized.includes('failed to fetch') ||
+        normalized.includes('fetch failed') ||
+        normalized.includes('networkerror') ||
+        normalized.includes('load failed')
+    ) {
+        return 'تعذر الاتصال بالإنترنت أو الوصول إلى GitHub Releases.';
+    }
+
+    if (
+        normalized.includes('enotfound') ||
+        normalized.includes('eai_again') ||
+        normalized.includes('getaddrinfo')
+    ) {
+        return 'تعذر الوصول إلى GitHub. تحقق من اتصال الإنترنت.';
+    }
+
+    if (
+        normalized.includes('timeout') ||
+        normalized.includes('timed out') ||
+        normalized.includes('etimedout')
+    ) {
+        return 'انتهت مهلة الاتصال أثناء التحديث. تحقق من سرعة الإنترنت ثم حاول مرة أخرى.';
+    }
+
+    if (
+        normalized.includes('econnreset') ||
+        normalized.includes('socket hang up') ||
+        normalized.includes('aborted')
+    ) {
+        return 'انقطع الاتصال أثناء تنزيل التحديث. حاول مرة أخرى.';
+    }
+
+    if (
+        normalized.includes('eacces') ||
+        normalized.includes('eperm') ||
+        normalized.includes('access is denied')
+    ) {
+        return 'لا توجد صلاحية كافية لحفظ ملف التحديث على هذا الجهاز.';
+    }
+
+    if (options.context === 'download') {
+        return 'حدث خطأ أثناء تنزيل ملف التحديث.';
+    }
+
+    return 'حدث خطأ أثناء فحص التحديث.';
+}
+
 function selectWindowsInstallerAsset(assets = []) {
     const validAssets = Array.isArray(assets) ? assets.filter((asset) => {
         const name = String(asset?.name || '');
@@ -79,6 +181,16 @@ async function fetchLatestReleaseDetails() {
         if (!response.ok) {
             return {
                 success: false,
+                error: translateAppUpdateError(payload?.message, {
+                    context: 'check',
+                    statusCode: response.status
+                })
+            };
+        }
+
+        if (!response.ok) {
+            return {
+                success: false,
                 error: payload?.message || `تعذر قراءة آخر إصدار من GitHub (${response.status}).`
             };
         }
@@ -103,7 +215,10 @@ async function fetchLatestReleaseDetails() {
             downloadUrl: installerAsset?.browser_download_url || ''
         };
     } catch (error) {
-        return { success: false, error: error.message };
+        return {
+            success: false,
+            error: translateAppUpdateError(error?.message, { context: 'check' })
+        };
     }
 }
 
@@ -204,6 +319,14 @@ async function downloadFileFromUrl(downloadUrl, destinationPath, onProgress) {
     }
 }
 
+async function downloadFileFromUrlWithArabicErrors(downloadUrl, destinationPath, onProgress) {
+    try {
+        await downloadFileFromUrl(downloadUrl, destinationPath, onProgress);
+    } catch (error) {
+        throw new Error(translateAppUpdateError(error?.message, { context: 'download' }));
+    }
+}
+
 function register() {
     // --- Settings Handlers ---
     ipcMain.handle('get-settings', () => {
@@ -244,6 +367,13 @@ function register() {
         };
     });
 
+    ipcMain.handle('get-app-update-progress-state', () => {
+        return {
+            success: true,
+            progress: getAppUpdateProgressState()
+        };
+    });
+
     ipcMain.handle('check-app-update', async () => {
         return fetchLatestReleaseDetails();
     });
@@ -276,6 +406,15 @@ function register() {
             fs.mkdirSync(updatesDir, { recursive: true });
 
             const targetPath = path.join(updatesDir, releaseResult.assetName);
+            setAppUpdateProgressState({
+                status: 'starting',
+                latestVersion: releaseResult.latestVersion,
+                assetName: releaseResult.assetName,
+                downloadedBytes: 0,
+                totalBytes: 0,
+                percent: 0,
+                error: ''
+            });
             emitAppUpdateProgress(event.sender, {
                 status: 'starting',
                 latestVersion: releaseResult.latestVersion,
@@ -284,13 +423,27 @@ function register() {
                 totalBytes: 0,
                 percent: 0
             });
-            await downloadFileFromUrl(releaseResult.downloadUrl, targetPath, (progressPayload) => {
+            await downloadFileFromUrlWithArabicErrors(releaseResult.downloadUrl, targetPath, (progressPayload) => {
+                setAppUpdateProgressState({
+                    status: 'downloading',
+                    latestVersion: releaseResult.latestVersion,
+                    assetName: releaseResult.assetName,
+                    ...progressPayload,
+                    error: ''
+                });
                 emitAppUpdateProgress(event.sender, {
                     status: 'downloading',
                     latestVersion: releaseResult.latestVersion,
                     assetName: releaseResult.assetName,
                     ...progressPayload
                 });
+            });
+            setAppUpdateProgressState({
+                status: 'completed',
+                latestVersion: releaseResult.latestVersion,
+                assetName: releaseResult.assetName,
+                percent: 100,
+                error: ''
             });
             emitAppUpdateProgress(event.sender, {
                 status: 'completed',
@@ -308,6 +461,12 @@ function register() {
                 closeForInstall: true
             };
         } catch (error) {
+            setAppUpdateProgressState({
+                status: 'error',
+                latestVersion: releaseResult.latestVersion,
+                assetName: releaseResult.assetName,
+                error: error.message
+            });
             emitAppUpdateProgress(event.sender, {
                 status: 'error',
                 latestVersion: releaseResult.latestVersion,

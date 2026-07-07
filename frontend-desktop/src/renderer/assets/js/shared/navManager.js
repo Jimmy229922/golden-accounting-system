@@ -1336,6 +1336,324 @@ async function renderNavigation(targetSelector, configPath) {
     }
 }
 
+const appUpdateFloatingIndicatorState = {
+    initialized: false,
+    element: null,
+    icon: null,
+    percent: null,
+    unsubscribe: null,
+    pollTimer: null,
+    lastErrorMessage: '',
+    hideTimer: null
+};
+
+function notifyGlobalAppUpdate(message, type = 'info') {
+    if (!message) return;
+
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+        return;
+    }
+
+    if (window.toast && typeof window.toast[type] === 'function') {
+        window.toast[type](message);
+        return;
+    }
+
+    if (type === 'error') {
+        console.error('[app-update]', message);
+        return;
+    }
+
+    console.log('[app-update]', message);
+}
+
+function ensureAppUpdateFloatingIndicatorStyles() {
+    if (document.getElementById('app-update-floating-indicator-styles')) {
+        return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'app-update-floating-indicator-styles';
+    style.textContent = `
+        .app-update-floating-indicator {
+            position: fixed;
+            left: 18px;
+            bottom: 18px;
+            width: 74px;
+            height: 74px;
+            border: none;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.26);
+            z-index: 9999;
+            cursor: pointer;
+            font-family: inherit;
+            transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .app-update-floating-indicator:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 18px 34px rgba(15, 23, 42, 0.3);
+        }
+
+        .app-update-floating-indicator.is-hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(8px);
+        }
+
+        .app-update-floating-indicator.is-error {
+            background: linear-gradient(135deg, #dc2626 0%, #f97316 100%);
+        }
+
+        .app-update-floating-indicator.is-complete {
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+        }
+
+        .app-update-floating-indicator__icon {
+            font-size: 16px;
+            line-height: 1;
+            font-weight: 700;
+        }
+
+        .app-update-floating-indicator__percent {
+            font-size: 16px;
+            line-height: 1;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+    `;
+
+    (document.head || document.documentElement).appendChild(style);
+}
+
+function clearAppUpdateFloatingIndicatorPoll() {
+    if (!appUpdateFloatingIndicatorState.pollTimer) {
+        return;
+    }
+
+    clearTimeout(appUpdateFloatingIndicatorState.pollTimer);
+    appUpdateFloatingIndicatorState.pollTimer = null;
+}
+
+function scheduleAppUpdateFloatingIndicatorPoll() {
+    if (appUpdateFloatingIndicatorState.pollTimer) {
+        return;
+    }
+
+    appUpdateFloatingIndicatorState.pollTimer = setTimeout(async () => {
+        appUpdateFloatingIndicatorState.pollTimer = null;
+        await syncAppUpdateFloatingIndicatorState();
+    }, 1000);
+}
+
+function clearAppUpdateFloatingIndicatorHideTimer() {
+    if (!appUpdateFloatingIndicatorState.hideTimer) {
+        return;
+    }
+
+    clearTimeout(appUpdateFloatingIndicatorState.hideTimer);
+    appUpdateFloatingIndicatorState.hideTimer = null;
+}
+
+function getSettingsNavigationHref() {
+    const prefix = resolveViewsPrefix();
+    const items = buildTopNavItems(prefix);
+    const settingsItem = items.find((item) => item && item.href && /settings\/index\.html$/i.test(String(item.href)));
+    return settingsItem?.href || `${prefix}settings/index.html`;
+}
+
+function openSettingsFromFloatingIndicator() {
+    const targetUrl = new URL(getSettingsNavigationHref(), window.location.href);
+    const currentUrl = new URL(window.location.href);
+    const isSamePage = normalizePath(currentUrl.pathname) === normalizePath(targetUrl.pathname);
+
+    if (isSamePage) {
+        return;
+    }
+
+    if (!tryShellNavigation(targetUrl.href)) {
+        window.location.href = targetUrl.href;
+    }
+}
+
+function ensureAppUpdateFloatingIndicator() {
+    if (appUpdateFloatingIndicatorState.element) {
+        return appUpdateFloatingIndicatorState;
+    }
+
+    if (!document.body) {
+        return null;
+    }
+
+    ensureAppUpdateFloatingIndicatorStyles();
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'app-update-floating-indicator is-hidden';
+    button.title = 'جاري تنزيل التحديث';
+    button.setAttribute('aria-label', 'جاري تنزيل التحديث');
+    button.innerHTML = `
+        <span class="app-update-floating-indicator__icon">↓</span>
+        <span class="app-update-floating-indicator__percent">0%</span>
+    `;
+    button.addEventListener('click', openSettingsFromFloatingIndicator);
+
+    document.body.appendChild(button);
+
+    appUpdateFloatingIndicatorState.element = button;
+    appUpdateFloatingIndicatorState.icon = button.querySelector('.app-update-floating-indicator__icon');
+    appUpdateFloatingIndicatorState.percent = button.querySelector('.app-update-floating-indicator__percent');
+    return appUpdateFloatingIndicatorState;
+}
+
+function hideAppUpdateFloatingIndicator() {
+    const state = ensureAppUpdateFloatingIndicator();
+    if (!state || !state.element) {
+        return;
+    }
+
+    clearAppUpdateFloatingIndicatorHideTimer();
+    state.element.classList.add('is-hidden');
+    state.element.classList.remove('is-error', 'is-complete');
+    state.element.title = 'جاري تنزيل التحديث';
+    state.element.setAttribute('aria-label', 'جاري تنزيل التحديث');
+    if (state.icon) state.icon.textContent = '↓';
+    if (state.percent) state.percent.textContent = '0%';
+}
+
+function renderAppUpdateFloatingIndicator(progress = {}) {
+    const state = ensureAppUpdateFloatingIndicator();
+    if (!state || !state.element) {
+        return;
+    }
+
+    clearAppUpdateFloatingIndicatorHideTimer();
+
+    const status = String(progress.status || 'idle');
+    const percentValue = Number(progress.percent);
+    const safePercent = Number.isFinite(percentValue) ? Math.max(0, Math.min(100, Math.round(percentValue))) : 0;
+    const errorMessage = String(progress.error || '').trim();
+
+    if (status !== 'starting' && status !== 'downloading' && status !== 'completed' && status !== 'error') {
+        clearAppUpdateFloatingIndicatorPoll();
+        hideAppUpdateFloatingIndicator();
+        return;
+    }
+
+    state.element.classList.remove('is-hidden');
+    state.element.classList.toggle('is-error', status === 'error');
+    state.element.classList.toggle('is-complete', status === 'completed');
+
+    if (status === 'error') {
+        if (state.icon) state.icon.textContent = '!';
+        if (state.percent) state.percent.textContent = 'خطأ';
+        state.element.title = errorMessage || 'حدث خطأ أثناء تنزيل التحديث';
+        state.element.setAttribute('aria-label', errorMessage || 'حدث خطأ أثناء تنزيل التحديث');
+        clearAppUpdateFloatingIndicatorPoll();
+
+        if (errorMessage && state.lastErrorMessage !== errorMessage) {
+            state.lastErrorMessage = errorMessage;
+            notifyGlobalAppUpdate(errorMessage, 'error');
+        }
+        return;
+    }
+
+    state.lastErrorMessage = '';
+    if (state.icon) {
+        state.icon.textContent = status === 'completed' ? '✓' : '↓';
+    }
+    if (state.percent) {
+        state.percent.textContent = `${safePercent}%`;
+    }
+
+    const title = status === 'completed'
+        ? 'اكتمل تنزيل التحديث. اضغط لفتح الإعدادات.'
+        : `جاري تنزيل التحديث ${safePercent}% - اضغط لفتح الإعدادات`;
+
+    state.element.title = title;
+    state.element.setAttribute('aria-label', title);
+
+    if (status === 'completed') {
+        clearAppUpdateFloatingIndicatorPoll();
+        state.hideTimer = setTimeout(() => {
+            hideAppUpdateFloatingIndicator();
+        }, 4000);
+        return;
+    }
+
+    scheduleAppUpdateFloatingIndicatorPoll();
+}
+
+async function syncAppUpdateFloatingIndicatorState() {
+    if (!window.electronAPI || typeof window.electronAPI.getAppUpdateProgressState !== 'function') {
+        return;
+    }
+
+    try {
+        const result = await window.electronAPI.getAppUpdateProgressState();
+        if (!result || !result.success || !result.progress) {
+            clearAppUpdateFloatingIndicatorPoll();
+            hideAppUpdateFloatingIndicator();
+            return;
+        }
+
+        renderAppUpdateFloatingIndicator(result.progress);
+    } catch (_) {
+        clearAppUpdateFloatingIndicatorPoll();
+    }
+}
+
+function bindAppUpdateFloatingIndicator() {
+    if (
+        appUpdateFloatingIndicatorState.unsubscribe ||
+        !window.electronAPI ||
+        typeof window.electronAPI.onAppUpdateProgress !== 'function'
+    ) {
+        return;
+    }
+
+    appUpdateFloatingIndicatorState.unsubscribe = window.electronAPI.onAppUpdateProgress((payload) => {
+        renderAppUpdateFloatingIndicator(payload || {});
+    });
+}
+
+function initializeAppUpdateFloatingIndicator() {
+    if (appUpdateFloatingIndicatorState.initialized) {
+        return;
+    }
+
+    appUpdateFloatingIndicatorState.initialized = true;
+
+    const boot = () => {
+        ensureAppUpdateFloatingIndicator();
+        bindAppUpdateFloatingIndicator();
+        syncAppUpdateFloatingIndicatorState();
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot, { once: true });
+    } else {
+        boot();
+    }
+
+    window.addEventListener('beforeunload', () => {
+        clearAppUpdateFloatingIndicatorPoll();
+        clearAppUpdateFloatingIndicatorHideTimer();
+        if (typeof appUpdateFloatingIndicatorState.unsubscribe === 'function') {
+            appUpdateFloatingIndicatorState.unsubscribe();
+            appUpdateFloatingIndicatorState.unsubscribe = null;
+        }
+    });
+}
+
 window.navManager = {
     loadNavigation,
     renderNavigation,
@@ -1345,6 +1663,8 @@ window.navManager = {
     openSalesShiftCloseModal,
     closeSalesShiftCloseModal
 };
+
+initializeAppUpdateFloatingIndicator();
 
 document.addEventListener('click', (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

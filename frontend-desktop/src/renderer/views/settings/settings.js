@@ -5,6 +5,7 @@ let profileImageInput, profileImagePreview, removeImageBtn, saveBtn;
 let changeLogLastModifiedEl, changeLogModifiedByEl, changeLogSummaryEl, appVersionValueEl;
 let saveStateTimer = null;
 let unsubscribeAppUpdateProgress = null;
+let appUpdateProgressPollTimer = null;
 let isAppUpdateDownloadRunning = false;
 let initialFormSnapshot = '';
 const SETTINGS_TRACKING_FIELDS = [
@@ -275,6 +276,7 @@ function initializeElements() {
         updateBtn.addEventListener('click', handleAppUpdate);
     }
     bindAppUpdateProgress();
+    syncAppUpdateProgressState();
 
     profileImageInput.addEventListener('change', handleImageUpload);
     removeImageBtn.addEventListener('click', handleImageRemove);
@@ -284,6 +286,14 @@ function initializeElements() {
     }
 
     setSaveButtonState('idle');
+
+    window.addEventListener('beforeunload', () => {
+        if (unsubscribeAppUpdateProgress) {
+            unsubscribeAppUpdateProgress();
+            unsubscribeAppUpdateProgress = null;
+        }
+        stopAppUpdateProgressPolling();
+    });
 }
 
 async function loadSettings() {
@@ -555,6 +565,26 @@ function bindAppUpdateProgress() {
     unsubscribeAppUpdateProgress = window.electronAPI.onAppUpdateProgress(handleAppUpdateProgress);
 }
 
+function stopAppUpdateProgressPolling() {
+    if (!appUpdateProgressPollTimer) {
+        return;
+    }
+
+    clearTimeout(appUpdateProgressPollTimer);
+    appUpdateProgressPollTimer = null;
+}
+
+function scheduleAppUpdateProgressPolling() {
+    if (appUpdateProgressPollTimer) {
+        return;
+    }
+
+    appUpdateProgressPollTimer = setTimeout(async () => {
+        appUpdateProgressPollTimer = null;
+        await syncAppUpdateProgressState();
+    }, 1000);
+}
+
 function setUpdateProgressVisibility(visible) {
     if (!updateProgressWrapEl) return;
     updateProgressWrapEl.hidden = !visible;
@@ -613,7 +643,8 @@ function buildUpdateProgressMeta(progressPayload) {
 }
 
 function handleAppUpdateProgress(progressPayload = {}) {
-    if (!isAppUpdateDownloadRunning && progressPayload.status !== 'completed') {
+    const progressStatus = String(progressPayload.status || '');
+    if (!isAppUpdateDownloadRunning && progressStatus !== 'completed' && progressStatus !== 'error') {
         return;
     }
 
@@ -626,10 +657,77 @@ function handleAppUpdateProgress(progressPayload = {}) {
     setUpdateProgress(safePercent, buildUpdateProgressMeta(progressPayload));
 
     if (progressPayload.status === 'downloading' || progressPayload.status === 'starting') {
+        isAppUpdateDownloadRunning = true;
         const statusText = safePercent > 0
             ? `جاري تنزيل التحديث... ${safePercent}%`
             : 'جاري تنزيل التحديث...';
         setStatus(updateStatusEl, statusText);
+        setUpdateButtonState('loading', 'جاري تنزيل التحديث...');
+        scheduleAppUpdateProgressPolling();
+        return;
+    }
+
+    if (progressStatus === 'error') {
+        isAppUpdateDownloadRunning = false;
+        setUpdateButtonState('idle');
+        setStatus(updateStatusEl, progressPayload.error || 'تعذر تنزيل ملف التحديث.', true);
+        stopAppUpdateProgressPolling();
+        return;
+    }
+
+    if (progressStatus === 'completed') {
+        isAppUpdateDownloadRunning = false;
+        setUpdateButtonState('idle');
+        stopAppUpdateProgressPolling();
+    }
+}
+
+async function syncAppUpdateProgressState() {
+    if (!window.electronAPI || typeof window.electronAPI.getAppUpdateProgressState !== 'function') {
+        return;
+    }
+
+    try {
+        const result = await window.electronAPI.getAppUpdateProgressState();
+        if (!result || !result.success || !result.progress) {
+            stopAppUpdateProgressPolling();
+            return;
+        }
+
+        const progressState = result.progress;
+        const progressStatus = String(progressState.status || 'idle');
+
+        if (progressStatus === 'starting' || progressStatus === 'downloading') {
+            isAppUpdateDownloadRunning = true;
+            handleAppUpdateProgress(progressState);
+            scheduleAppUpdateProgressPolling();
+            return;
+        }
+
+        if (progressStatus === 'completed') {
+            isAppUpdateDownloadRunning = false;
+            setUpdateProgressVisibility(true);
+            setUpdateProgress(100, buildUpdateProgressMeta({
+                ...progressState,
+                percent: 100
+            }));
+            setUpdateButtonState('idle');
+            stopAppUpdateProgressPolling();
+            return;
+        }
+
+        if (progressStatus === 'error') {
+            isAppUpdateDownloadRunning = false;
+            setUpdateButtonState('idle');
+            setStatus(updateStatusEl, progressState.error || 'تعذر تنزيل ملف التحديث.', true);
+            stopAppUpdateProgressPolling();
+            return;
+        }
+
+        isAppUpdateDownloadRunning = false;
+        stopAppUpdateProgressPolling();
+    } catch (_) {
+        stopAppUpdateProgressPolling();
     }
 }
 
