@@ -370,6 +370,7 @@ function initDB() {
             raw_quantity REAL,
             raw_weights TEXT,
             sale_price REAL,
+            cost_price REAL DEFAULT 0,
             total_price REAL,
             FOREIGN KEY (invoice_id) REFERENCES sales_invoices(id) ON DELETE CASCADE,
             FOREIGN KEY (item_id) REFERENCES items(id),
@@ -378,6 +379,7 @@ function initDB() {
     `);
     runAddColumnMigration("ALTER TABLE sales_invoice_details ADD COLUMN raw_quantity REAL DEFAULT 0", 'sales_invoice_details', 'raw_quantity');
     runAddColumnMigration("ALTER TABLE sales_invoice_details ADD COLUMN raw_weights TEXT DEFAULT '[]'", 'sales_invoice_details', 'raw_weights');
+    runAddColumnMigration("ALTER TABLE sales_invoice_details ADD COLUMN cost_price REAL DEFAULT 0", 'sales_invoice_details', 'cost_price');
     runAddColumnMigration("ALTER TABLE sales_invoice_details ADD COLUMN warehouse_id INTEGER DEFAULT 1", 'sales_invoice_details', 'warehouse_id');
 
     // 9. Treasury Transactions Table (جدول حركات الخزينة)
@@ -757,34 +759,9 @@ function initDB() {
     db.exec(`DELETE FROM warehouses WHERE id <> 1`);
     db.exec(`UPDATE warehouses SET name = 'المخزن الرئيسي' WHERE id = 1`);
 
-    // Add triggers to auto-update items.stock_quantity from inventory_transactions
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_items_stock_after_inventory_insert
-        AFTER INSERT ON inventory_transactions
-        FOR EACH ROW
-        BEGIN
-            UPDATE items SET stock_quantity = stock_quantity + NEW.quantity WHERE id = NEW.item_id;
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_items_stock_after_inventory_delete
-        AFTER DELETE ON inventory_transactions
-        FOR EACH ROW
-        BEGIN
-            UPDATE items SET stock_quantity = stock_quantity - OLD.quantity WHERE id = OLD.item_id;
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_items_stock_after_inventory_update
-        AFTER UPDATE OF quantity, item_id ON inventory_transactions
-        FOR EACH ROW
-        BEGIN
-            UPDATE items SET stock_quantity = stock_quantity - OLD.quantity WHERE id = OLD.item_id;
-            UPDATE items SET stock_quantity = stock_quantity + NEW.quantity WHERE id = NEW.item_id;
-        END
-    `);
+    db.exec(`DROP TRIGGER IF EXISTS trg_items_stock_after_inventory_insert`);
+    db.exec(`DROP TRIGGER IF EXISTS trg_items_stock_after_inventory_delete`);
+    db.exec(`DROP TRIGGER IF EXISTS trg_items_stock_after_inventory_update`);
 
     // Add triggers to automatically record inventory transactions
     // 1. Opening Balances

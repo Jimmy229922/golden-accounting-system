@@ -1,7 +1,7 @@
 {
   "name": "accounting-system-monorepo",
   "private": true,
-  "version": "6.0.5",
+  "version": "6.1.0",
   "description": "Monorepo for desktop, backend, and future android client",
   "scripts": {
     "setup": "npm --prefix frontend-desktop install && npm --prefix backend install",

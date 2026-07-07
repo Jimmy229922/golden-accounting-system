@@ -1617,7 +1617,6 @@ function collectInvoiceItemsFromForm() {
 
     purchasesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
         const item_id = parseInt(row.querySelector('.item-select').value, 10);
-        const warehouse_id = parseInt(row.querySelector('.warehouse-select')?.value || 1, 10);
         const quantityInput = row.querySelector('.quantity-input');
         const rawQuantity = getRowRawQuantity(row);
         
@@ -1647,7 +1646,6 @@ function collectInvoiceItemsFromForm() {
 
         items.push({
             item_id,
-            warehouse_id,
             raw_quantity: rawQuantity,
             raw_weights: rawWeightsStr,
             quantity,
@@ -1685,8 +1683,8 @@ async function saveInvoice() {
         return;
     }
 
-    const rawSubtotal = parseFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
-    const netSubtotal = parseFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
+    const rawSubtotal = parseLocaleFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
+    const netSubtotal = parseLocaleFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
     const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
 
     const invoiceData = {
@@ -1719,8 +1717,8 @@ async function updateInvoice() {
         return;
     }
 
-    const rawSubtotal = parseFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
-    const netSubtotal = parseFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
+    const rawSubtotal = parseLocaleFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
+    const netSubtotal = parseLocaleFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
     const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
 
     const invoiceData = {

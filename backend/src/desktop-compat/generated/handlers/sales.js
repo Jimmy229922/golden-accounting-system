@@ -582,8 +582,8 @@ function register() {
         `);
 
         const insertDetail = db.prepare(`
-            INSERT INTO sales_invoice_details (invoice_id, item_id, quantity, sale_price, total_price)
-            VALUES (@invoice_id, @item_id, @quantity, @sale_price, @total_price)
+            INSERT INTO sales_invoice_details (invoice_id, item_id, quantity, sale_price, cost_price, total_price)
+            VALUES (@invoice_id, @item_id, @quantity, @sale_price, @cost_price, @total_price)
         `);
 
         const updateItemStock = db.prepare(`
@@ -591,6 +591,7 @@ function register() {
             SET stock_quantity = stock_quantity - @quantity
             WHERE id = @item_id
         `);
+        const getItemCost = db.prepare('SELECT cost_price FROM items WHERE id = ?');
 
         const transaction = db.transaction((data) => {
             const info = insertInvoice.run({
@@ -614,6 +615,7 @@ function register() {
                     item_id: item.item_id,
                     quantity: item.quantity,
                     sale_price: item.sale_price,
+                    cost_price: Number(getItemCost.get(item.item_id)?.cost_price) || 0,
                     total_price: item.total_price
                 });
 
@@ -718,10 +720,11 @@ function register() {
 
             // Insert New Details & Update Stock
             const insertDetail = db.prepare(`
-                INSERT INTO sales_invoice_details (invoice_id, item_id, quantity, sale_price, total_price)
-                VALUES (@invoice_id, @item_id, @quantity, @sale_price, @total_price)
+                INSERT INTO sales_invoice_details (invoice_id, item_id, quantity, sale_price, cost_price, total_price)
+                VALUES (@invoice_id, @item_id, @quantity, @sale_price, @cost_price, @total_price)
             `);
             const updateItemStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity - @quantity WHERE id = @item_id');
+            const getItemCost = db.prepare('SELECT cost_price FROM items WHERE id = ?');
 
             for (const item of items) {
                 insertDetail.run({
@@ -729,6 +732,7 @@ function register() {
                     item_id: item.item_id,
                     quantity: item.quantity,
                     sale_price: item.sale_price,
+                    cost_price: Number(getItemCost.get(item.item_id)?.cost_price) || 0,
                     total_price: item.total_price
                 });
                 updateItemStock.run({ quantity: item.quantity, item_id: item.item_id });

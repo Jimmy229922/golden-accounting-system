@@ -380,11 +380,13 @@ function initDB() {
             item_id INTEGER,
             quantity REAL,
             sale_price REAL,
+            cost_price REAL DEFAULT 0,
             total_price REAL,
             FOREIGN KEY (invoice_id) REFERENCES sales_invoices(id) ON DELETE CASCADE,
             FOREIGN KEY (item_id) REFERENCES items(id)
         )
     `);
+    runAddColumnMigration("ALTER TABLE sales_invoice_details ADD COLUMN cost_price REAL DEFAULT 0", 'sales_invoice_details', 'cost_price');
 
     // 9. Treasury Transactions Table (جدول حركات الخزينة)
     db.exec(`

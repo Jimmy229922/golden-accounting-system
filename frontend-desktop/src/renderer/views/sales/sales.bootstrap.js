@@ -1005,7 +1005,7 @@ async function printInvoice() {
         return;
     }
 
-    const financials = getInvoiceFinancials(parseFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
+    const financials = getInvoiceFinancials(parseLocaleFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
 
     // 2. Submit the invoice if not locked
     const wasEditing = !!salesState.editingInvoiceId;
@@ -2001,7 +2001,7 @@ async function updateInvoice() {
         return;
     }
 
-    const financials = getInvoiceFinancials(parseFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
+    const financials = getInvoiceFinancials(parseLocaleFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
 
     const invoiceData = {
         id: salesState.editingInvoiceId,
@@ -2055,7 +2055,7 @@ async function saveInvoice() {
         return;
     }
 
-    const financials = getInvoiceFinancials(parseFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
+    const financials = getInvoiceFinancials(parseLocaleFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
 
     const invoiceData = {
         customer_id,

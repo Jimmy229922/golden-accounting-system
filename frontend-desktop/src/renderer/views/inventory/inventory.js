@@ -155,10 +155,6 @@ function renderPage() {
                                 <select id="damagedItemSelect"></select>
                             </div>
                             <div class="inv-damaged-field">
-                                <label>${t('inventory.damagedWarehouse', 'المخزن')}</label>
-                                <select id="damagedWarehouseSelect"></select>
-                            </div>
-                            <div class="inv-damaged-field">
                                 <label>${t('inventory.damagedQuantity', 'الكمية التالفة')}</label>
                                 <input id="damagedQuantityInput" type="number" min="0.0001" step="0.0001" placeholder="0.0000">
                             </div>
@@ -196,7 +192,6 @@ function renderPage() {
                                 <tr>
                                     <th>${t('inventory.modalHeaders.date', 'التاريخ')}</th>
                                     <th>${t('inventory.tableHeaders.itemName', 'الصنف')}</th>
-                                    <th>${t('inventory.damagedWarehouse', 'المخزن')}</th>
                                     <th>${t('inventory.damagedQuantity', 'الكمية')}</th>
                                     <th>${t('inventory.damagedReason', 'السبب')}</th>
                                     <th>${t('inventory.damagedLoss', 'الخسارة')}</th>
@@ -246,10 +241,6 @@ function renderPage() {
                         <div class="inv-damaged-field">
                             <label>${t('inventory.damagedItem', 'الصنف')}</label>
                             <select id="editDamagedItemSelect"></select>
-                        </div>
-                        <div class="inv-damaged-field">
-                            <label>${t('inventory.damagedWarehouse', 'المخزن')}</label>
-                            <select id="editDamagedWarehouseSelect"></select>
                         </div>
                         <div class="inv-damaged-field">
                             <label>${t('inventory.damagedQuantity', 'الكمية التالفة')}</label>
@@ -572,7 +563,6 @@ function renderDamagedEntries(entries) {
         row.innerHTML = `
             <td>${escapeHtml(formatDate(entry.damaged_date || entry.created_at))}</td>
             <td>${escapeHtml(entry.item_name || '')}</td>
-            <td>${escapeHtml(entry.warehouse_name || t('inventory.notSpecified', 'غير محدد'))}</td>
             <td>${Number(entry.quantity || 0).toFixed(4)}</td>
             <td title="${escapeHtml(entry.reason || '')}">${escapeHtml(entry.reason || '')}</td>
             <td>${Number(entry.loss_amount || 0).toFixed(2)}</td>
@@ -585,7 +575,6 @@ function renderDamagedEntries(entries) {
 
 function getDamagedPayload(prefix = '') {
     const itemSelect = prefix ? editDamagedItemSelect : damagedItemSelect;
-    const warehouseSelect = prefix ? editDamagedWarehouseSelect : damagedWarehouseSelect;
     const quantityInput = prefix ? editDamagedQuantityInput : damagedQuantityInput;
     const reasonInput = prefix ? editDamagedReasonInput : damagedReasonInput;
     const batchInput = prefix ? editDamagedBatchInput : damagedBatchInput;
@@ -594,7 +583,6 @@ function getDamagedPayload(prefix = '') {
     const notesInput = prefix ? editDamagedNotesInput : damagedNotesInput;
 
     const itemId = Number(itemSelect?.value || 0);
-    const warehouseId = warehouseSelect?.value ? Number(warehouseSelect.value) : null;
     const quantity = Number(quantityInput?.value || 0);
     const reason = String(reasonInput?.value || '').trim();
     const batchNo = String(batchInput?.value || '').trim();
@@ -618,7 +606,7 @@ function getDamagedPayload(prefix = '') {
         valid: true,
         payload: {
             item_id: itemId,
-            warehouse_id: Number.isFinite(warehouseId) && warehouseId > 0 ? warehouseId : null,
+            warehouse_id: 1,
             quantity,
             reason,
             batch_no: batchNo || null,

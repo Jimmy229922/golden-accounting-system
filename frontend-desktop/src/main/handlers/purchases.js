@@ -343,7 +343,6 @@ function register() {
 
         const transaction = db.transaction(() => {
             // --- REVERSE OLD ---
-            // Delete Details (This will trigger DB cascade to inventory_transactions and auto-revert stock)
             db.prepare('DELETE FROM purchase_invoice_details WHERE invoice_id = ?').run(id);
 
             // --- APPLY NEW ---
@@ -373,7 +372,7 @@ function register() {
                 INSERT INTO purchase_invoice_details (invoice_id, item_id, raw_quantity, raw_weights, quantity, cost_price, total_price)
                 VALUES (@invoice_id, @item_id, @raw_quantity, @raw_weights, @quantity, @cost_price, @total_price)
             `);
-            const updateItemCostPrice = db.prepare('UPDATE items SET cost_price = @cost_price WHERE id = @item_id');
+            const updateItemStock = db.prepare('UPDATE items SET stock_quantity = stock_quantity + @quantity, cost_price = @cost_price WHERE id = @item_id');
 
             for (const item of normalizedItems) {
                 insertDetail.run({
@@ -385,7 +384,11 @@ function register() {
                     cost_price: item.cost_price,
                     total_price: item.total_price
                 });
-                updateItemCostPrice.run({ cost_price: item.cost_price, item_id: item.item_id });
+                updateItemStock.run({ quantity: item.quantity, cost_price: item.cost_price, item_id: item.item_id });
+            }
+
+            for (const item of oldDetails) {
+                db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
             }
         });
 
