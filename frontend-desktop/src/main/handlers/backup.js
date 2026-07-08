@@ -520,6 +520,45 @@ function cleanupFileSilently(filePath) {
     }
 }
 
+function saveBackupStatusSettings(entries = {}) {
+    try {
+        const rows = Object.entries(entries).filter(([key]) => String(key || '').trim() !== '');
+        if (!rows.length) {
+            return;
+        }
+
+        const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+        const transaction = db.transaction((items) => {
+            items.forEach(([key, value]) => {
+                stmt.run(String(key), value == null ? '' : String(value));
+            });
+        });
+        transaction(rows);
+    } catch (_) {
+    }
+}
+
+function readBackupStatusSettings() {
+    try {
+        const keys = [
+            'last_manual_backup_path',
+            'last_manual_backup_at',
+            'last_cloud_backup_status',
+            'last_cloud_backup_at',
+            'last_cloud_backup_error'
+        ];
+        const placeholders = keys.map(() => '?').join(', ');
+        const rows = db.prepare(`SELECT key, value FROM settings WHERE key IN (${placeholders})`).all(...keys);
+        const values = {};
+        rows.forEach((row) => {
+            values[row.key] = row.value;
+        });
+        return values;
+    } catch (_) {
+        return {};
+    }
+}
+
 function verifyRestoreSourceIntegrity(sourcePath) {
     const restoreSourcePath = String(sourcePath || '').trim();
     if (!restoreSourcePath) {
@@ -627,6 +666,16 @@ function register() {
                 prefix: payload.prefix,
                 fileName: buildBackupFileName(CLOUD_BACKUP_FILE_PREFIX, CLOUD_BACKUP_FILE_TAG)
             });
+            const backupTimestamp = new Date().toISOString();
+            saveBackupStatusSettings({
+                last_manual_backup_path: chosenPath,
+                last_manual_backup_at: backupTimestamp,
+                last_cloud_backup_status: cloudResult && cloudResult.success
+                    ? 'success'
+                    : (cloudResult && cloudResult.disabled ? 'disabled' : 'error'),
+                last_cloud_backup_at: cloudResult && cloudResult.success ? backupTimestamp : '',
+                last_cloud_backup_error: cloudResult && cloudResult.success ? '' : (cloudResult && cloudResult.error ? cloudResult.error : '')
+            });
 
             if (payload.requireCloud && !cloudResult.success) {
                 return { success: false, error: cloudResult.error, path: chosenPath, cloud: cloudResult };
@@ -654,15 +703,50 @@ function register() {
             });
 
             if (!cloudResult.success) {
+                saveBackupStatusSettings({
+                    last_cloud_backup_status: cloudResult.disabled ? 'disabled' : 'error',
+                    last_cloud_backup_at: '',
+                    last_cloud_backup_error: cloudResult.error || ''
+                });
                 return { success: false, error: cloudResult.error, cloud: cloudResult };
             }
 
+            saveBackupStatusSettings({
+                last_cloud_backup_status: 'success',
+                last_cloud_backup_at: new Date().toISOString(),
+                last_cloud_backup_error: ''
+            });
+
             return { success: true, cloud: cloudResult };
         } catch (error) {
+            saveBackupStatusSettings({
+                last_cloud_backup_status: 'error',
+                last_cloud_backup_at: '',
+                last_cloud_backup_error: error.message || ''
+            });
             return { success: false, error: error.message };
         } finally {
             cleanupFileSilently(tempFilePath);
         }
+    });
+
+    ipcMain.handle('get-backup-status-summary', async () => {
+        const config = getSupabaseConfig();
+        const savedStatus = readBackupStatusSettings();
+
+        return {
+            success: true,
+            databasePath: dbFilePath,
+            backupRootPath: getSharedBackupRootPath(),
+            cloudConfigured: Boolean(config.enabled),
+            cloudBucketName: config.bucketName || '',
+            cloudPrefix: config.cloudPrefix || '',
+            lastManualBackupPath: savedStatus.last_manual_backup_path || '',
+            lastManualBackupAt: savedStatus.last_manual_backup_at || '',
+            lastCloudBackupStatus: savedStatus.last_cloud_backup_status || 'never',
+            lastCloudBackupAt: savedStatus.last_cloud_backup_at || '',
+            lastCloudBackupError: savedStatus.last_cloud_backup_error || ''
+        };
     });
 
     ipcMain.handle('list-cloud-backups', async (event, payload = {}) => {

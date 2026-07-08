@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { db } = require('../db');
 const { requirePermission } = require('./auth');
+const { markMainWindowClosingForUpdate } = require('../windowManager');
 
 const CUSTOMER_COLLECTION_PENDING_RELATED_TYPE = 'customer_collection_pending';
 const CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE = 'customer_collection_shift_close';
@@ -598,8 +599,20 @@ function register() {
                 return { success: false, error: 'مسار ملف التثبيت غير صالح.' };
             }
 
+            if (!fs.existsSync(targetPath)) {
+                return { success: false, error: 'Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Ù…Ù„Ù Ø§Ù„ØªØ«Ø¨ÙŠØª Ø¨Ø¹Ø¯ Ø§ÙƒØªÙ…Ø§Ù„ Ø§Ù„ØªØ­Ø¯ÙŠØ«.' };
+            }
+
+            app.isQuittingForAppUpdate = true;
+            app.appUpdateInstallerPath = targetPath;
+            markMainWindowClosingForUpdate();
+
             app.once('quit', () => {
-                shell.openPath(targetPath).catch(() => {});
+                const installerToOpen = String(app.appUpdateInstallerPath || targetPath).trim();
+                if (!installerToOpen) {
+                    return;
+                }
+                shell.openPath(installerToOpen).catch(() => {});
             });
 
             app.quit();

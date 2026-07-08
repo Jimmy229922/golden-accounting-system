@@ -12,6 +12,7 @@ let authWindow = null;
 let inviteUnlocked = false;
 let authUnlocked = false;
 let isMainWindowClosingConfirmed = false;
+let isMainWindowClosingForUpdate = false;
 
 function isInviteValid() {
     try {
@@ -208,7 +209,7 @@ function createWindow() {
     // mainWindow.webContents.openDevTools();
 
     mainWindow.on('close', async (event) => {
-        if (isMainWindowClosingConfirmed) {
+        if (isMainWindowClosingConfirmed || isMainWindowClosingForUpdate) {
             return;
         }
 
@@ -245,6 +246,7 @@ function createWindow() {
 
     mainWindow.on('closed', () => {
         isMainWindowClosingConfirmed = false;
+        isMainWindowClosingForUpdate = false;
         mainWindow = null;
     });
 }
@@ -274,7 +276,12 @@ function getMainWindow() {
     return mainWindow;
 }
 
+function markMainWindowClosingForUpdate() {
+    isMainWindowClosingForUpdate = true;
+}
+
 module.exports = {
     openAppFlow,
-    getMainWindow
+    getMainWindow,
+    markMainWindowClosingForUpdate
 };

@@ -248,6 +248,10 @@ let authSessionToken = null;
 let isQuitBackupRunning = false;
 let isQuitBackupCompleted = false;
 
+function isQuittingForAppUpdate() {
+    return Boolean(app.isQuittingForAppUpdate);
+}
+
 function getInviteSettingsMap() {
     const rows = db.prepare(
         "SELECT key, value FROM settings WHERE key IN ('invite_code', 'invite_expiry')"
@@ -435,6 +439,11 @@ app.whenReady().then(() => {
 
 app.on('before-quit', (event) => {
     if (!gotTheLock) return;
+    if (isQuittingForAppUpdate()) {
+        isQuitBackupCompleted = true;
+        isQuitBackupRunning = false;
+        return;
+    }
     if (isQuitBackupCompleted || isQuitBackupRunning) {
         return;
     }

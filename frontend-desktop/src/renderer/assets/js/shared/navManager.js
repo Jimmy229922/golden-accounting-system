@@ -1391,7 +1391,7 @@ function ensureAppUpdateFloatingIndicatorStyles() {
             align-items: center;
             justify-content: center;
             gap: 2px;
-            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.26);
+            box-shadow: 0 8px 16px rgba(15, 23, 42, 0.16);
             z-index: 9999;
             cursor: pointer;
             font-family: inherit;
@@ -1400,7 +1400,7 @@ function ensureAppUpdateFloatingIndicatorStyles() {
 
         .app-update-floating-indicator:hover {
             transform: translateY(-2px);
-            box-shadow: 0 18px 34px rgba(15, 23, 42, 0.3);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
         }
 
         .app-update-floating-indicator.is-hidden {
