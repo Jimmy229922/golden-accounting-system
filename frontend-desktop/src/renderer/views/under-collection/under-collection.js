@@ -7,6 +7,7 @@ const state = {
     totalPages: 1,
     rows: [],
     editingId: null,
+    isSaving: false,
     totalAmount: 0,
     totalCount: 0
 };
@@ -34,6 +35,14 @@ function showMessage(message, type = 'info') {
     }
 
     console.log(message);
+}
+
+function setSubmitButtonLoading(loading) {
+    const submitBtn = document.querySelector('#underCollectionForm .submit-btn');
+    if (!submitBtn) return;
+    submitBtn.disabled = Boolean(loading);
+    submitBtn.style.opacity = loading ? '0.6' : '1';
+    submitBtn.style.cursor = loading ? 'not-allowed' : 'pointer';
 }
 
 function escapeHtml(value) {
@@ -498,6 +507,7 @@ async function toggleCollected(id, isCollected) {
 
 async function saveRecord(event) {
     event.preventDefault();
+    if (state.isSaving) return;
     const selectedRecordDate = document.getElementById('recordDate').value || today();
     const payload = {
         record_date: selectedRecordDate,
@@ -512,37 +522,44 @@ async function saveRecord(event) {
         remaining_value: document.getElementById('remainingValue').value
     };
 
-    if (state.editingId) {
-        payload.id = state.editingId;
-        const result = await window.electronAPI.updateUnderCollectionRecord(payload);
-        if (!result || !result.success) {
-            showMessage((result && result.error) || 'تعذر تعديل السجل', 'error');
+    state.isSaving = true;
+    setSubmitButtonLoading(true);
+    try {
+        if (state.editingId) {
+            payload.id = state.editingId;
+            const result = await window.electronAPI.updateUnderCollectionRecord(payload);
+            if (!result || !result.success) {
+                showMessage((result && result.error) || 'تعذر تعديل السجل', 'error');
+                return;
+            }
+
+            showMessage('تم تعديل السجل بنجاح', 'success');
+            state.editingId = null;
+            document.getElementById('addRecordModal').classList.add('hidden');
+            document.getElementById('underCollectionForm').reset();
+            await loadRecords();
             return;
         }
 
-        showMessage('تم تعديل السجل بنجاح', 'success');
-        state.editingId = null;
-        document.getElementById('addRecordModal').classList.add('hidden');
+        const result = await window.electronAPI.saveUnderCollectionRecord(payload);
+        if (!result || !result.success) {
+            showMessage((result && result.error) || 'تعذر حفظ السجل', 'error');
+            return;
+        }
+
+        showMessage('تم حفظ السجل بنجاح', 'success');
         document.getElementById('underCollectionForm').reset();
+        document.getElementById('recordDate').value = selectedRecordDate;
+        document.getElementById('remainingType').value = 'percent';
+        updateTotalPreview();
+        await refreshDocumentNumber();
+        document.getElementById('statement').focus();
+        state.page = 1;
         await loadRecords();
-        return;
+    } finally {
+        state.isSaving = false;
+        setSubmitButtonLoading(false);
     }
-
-    const result = await window.electronAPI.saveUnderCollectionRecord(payload);
-    if (!result || !result.success) {
-        showMessage((result && result.error) || 'تعذر حفظ السجل', 'error');
-        return;
-    }
-
-    showMessage('تم حفظ السجل بنجاح', 'success');
-    document.getElementById('underCollectionForm').reset();
-    document.getElementById('recordDate').value = selectedRecordDate;
-    document.getElementById('remainingType').value = 'percent';
-    updateTotalPreview();
-    await refreshDocumentNumber();
-    document.getElementById('statement').focus();
-    state.page = 1;
-    await loadRecords();
 }
 
 async function exportPdf() {

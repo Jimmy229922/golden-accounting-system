@@ -231,6 +231,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Backup & Restore API
     backupDatabase: (payload = {}) => invokeChannel('backup-database', payload),
     backupDatabaseToCloud: (payload = {}) => invokeChannel('backup-database-to-cloud', payload),
+    getBackupStatusSummary: () => invokeChannel('get-backup-status-summary'),
     listCloudBackups: (payload = {}) => invokeChannel('list-cloud-backups', payload),
     restoreDatabaseFromCloud: (payload) => invokeChannel('restore-database-from-cloud', payload),
     restoreDatabase: () => invokeChannel('restore-database'),

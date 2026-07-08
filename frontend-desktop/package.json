@@ -1,9 +1,11 @@
 {
   "name": "accounting-system-desktop",
-  "version": "6.2.1",
+  "version": "6.2.2",
   "description": "Professional Accounting System",
   "main": "src/main/main.js",
   "scripts": {
+    "prestart": "node ../scripts/sync-workspace-version.js",
+    "prebuild": "node ../scripts/sync-workspace-version.js",
     "start": "electron .",
     "build": "electron-builder",
     "rebuild": "electron-rebuild -f -w better-sqlite3",

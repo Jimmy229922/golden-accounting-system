@@ -7,6 +7,7 @@
         let entityAutocomplete = null;
         let suggestedVoucherNumber = '';
         let currentEditId = null;
+        let isSubmitting = false;
 
         const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
         const tx = (suffix, fallback = '') => t(`${config.i18nPrefix}.${suffix}`, fallback);
@@ -439,6 +440,9 @@
         async function handleSubmit(e) {
             e.preventDefault();
 
+            if (isSubmitting) return;
+            isSubmitting = true;
+
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${text('toastSaving')}`;
@@ -500,6 +504,7 @@
                 console.error('Error:', error);
                 showToast(text('toastUnexpectedError'), 'error');
             } finally {
+                isSubmitting = false;
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = `<i class="fas fa-save"></i> ${text('submitBtn')}`;
             }

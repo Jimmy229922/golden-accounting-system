@@ -5,6 +5,8 @@ let transDateInput;
 let newTransactionBtn;
 let transactionsById = new Map();
 let ar = {};
+let isSavingTransaction = false;
+let isUpdatingTransaction = false;
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
 const CUSTOMER_COLLECTION_PENDING_RELATED_TYPE = 'customer_collection_pending';
 const CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE = 'customer_collection_shift_close';
@@ -380,6 +382,8 @@ function hideForm() {
 }
 
 async function saveTransaction() {
+    if (isSavingTransaction) return;
+
     const type = document.getElementById('transType').value;
     const amount = parseFloat(document.getElementById('transAmount').value);
     const date = document.getElementById('transDate').value;
@@ -394,19 +398,36 @@ async function saveTransaction() {
         return;
     }
 
-    const result = await window.electronAPI.addTreasuryTransaction({
-        type,
-        amount,
-        date,
-        description
-    });
+    isSavingTransaction = true;
+    const saveBtn = document.querySelector('[data-action="save-transaction"]');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.style.opacity = '0.6';
+        saveBtn.style.cursor = 'not-allowed';
+    }
 
-    if (result.success) {
-        showFinanceToast(t('finance.toast.saveSuccess', 'تم حفظ الحركة بنجاح'), 'success');
-        hideForm();
-        loadFinanceData();
-    } else {
-        showFinanceToast(fmt(t('finance.toast.saveError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
+    try {
+        const result = await window.electronAPI.addTreasuryTransaction({
+            type,
+            amount,
+            date,
+            description
+        });
+
+        if (result.success) {
+            showFinanceToast(t('finance.toast.saveSuccess', 'تم حفظ الحركة بنجاح'), 'success');
+            hideForm();
+            loadFinanceData();
+        } else {
+            showFinanceToast(fmt(t('finance.toast.saveError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
+        }
+    } finally {
+        isSavingTransaction = false;
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.style.opacity = '1';
+            saveBtn.style.cursor = 'pointer';
+        }
     }
 }
 
@@ -442,6 +463,8 @@ function closeEditModal() {
 }
 
 async function updateTransaction() {
+    if (isUpdatingTransaction) return;
+
     const id = document.getElementById('editTransId').value;
     const type = document.getElementById('editTransType').value;
     const amount = parseFloat(document.getElementById('editTransAmount').value);
@@ -453,20 +476,37 @@ async function updateTransaction() {
         return;
     }
 
-    const result = await window.electronAPI.updateTreasuryTransaction({
-        id,
-        type,
-        amount,
-        date,
-        description
-    });
+    isUpdatingTransaction = true;
+    const updateBtn = document.querySelector('[data-action="update-transaction"]');
+    if (updateBtn) {
+        updateBtn.disabled = true;
+        updateBtn.style.opacity = '0.6';
+        updateBtn.style.cursor = 'not-allowed';
+    }
 
-    if (result.success) {
-        showFinanceToast(t('finance.toast.updateSuccess', 'تم تحديث الحركة بنجاح'), 'success');
-        closeEditModal();
-        loadFinanceData();
-    } else {
-        showFinanceToast(fmt(t('finance.toast.updateError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
+    try {
+        const result = await window.electronAPI.updateTreasuryTransaction({
+            id,
+            type,
+            amount,
+            date,
+            description
+        });
+
+        if (result.success) {
+            showFinanceToast(t('finance.toast.updateSuccess', 'تم تحديث الحركة بنجاح'), 'success');
+            closeEditModal();
+            loadFinanceData();
+        } else {
+            showFinanceToast(fmt(t('finance.toast.updateError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
+        }
+    } finally {
+        isUpdatingTransaction = false;
+        if (updateBtn) {
+            updateBtn.disabled = false;
+            updateBtn.style.opacity = '1';
+            updateBtn.style.cursor = 'pointer';
+        }
     }
 }
 

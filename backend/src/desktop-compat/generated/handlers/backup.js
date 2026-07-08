@@ -90,6 +90,110 @@ function encodeStoragePath(pathValue) {
         .join('/');
 }
 
+function extractSupabaseErrorDetails(rawBody) {
+    const text = String(rawBody || '').trim();
+    if (!text) {
+        return '';
+    }
+
+    try {
+        const payload = JSON.parse(text);
+        return String(
+            payload?.message
+            || payload?.error
+            || payload?.error_description
+            || payload?.msg
+            || text
+        ).trim();
+    } catch (_) {
+        return text;
+    }
+}
+
+function translateCloudBackupError(rawError, options = {}) {
+    const statusCode = Number(options.statusCode) || 0;
+    const details = extractSupabaseErrorDetails(options.details || '');
+    const originalMessage = String(rawError || '').trim();
+    const sourceText = `${originalMessage} ${details}`.trim().toLowerCase();
+
+    if (
+        sourceText.includes('not configured') ||
+        sourceText.includes('supabase cloud backup is not configured')
+    ) {
+        return 'الحفظ السحابي غير مفعل لأن إعدادات Supabase غير مضبوطة على هذا الجهاز.';
+    }
+
+    if (
+        sourceText.includes('global fetch is not available') ||
+        sourceText.includes('fetch is not available in this runtime')
+    ) {
+        return 'تعذر تشغيل الرفع السحابي لأن خدمة الاتصال غير متاحة داخل البرنامج.';
+    }
+
+    if (
+        sourceText.includes('exceeds limit') ||
+        sourceText.includes('entity too large') ||
+        sourceText.includes('payload too large') ||
+        statusCode === 413
+    ) {
+        return 'حجم ملف النسخة الاحتياطية أكبر من الحد المسموح للرفع السحابي.';
+    }
+
+    if (
+        statusCode === 401 ||
+        statusCode === 403 ||
+        sourceText.includes('unauthorized') ||
+        sourceText.includes('forbidden') ||
+        sourceText.includes('invalid signature') ||
+        sourceText.includes('jwt') ||
+        sourceText.includes('permission denied') ||
+        sourceText.includes('row-level security')
+    ) {
+        return 'تم رفض الرفع السحابي بسبب مشكلة في صلاحية الوصول أو مفتاح الخدمة.';
+    }
+
+    if (
+        statusCode === 404 ||
+        sourceText.includes('bucket not found') ||
+        sourceText.includes('the resource was not found') ||
+        sourceText.includes('not found')
+    ) {
+        return 'فشل الرفع السحابي لأن حاوية النسخ الاحتياطية غير موجودة أو اسمها غير صحيح.';
+    }
+
+    if (
+        sourceText.includes('econnreset') ||
+        sourceText.includes('etimedout') ||
+        sourceText.includes('timeout') ||
+        sourceText.includes('socket hang up') ||
+        sourceText.includes('fetch failed') ||
+        sourceText.includes('network error') ||
+        sourceText.includes('failed to fetch') ||
+        sourceText.includes('terminated') ||
+        sourceText.includes('enotfound') ||
+        sourceText.includes('eai_again') ||
+        sourceText.includes('econnrefused')
+    ) {
+        return 'تعذر الرفع السحابي بسبب مشكلة في الاتصال بالإنترنت. تحقق من الشبكة ثم أعد المحاولة.';
+    }
+
+    if (
+        sourceText.includes('enoent') ||
+        sourceText.includes('no such file or directory')
+    ) {
+        return 'تعذر العثور على ملف النسخة الاحتياطية قبل رفعه إلى السحابة.';
+    }
+
+    if (
+        sourceText.includes('eacces') ||
+        sourceText.includes('eperm')
+    ) {
+        return 'تعذر الوصول إلى ملف النسخة الاحتياطية بسبب الصلاحيات على هذا الجهاز.';
+    }
+
+    return 'فشل رفع النسخة الاحتياطية إلى السحابة. تحقق من الإعدادات أو الاتصال ثم أعد المحاولة.';
+}
+
 function formatTimestampForFileName(dateValue) {
     const year = String(dateValue.getFullYear());
     const month = String(dateValue.getMonth() + 1).padStart(2, '0');
@@ -309,11 +413,18 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
     const config = getSupabaseConfig();
 
     if (!config.enabled) {
-        return { success: false, disabled: true, error: 'Supabase cloud backup is not configured.' };
+        return {
+            success: false,
+            disabled: true,
+            error: translateCloudBackupError('Supabase cloud backup is not configured.')
+        };
     }
 
     if (typeof fetch !== 'function') {
-        return { success: false, error: 'Global fetch is not available in this runtime.' };
+        return {
+            success: false,
+            error: translateCloudBackupError('Global fetch is not available in this runtime.')
+        };
     }
 
     try {
@@ -321,7 +432,9 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
         if (stat.size > config.maxUploadBytes) {
             return {
                 success: false,
-                error: `Backup file size exceeds limit (${Math.round(config.maxUploadBytes / (1024 * 1024))} MB).`
+                error: translateCloudBackupError(
+                    `Backup file size exceeds limit (${Math.round(config.maxUploadBytes / (1024 * 1024))} MB).`
+                )
             };
         }
 
@@ -351,7 +464,13 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
         if (!response.ok) {
             return {
                 success: false,
-                error: `Supabase upload failed (${response.status}): ${rawBody || response.statusText}`
+                error: translateCloudBackupError(
+                    `Supabase upload failed (${response.status}): ${rawBody || response.statusText}`,
+                    {
+                        statusCode: response.status,
+                        details: rawBody || response.statusText
+                    }
+                )
             };
         }
 
@@ -371,7 +490,10 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
             payload
         };
     } catch (error) {
-        return { success: false, error: error.message };
+        return {
+            success: false,
+            error: translateCloudBackupError(error.message)
+        };
     }
 }
 
@@ -520,6 +642,45 @@ function cleanupFileSilently(filePath) {
     }
 }
 
+function saveBackupStatusSettings(entries = {}) {
+    try {
+        const rows = Object.entries(entries).filter(([key]) => String(key || '').trim() !== '');
+        if (!rows.length) {
+            return;
+        }
+
+        const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+        const transaction = db.transaction((items) => {
+            items.forEach(([key, value]) => {
+                stmt.run(String(key), value == null ? '' : String(value));
+            });
+        });
+        transaction(rows);
+    } catch (_) {
+    }
+}
+
+function readBackupStatusSettings() {
+    try {
+        const keys = [
+            'last_manual_backup_path',
+            'last_manual_backup_at',
+            'last_cloud_backup_status',
+            'last_cloud_backup_at',
+            'last_cloud_backup_error'
+        ];
+        const placeholders = keys.map(() => '?').join(', ');
+        const rows = db.prepare(`SELECT key, value FROM settings WHERE key IN (${placeholders})`).all(...keys);
+        const values = {};
+        rows.forEach((row) => {
+            values[row.key] = row.value;
+        });
+        return values;
+    } catch (_) {
+        return {};
+    }
+}
+
 function verifyRestoreSourceIntegrity(sourcePath) {
     const restoreSourcePath = String(sourcePath || '').trim();
     if (!restoreSourcePath) {
@@ -627,6 +788,16 @@ function register() {
                 prefix: payload.prefix,
                 fileName: buildBackupFileName(CLOUD_BACKUP_FILE_PREFIX, CLOUD_BACKUP_FILE_TAG)
             });
+            const backupTimestamp = new Date().toISOString();
+            saveBackupStatusSettings({
+                last_manual_backup_path: chosenPath,
+                last_manual_backup_at: backupTimestamp,
+                last_cloud_backup_status: cloudResult && cloudResult.success
+                    ? 'success'
+                    : (cloudResult && cloudResult.disabled ? 'disabled' : 'error'),
+                last_cloud_backup_at: cloudResult && cloudResult.success ? backupTimestamp : '',
+                last_cloud_backup_error: cloudResult && cloudResult.success ? '' : (cloudResult && cloudResult.error ? cloudResult.error : '')
+            });
 
             if (payload.requireCloud && !cloudResult.success) {
                 return { success: false, error: cloudResult.error, path: chosenPath, cloud: cloudResult };
@@ -654,15 +825,51 @@ function register() {
             });
 
             if (!cloudResult.success) {
+                saveBackupStatusSettings({
+                    last_cloud_backup_status: cloudResult.disabled ? 'disabled' : 'error',
+                    last_cloud_backup_at: '',
+                    last_cloud_backup_error: cloudResult.error || ''
+                });
                 return { success: false, error: cloudResult.error, cloud: cloudResult };
             }
 
+            saveBackupStatusSettings({
+                last_cloud_backup_status: 'success',
+                last_cloud_backup_at: new Date().toISOString(),
+                last_cloud_backup_error: ''
+            });
+
             return { success: true, cloud: cloudResult };
         } catch (error) {
+            saveBackupStatusSettings({
+                last_cloud_backup_status: 'error',
+                last_cloud_backup_at: '',
+                last_cloud_backup_error: error.message || ''
+            });
             return { success: false, error: error.message };
         } finally {
             cleanupFileSilently(tempFilePath);
         }
+    });
+
+    ipcMain.handle('get-backup-status-summary', async () => {
+        const config = getSupabaseConfig();
+        const savedStatus = readBackupStatusSettings();
+        const dbFilePath = db.name || path.join(app.getPath('userData'), 'accounting.db');
+
+        return {
+            success: true,
+            databasePath: dbFilePath,
+            backupRootPath: getSharedBackupRootPath(),
+            cloudConfigured: Boolean(config.enabled),
+            cloudBucketName: config.bucketName || '',
+            cloudPrefix: config.cloudPrefix || '',
+            lastManualBackupPath: savedStatus.last_manual_backup_path || '',
+            lastManualBackupAt: savedStatus.last_manual_backup_at || '',
+            lastCloudBackupStatus: savedStatus.last_cloud_backup_status || 'never',
+            lastCloudBackupAt: savedStatus.last_cloud_backup_at || '',
+            lastCloudBackupError: savedStatus.last_cloud_backup_error || ''
+        };
     });
 
     ipcMain.handle('list-cloud-backups', async (event, payload = {}) => {

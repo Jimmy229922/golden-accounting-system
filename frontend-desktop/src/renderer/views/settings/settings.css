@@ -461,6 +461,13 @@
             background: linear-gradient(135deg, #0f766e, #14b8a6);
         }
         .btn-action.update-btn:hover { box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
+        .btn-action.update-retry-btn {
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+        }
+        .btn-action.update-retry-btn:hover { box-shadow: 0 4px 12px rgba(239,68,68,0.3); }
+        .btn-action.update-retry-btn[hidden] {
+            display: none !important;
+        }
         .btn-action.restore-btn {
             background: linear-gradient(135deg, #f97316, #ea580c);
         }
@@ -514,12 +521,16 @@
         }
         .info-item {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 12px;
             padding: 14px 18px;
             background: var(--secondary-bg, var(--input-bg));
             border-radius: 12px;
             border: 1px solid var(--card-border);
+        }
+        .info-item-content {
+            min-width: 0;
+            flex: 1;
         }
         .info-item-icon {
             width: 36px;
@@ -542,6 +553,21 @@
             font-size: 0.92rem;
             font-weight: 700;
             color: var(--text-color);
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        .info-item-value.is-path {
+            font-size: 0.84rem;
+            font-weight: 600;
+            direction: ltr;
+            text-align: left;
+        }
+        .info-item-meta {
+            margin-top: 4px;
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            line-height: 1.45;
+            word-break: break-word;
         }
 
         /* ===== Dark Mode Contrast ===== */

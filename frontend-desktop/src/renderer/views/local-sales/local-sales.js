@@ -7,6 +7,7 @@ const state = {
     totalPages: 1,
     rows: [],
     editingId: null,
+    isSaving: false,
     totalAmount: 0,
     totalQuantity: 0,
     totalCount: 0
@@ -38,6 +39,14 @@ function showMessage(message, type = 'info') {
     }
 
     console.log(message);
+}
+
+function setSubmitButtonLoading(loading) {
+    const submitBtn = document.querySelector('#localSalesForm .submit-btn');
+    if (!submitBtn) return;
+    submitBtn.disabled = Boolean(loading);
+    submitBtn.style.opacity = loading ? '0.6' : '1';
+    submitBtn.style.cursor = loading ? 'not-allowed' : 'pointer';
 }
 
 function escapeHtml(value) {
@@ -574,6 +583,7 @@ async function deleteRecord(id) {
 
 async function saveRecord(event) {
     event.preventDefault();
+    if (state.isSaving) return;
     const customerSelect = document.getElementById('customerSelect');
     const customerId = Number(customerSelect?.value || 0);
 
@@ -590,36 +600,43 @@ async function saveRecord(event) {
         statement: document.getElementById('statementInput').value
     };
 
-    if (state.editingId) {
-        payload.id = state.editingId;
-        const result = await window.electronAPI.updateLocalSale(payload);
-        if (!result || !result.success) {
-            showMessage((result && result.error) || 'تعذر تعديل السجل', 'error');
+    state.isSaving = true;
+    setSubmitButtonLoading(true);
+    try {
+        if (state.editingId) {
+            payload.id = state.editingId;
+            const result = await window.electronAPI.updateLocalSale(payload);
+            if (!result || !result.success) {
+                showMessage((result && result.error) || 'تعذر تعديل السجل', 'error');
+                return;
+            }
+
+            showMessage('تم تعديل السجل بنجاح', 'success');
+            state.editingId = null;
+            document.getElementById('addRecordModal').classList.add('hidden');
+            document.getElementById('localSalesForm').reset();
+            await loadRecords();
             return;
         }
 
-        showMessage('تم تعديل السجل بنجاح', 'success');
-        state.editingId = null;
+        const result = await window.electronAPI.saveLocalSale(payload);
+        if (!result || !result.success) {
+            showMessage((result && result.error) || 'تعذر حفظ السجل', 'error');
+            return;
+        }
+
+        showMessage('تم حفظ السجل بنجاح', 'success');
         document.getElementById('addRecordModal').classList.add('hidden');
         document.getElementById('localSalesForm').reset();
+        document.getElementById('recordDate').value = today();
+        document.getElementById('totalInput').value = '';
+        await refreshDocumentNumber();
+        state.page = 1;
         await loadRecords();
-        return;
+    } finally {
+        state.isSaving = false;
+        setSubmitButtonLoading(false);
     }
-
-    const result = await window.electronAPI.saveLocalSale(payload);
-    if (!result || !result.success) {
-        showMessage((result && result.error) || 'تعذر حفظ السجل', 'error');
-        return;
-    }
-
-    showMessage('تم حفظ السجل بنجاح', 'success');
-    document.getElementById('addRecordModal').classList.add('hidden');
-    document.getElementById('localSalesForm').reset();
-    document.getElementById('recordDate').value = today();
-    document.getElementById('totalInput').value = '';
-    await refreshDocumentNumber();
-    state.page = 1;
-    await loadRecords();
 }
 
 async function exportPdf() {

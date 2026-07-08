@@ -404,8 +404,9 @@ async function submitInvoice() {
     if (purchasesState.isSubmitting) return;
     purchasesState.isSubmitting = true;
 
-    const saveBtn = document.querySelector('#invoiceForm .btn-success');
+    const saveBtn = purchasesState.dom.invoiceForm?.querySelector('[data-action="submit-invoice"]');
     if (saveBtn) {
+        saveBtn.disabled = true;
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
     }
@@ -419,6 +420,7 @@ async function submitInvoice() {
     } finally {
         purchasesState.isSubmitting = false;
         if (saveBtn) {
+            saveBtn.disabled = false;
             saveBtn.style.opacity = '1';
             saveBtn.style.cursor = 'pointer';
         }

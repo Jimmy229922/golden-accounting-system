@@ -11,6 +11,8 @@ const GITHUB_REPOSITORY_NAME = 'golden-accounting-system';
 const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases/latest`;
 const GITHUB_RELEASES_PAGE_URL = `https://github.com/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY_NAME}/releases`;
 const APP_UPDATE_PROGRESS_CHANNEL = 'app-update-download-progress';
+const APP_UPDATE_MAX_DOWNLOAD_RETRIES = 3;
+const APP_UPDATE_RETRY_DELAY_MS = 2000;
 let appUpdateProgressState = {
     status: 'idle',
     latestVersion: '',
@@ -18,7 +20,10 @@ let appUpdateProgressState = {
     downloadedBytes: 0,
     totalBytes: 0,
     percent: 0,
-    error: ''
+    error: '',
+    message: '',
+    retryAttempt: 0,
+    maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
 };
 
 function normalizeVersion(versionValue) {
@@ -66,7 +71,7 @@ function getAppUpdateProgressState() {
     const status = String(appUpdateProgressState?.status || 'idle');
     return {
         ...appUpdateProgressState,
-        isRunning: status === 'starting' || status === 'downloading'
+        isRunning: status === 'starting' || status === 'downloading' || status === 'retrying'
     };
 }
 
@@ -126,6 +131,7 @@ function translateAppUpdateError(rawMessage, options = {}) {
     }
 
     if (
+        normalized.includes('terminated') ||
         normalized.includes('econnreset') ||
         normalized.includes('socket hang up') ||
         normalized.includes('aborted')
@@ -148,6 +154,42 @@ function translateAppUpdateError(rawMessage, options = {}) {
     return 'حدث خطأ أثناء فحص التحديث.';
 }
 
+function isRetryableAppUpdateError(error) {
+    const statusCode = Number(error?.statusCode) || 0;
+    if (statusCode === 408 || statusCode === 425 || statusCode === 429) {
+        return true;
+    }
+    if (statusCode >= 500 && statusCode <= 599) {
+        return true;
+    }
+
+    const normalized = String(error?.message || '').trim().toLowerCase();
+    if (!normalized) {
+        return false;
+    }
+
+    return (
+        normalized.includes('terminated') ||
+        normalized.includes('failed to fetch') ||
+        normalized.includes('fetch failed') ||
+        normalized.includes('networkerror') ||
+        normalized.includes('load failed') ||
+        normalized.includes('enotfound') ||
+        normalized.includes('eai_again') ||
+        normalized.includes('getaddrinfo') ||
+        normalized.includes('timeout') ||
+        normalized.includes('timed out') ||
+        normalized.includes('etimedout') ||
+        normalized.includes('econnreset') ||
+        normalized.includes('socket hang up') ||
+        normalized.includes('aborted')
+    );
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function selectWindowsInstallerAsset(assets = []) {
     const validAssets = Array.isArray(assets) ? assets.filter((asset) => {
         const name = String(asset?.name || '');
@@ -164,7 +206,7 @@ function selectWindowsInstallerAsset(assets = []) {
 
 async function fetchLatestReleaseDetails() {
     if (typeof fetch !== 'function') {
-        return { success: false, error: 'خدمة التحديث غير متاحة في هذا الإصدار.' };
+        return { success: false, error: '\u062e\u062f\u0645\u0629 \u0627\u0644\u062a\u062d\u062f\u064a\u062b \u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629 \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u0625\u0635\u062f\u0627\u0631.' };
     }
 
     try {
@@ -181,23 +223,16 @@ async function fetchLatestReleaseDetails() {
         if (!response.ok) {
             return {
                 success: false,
-                error: translateAppUpdateError(payload?.message, {
+                error: translateAppUpdateError(payload?.message || rawBody, {
                     context: 'check',
                     statusCode: response.status
                 })
             };
         }
 
-        if (!response.ok) {
-            return {
-                success: false,
-                error: payload?.message || `تعذر قراءة آخر إصدار من GitHub (${response.status}).`
-            };
-        }
-
         const latestVersion = normalizeVersion(payload.tag_name || payload.name || '');
         if (!latestVersion) {
-            return { success: false, error: 'لم يتم العثور على رقم إصدار صالح داخل GitHub Releases.' };
+            return { success: false, error: '\u0644\u0645 \u064a\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0631\u0642\u0645 \u0625\u0635\u062f\u0627\u0631 \u0635\u0627\u0644\u062d \u062f\u0627\u062e\u0644 GitHub Releases.' };
         }
 
         const installerAsset = selectWindowsInstallerAsset(payload.assets);
@@ -221,7 +256,6 @@ async function fetchLatestReleaseDetails() {
         };
     }
 }
-
 function emitAppUpdateProgress(target, payload = {}) {
     if (!target || typeof target.send !== 'function') {
         return;
@@ -254,7 +288,9 @@ async function downloadFileFromUrl(downloadUrl, destinationPath, onProgress) {
 
     if (!response.ok) {
         const rawBody = await response.text();
-        throw new Error(rawBody || `تعذر تنزيل ملف التحديث (${response.status}).`);
+        const downloadError = new Error(rawBody || `\u062a\u0639\u0630\u0631 \u062a\u0646\u0632\u064a\u0644 \u0645\u0644\u0641 \u0627\u0644\u062a\u062d\u062f\u064a\u062b (${response.status}).`);
+        downloadError.statusCode = response.status;
+        throw downloadError;
     }
 
     const totalBytesRaw = Number(response.headers.get('content-length') || 0);
@@ -318,15 +354,54 @@ async function downloadFileFromUrl(downloadUrl, destinationPath, onProgress) {
         throw error;
     }
 }
+async function downloadFileFromUrlWithArabicErrors(downloadUrl, destinationPath, options = {}) {
+    const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+    const onRetry = typeof options.onRetry === 'function' ? options.onRetry : null;
 
-async function downloadFileFromUrlWithArabicErrors(downloadUrl, destinationPath, onProgress) {
-    try {
-        await downloadFileFromUrl(downloadUrl, destinationPath, onProgress);
-    } catch (error) {
-        throw new Error(translateAppUpdateError(error?.message, { context: 'download' }));
+    for (let attempt = 1; attempt <= APP_UPDATE_MAX_DOWNLOAD_RETRIES; attempt += 1) {
+        try {
+            await downloadFileFromUrl(downloadUrl, destinationPath, (progressPayload) => {
+                if (onProgress) {
+                    onProgress({
+                        ...progressPayload,
+                        retryAttempt: attempt,
+                        maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
+                    });
+                }
+            });
+
+            return {
+                retryAttempt: attempt,
+                maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
+            };
+        } catch (error) {
+            const translatedError = translateAppUpdateError(error?.message, {
+                context: 'download',
+                statusCode: error?.statusCode
+            });
+
+            if (attempt >= APP_UPDATE_MAX_DOWNLOAD_RETRIES || !isRetryableAppUpdateError(error)) {
+                throw new Error(translatedError);
+            }
+
+            if (onRetry) {
+                onRetry({
+                    status: 'retrying',
+                    retryAttempt: attempt + 1,
+                    maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES,
+                    downloadedBytes: 0,
+                    totalBytes: 0,
+                    percent: 0,
+                    error: '',
+                    message: `\u0636\u0639\u0641 \u0641\u064a \u0627\u0644\u0627\u062a\u0635\u0627\u0644. \u062c\u0627\u0631\u064a \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629 ${attempt + 1} \u0645\u0646 ${APP_UPDATE_MAX_DOWNLOAD_RETRIES}...`,
+                    lastError: translatedError
+                });
+            }
+
+            await sleep(APP_UPDATE_RETRY_DELAY_MS);
+        }
     }
 }
-
 function register() {
     // --- Settings Handlers ---
     ipcMain.handle('get-settings', () => {
@@ -396,8 +471,9 @@ function register() {
         if (!releaseResult.downloadUrl || !releaseResult.assetName) {
             return {
                 success: false,
-                error: 'تم العثور على إصدار جديد لكن بدون ملف تثبيت لويندوز داخل GitHub Releases.',
-                releaseUrl: releaseResult.releaseUrl
+                error: '\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0625\u0635\u062f\u0627\u0631 \u062c\u062f\u064a\u062f \u0644\u0643\u0646 \u0628\u062f\u0648\u0646 \u0645\u0644\u0641 \u062a\u062b\u0628\u064a\u062a \u0644\u0648\u064a\u0646\u062f\u0648\u0632 \u062f\u0627\u062e\u0644 GitHub Releases.',
+                releaseUrl: releaseResult.releaseUrl,
+                openReleasePage: true
             };
         }
 
@@ -413,7 +489,10 @@ function register() {
                 downloadedBytes: 0,
                 totalBytes: 0,
                 percent: 0,
-                error: ''
+                error: '',
+                message: '\u062c\u0627\u0631\u064a \u0628\u062f\u0621 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b...',
+                retryAttempt: 1,
+                maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
             });
             emitAppUpdateProgress(event.sender, {
                 status: 'starting',
@@ -421,35 +500,63 @@ function register() {
                 assetName: releaseResult.assetName,
                 downloadedBytes: 0,
                 totalBytes: 0,
-                percent: 0
+                percent: 0,
+                message: '\u062c\u0627\u0631\u064a \u0628\u062f\u0621 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b...',
+                retryAttempt: 1,
+                maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
             });
-            await downloadFileFromUrlWithArabicErrors(releaseResult.downloadUrl, targetPath, (progressPayload) => {
-                setAppUpdateProgressState({
-                    status: 'downloading',
-                    latestVersion: releaseResult.latestVersion,
-                    assetName: releaseResult.assetName,
-                    ...progressPayload,
-                    error: ''
-                });
-                emitAppUpdateProgress(event.sender, {
-                    status: 'downloading',
-                    latestVersion: releaseResult.latestVersion,
-                    assetName: releaseResult.assetName,
-                    ...progressPayload
-                });
+
+            const downloadMeta = await downloadFileFromUrlWithArabicErrors(releaseResult.downloadUrl, targetPath, {
+                onProgress: (progressPayload) => {
+                    setAppUpdateProgressState({
+                        status: 'downloading',
+                        latestVersion: releaseResult.latestVersion,
+                        assetName: releaseResult.assetName,
+                        ...progressPayload,
+                        error: '',
+                        message: ''
+                    });
+                    emitAppUpdateProgress(event.sender, {
+                        status: 'downloading',
+                        latestVersion: releaseResult.latestVersion,
+                        assetName: releaseResult.assetName,
+                        ...progressPayload,
+                        message: ''
+                    });
+                },
+                onRetry: (retryPayload) => {
+                    setAppUpdateProgressState({
+                        status: 'retrying',
+                        latestVersion: releaseResult.latestVersion,
+                        assetName: releaseResult.assetName,
+                        ...retryPayload
+                    });
+                    emitAppUpdateProgress(event.sender, {
+                        latestVersion: releaseResult.latestVersion,
+                        assetName: releaseResult.assetName,
+                        ...retryPayload
+                    });
+                }
             });
+
             setAppUpdateProgressState({
                 status: 'completed',
                 latestVersion: releaseResult.latestVersion,
                 assetName: releaseResult.assetName,
                 percent: 100,
-                error: ''
+                error: '',
+                message: '\u0627\u0643\u062a\u0645\u0644 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b.',
+                retryAttempt: downloadMeta.retryAttempt,
+                maxRetries: downloadMeta.maxRetries
             });
             emitAppUpdateProgress(event.sender, {
                 status: 'completed',
                 latestVersion: releaseResult.latestVersion,
                 assetName: releaseResult.assetName,
-                percent: 100
+                percent: 100,
+                message: '\u0627\u0643\u062a\u0645\u0644 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b.',
+                retryAttempt: downloadMeta.retryAttempt,
+                maxRetries: downloadMeta.maxRetries
             });
 
             return {
@@ -465,18 +572,21 @@ function register() {
                 status: 'error',
                 latestVersion: releaseResult.latestVersion,
                 assetName: releaseResult.assetName,
-                error: error.message
+                error: error.message,
+                message: error.message
             });
             emitAppUpdateProgress(event.sender, {
                 status: 'error',
                 latestVersion: releaseResult.latestVersion,
                 assetName: releaseResult.assetName,
-                error: error.message
+                error: error.message,
+                message: error.message
             });
             return {
                 success: false,
                 error: error.message,
-                releaseUrl: releaseResult.releaseUrl
+                releaseUrl: releaseResult.releaseUrl,
+                openReleasePage: false
             };
         }
     });
@@ -735,4 +845,5 @@ function register() {
 }
 
 module.exports = { register };
+
 

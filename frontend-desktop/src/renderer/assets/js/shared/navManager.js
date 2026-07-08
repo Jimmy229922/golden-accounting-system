@@ -1542,7 +1542,7 @@ function renderAppUpdateFloatingIndicator(progress = {}) {
     const safePercent = Number.isFinite(percentValue) ? Math.max(0, Math.min(100, Math.round(percentValue))) : 0;
     const errorMessage = String(progress.error || '').trim();
 
-    if (status !== 'starting' && status !== 'downloading' && status !== 'completed' && status !== 'error') {
+    if (status !== 'starting' && status !== 'downloading' && status !== 'retrying' && status !== 'completed' && status !== 'error') {
         clearAppUpdateFloatingIndicatorPoll();
         hideAppUpdateFloatingIndicator();
         return;
@@ -1563,6 +1563,23 @@ function renderAppUpdateFloatingIndicator(progress = {}) {
             state.lastErrorMessage = errorMessage;
             notifyGlobalAppUpdate(errorMessage, 'error');
         }
+        return;
+    }
+
+    if (status === 'retrying') {
+        const retryAttempt = Number(progress.retryAttempt) || 0;
+        const maxRetries = Number(progress.maxRetries) || 0;
+        const retryMessage = String(progress.message || '').trim() || 'ضعف في الاتصال. جاري إعادة المحاولة...';
+        state.lastErrorMessage = '';
+        if (state.icon) state.icon.textContent = 'R';
+        if (state.percent) {
+            state.percent.textContent = retryAttempt > 0 && maxRetries > 0
+                ? `${retryAttempt}/${maxRetries}`
+                : 'R';
+        }
+        state.element.title = retryMessage;
+        state.element.setAttribute('aria-label', retryMessage);
+        scheduleAppUpdateFloatingIndicatorPoll();
         return;
     }
 

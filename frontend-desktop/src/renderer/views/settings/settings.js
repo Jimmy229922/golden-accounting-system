@@ -1,8 +1,10 @@
 let companyNameInput, companyAddressInput, companyPhoneInput, invoiceFooterInput, settingsForm;
-let backupBtn, restoreBtn, updateBtn, backupStatusEl, restoreStatusEl, updateStatusEl, themeToggleBtn;
+let backupBtn, restoreBtn, updateBtn, updateRetryBtn, backupStatusEl, restoreStatusEl, updateStatusEl, themeToggleBtn;
 let updateProgressWrapEl, updateProgressBarEl, updateProgressMetaEl;
 let profileImageInput, profileImagePreview, removeImageBtn, saveBtn;
 let changeLogLastModifiedEl, changeLogModifiedByEl, changeLogSummaryEl, appVersionValueEl;
+let appUpdateStatusValueEl, appUpdateStatusMetaEl, localBackupValueEl, localBackupMetaEl;
+let cloudBackupStatusValueEl, cloudBackupStatusMetaEl, databasePathValueEl, backupFolderValueEl;
 let saveStateTimer = null;
 let unsubscribeAppUpdateProgress = null;
 let appUpdateProgressPollTimer = null;
@@ -33,7 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderPage();
     initializeElements();
     await loadSettings();
-    await loadAppVersion();
+    await loadSystemStatusSummary();
     } catch (error) {
         console.error('Initialization Error:', error);
         if (window.toast && typeof window.toast.error === 'function') {
@@ -196,6 +198,7 @@ function renderPage() {
                         </div>
                         <p class="action-card-desc">${t('settings.updateDesc', 'تحقق من آخر إصدار من GitHub Releases ونزل ملف التحديث على جهاز العميل.')}</p>
                         <button id="updateBtn" class="btn-action update-btn"><i class="fas fa-cloud-download-alt"></i> <span class="update-btn-text">${t('settings.updateNow', 'فحص وتنزيل التحديث')}</span></button>
+                        <button id="updateRetryBtn" class="btn-action update-retry-btn" hidden><i class="fas fa-redo-alt"></i> <span class="update-retry-btn-text">إعادة المحاولة</span></button>
                         <div id="updateProgressWrap" class="update-progress" hidden>
                             <div class="update-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                                 <div id="updateProgressBar" class="update-progress-fill"></div>
@@ -226,16 +229,47 @@ function renderPage() {
                 <div class="system-info-grid">
                     <div class="info-item">
                         <div class="info-item-icon"><i class="fas fa-code-branch"></i></div>
-                        <div>
+                        <div class="info-item-content">
                             <div class="info-item-label">${t('settings.version', 'إصدار التطبيق')}</div>
                             <div class="info-item-value" id="appVersionValue">-</div>
                         </div>
                     </div>
                     <div class="info-item">
-                        <div class="info-item-icon"><i class="fas fa-check-circle"></i></div>
-                        <div>
-                            <div class="info-item-label">${t('settings.connectionStatus', 'حالة الاتصال')}</div>
-                            <div class="info-item-value" style="color: #10b981;">${t('settings.connected', 'متصل')}</div>
+                        <div class="info-item-icon"><i class="fas fa-download"></i></div>
+                        <div class="info-item-content">
+                            <div class="info-item-label">حالة التحديث</div>
+                            <div class="info-item-value" id="appUpdateStatusValue">-</div>
+                            <div class="info-item-meta" id="appUpdateStatusMeta">-</div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-item-icon"><i class="fas fa-hdd"></i></div>
+                        <div class="info-item-content">
+                            <div class="info-item-label">آخر نسخة محلية</div>
+                            <div class="info-item-value" id="localBackupValue">-</div>
+                            <div class="info-item-meta" id="localBackupMeta">-</div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-item-icon"><i class="fas fa-cloud"></i></div>
+                        <div class="info-item-content">
+                            <div class="info-item-label">الحفظ السحابي</div>
+                            <div class="info-item-value" id="cloudBackupStatusValue">-</div>
+                            <div class="info-item-meta" id="cloudBackupStatusMeta">-</div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-item-icon"><i class="fas fa-database"></i></div>
+                        <div class="info-item-content">
+                            <div class="info-item-label">مسار قاعدة البيانات</div>
+                            <div class="info-item-value is-path" id="databasePathValue">-</div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-item-icon"><i class="fas fa-folder-open"></i></div>
+                        <div class="info-item-content">
+                            <div class="info-item-label">مجلد النسخ الاحتياطية</div>
+                            <div class="info-item-value is-path" id="backupFolderValue">-</div>
                         </div>
                     </div>
                 </div>
@@ -253,6 +287,7 @@ function initializeElements() {
     backupBtn = document.getElementById('backupBtn');
     restoreBtn = document.getElementById('restoreBtn');
     updateBtn = document.getElementById('updateBtn');
+    updateRetryBtn = document.getElementById('updateRetryBtn');
     backupStatusEl = document.getElementById('backupStatus');
     restoreStatusEl = document.getElementById('restoreStatus');
     updateStatusEl = document.getElementById('updateStatus');
@@ -268,12 +303,23 @@ function initializeElements() {
     changeLogModifiedByEl = document.getElementById('settingsAuditModifiedBy');
     changeLogSummaryEl = document.getElementById('settingsAuditSummary');
     appVersionValueEl = document.getElementById('appVersionValue');
+    appUpdateStatusValueEl = document.getElementById('appUpdateStatusValue');
+    appUpdateStatusMetaEl = document.getElementById('appUpdateStatusMeta');
+    localBackupValueEl = document.getElementById('localBackupValue');
+    localBackupMetaEl = document.getElementById('localBackupMeta');
+    cloudBackupStatusValueEl = document.getElementById('cloudBackupStatusValue');
+    cloudBackupStatusMetaEl = document.getElementById('cloudBackupStatusMeta');
+    databasePathValueEl = document.getElementById('databasePathValue');
+    backupFolderValueEl = document.getElementById('backupFolderValue');
 
     settingsForm.addEventListener('submit', saveSettings);
     backupBtn.addEventListener('click', handleBackup);
     restoreBtn.addEventListener('click', handleRestore);
     if (updateBtn) {
         updateBtn.addEventListener('click', handleAppUpdate);
+    }
+    if (updateRetryBtn) {
+        updateRetryBtn.addEventListener('click', handleAppUpdate);
     }
     bindAppUpdateProgress();
     syncAppUpdateProgressState();
@@ -324,6 +370,146 @@ async function loadAppVersion() {
         const result = await window.electronAPI.getAppVersion();
         if (result && result.success && result.version) {
             appVersionValueEl.textContent = result.version;
+        }
+    } catch (_) {
+    }
+}
+
+function setInfoText(element, value) {
+    if (!element) return;
+    element.textContent = value || '-';
+}
+
+function formatSystemDateTime(rawValue) {
+    const value = String(rawValue || '').trim();
+    if (!value) return '';
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+}
+
+function buildSystemUpdateStatus(progressState = {}) {
+    const status = String(progressState?.status || 'idle');
+    if (status === 'downloading') {
+        const percent = Number(progressState?.percent);
+        return {
+            value: 'جارٍ تنزيل التحديث',
+            meta: Number.isFinite(percent) ? `${Math.max(0, Math.min(100, percent))}%` : 'يتم تنزيل الملف الآن'
+        };
+    }
+
+    if (status === 'retrying') {
+        return {
+            value: 'جارٍ إعادة المحاولة',
+            meta: progressState?.message || 'ضعف في الاتصال أثناء تنزيل التحديث'
+        };
+    }
+
+    if (status === 'completed') {
+        return {
+            value: 'تم تنزيل آخر تحديث',
+            meta: progressState?.latestVersion ? `الإصدار ${progressState.latestVersion}` : 'الملف جاهز للتثبيت'
+        };
+    }
+
+    if (status === 'error') {
+        return {
+            value: 'فشل آخر تحديث',
+            meta: progressState?.error || 'حدث خطأ أثناء تنزيل التحديث'
+        };
+    }
+
+    if (status === 'starting') {
+        return {
+            value: 'بدء تنزيل التحديث',
+            meta: 'جارٍ تجهيز ملف التحديث'
+        };
+    }
+
+    return {
+        value: 'جاهز',
+        meta: 'لا يوجد تنزيل تحديث جارٍ الآن'
+    };
+}
+
+function buildCloudBackupStatus(summary = {}) {
+    const configured = Boolean(summary?.cloudConfigured);
+    const lastStatus = String(summary?.lastCloudBackupStatus || 'never');
+    const lastCloudAt = formatSystemDateTime(summary?.lastCloudBackupAt);
+    const lastCloudError = String(summary?.lastCloudBackupError || '').trim();
+
+    if (!configured) {
+        return {
+            value: 'غير مفعل',
+            meta: 'إعدادات Supabase غير مضبوطة على هذا الجهاز'
+        };
+    }
+
+    if (lastStatus === 'success') {
+        return {
+            value: 'مفعل',
+            meta: lastCloudAt ? `آخر رفع ناجح: ${lastCloudAt}` : 'آخر رفع ناجح'
+        };
+    }
+
+    if (lastStatus === 'error') {
+        return {
+            value: 'مفعل مع خطأ أخير',
+            meta: lastCloudError || 'فشلت آخر محاولة رفع سحابي'
+        };
+    }
+
+    if (lastStatus === 'disabled') {
+        return {
+            value: 'غير مفعل',
+            meta: lastCloudError || 'الحفظ السحابي غير متاح حاليًا'
+        };
+    }
+
+    return {
+        value: 'مفعل',
+        meta: 'لم يتم تسجيل رفع سحابي بعد'
+    };
+}
+
+async function loadSystemStatusSummary() {
+    await loadAppVersion();
+
+    if (!window.electronAPI) {
+        return;
+    }
+
+    try {
+        if (typeof window.electronAPI.getAppUpdateProgressState === 'function') {
+            const progressResult = await window.electronAPI.getAppUpdateProgressState();
+            const progressInfo = buildSystemUpdateStatus(progressResult?.progress || {});
+            setInfoText(appUpdateStatusValueEl, progressInfo.value);
+            setInfoText(appUpdateStatusMetaEl, progressInfo.meta);
+        }
+
+        if (typeof window.electronAPI.getBackupStatusSummary === 'function') {
+            const backupSummary = await window.electronAPI.getBackupStatusSummary();
+            if (backupSummary && backupSummary.success) {
+                const lastLocalAt = formatSystemDateTime(backupSummary.lastManualBackupAt);
+                setInfoText(localBackupValueEl, lastLocalAt || 'لا توجد نسخة مسجلة بعد');
+                setInfoText(localBackupMetaEl, backupSummary.lastManualBackupPath || 'لم يتم حفظ نسخة محلية حتى الآن');
+
+                const cloudInfo = buildCloudBackupStatus(backupSummary);
+                setInfoText(cloudBackupStatusValueEl, cloudInfo.value);
+                setInfoText(cloudBackupStatusMetaEl, cloudInfo.meta);
+
+                setInfoText(databasePathValueEl, backupSummary.databasePath || '-');
+                setInfoText(backupFolderValueEl, backupSummary.backupRootPath || '-');
+            }
         }
     } catch (_) {
     }
@@ -552,6 +738,11 @@ function setUpdateButtonState(state, buttonText = '') {
     if (textEl) textEl.textContent = buttonText || t('settings.updateNow', 'فحص وتنزيل التحديث');
 }
 
+function setUpdateRetryButtonVisibility(visible) {
+    if (!updateRetryBtn) return;
+    updateRetryBtn.hidden = !visible;
+}
+
 function bindAppUpdateProgress() {
     if (unsubscribeAppUpdateProgress) {
         unsubscribeAppUpdateProgress();
@@ -622,10 +813,23 @@ function formatUpdateBytes(bytes) {
 }
 
 function buildUpdateProgressMeta(progressPayload) {
+    const progressStatus = String(progressPayload?.status || '');
     const percentValue = Number(progressPayload?.percent);
     const hasPercent = Number.isFinite(percentValue);
     const downloadedBytes = Number(progressPayload?.downloadedBytes) || 0;
     const totalBytes = Number(progressPayload?.totalBytes) || 0;
+    const retryAttempt = Number(progressPayload?.retryAttempt) || 0;
+    const maxRetries = Number(progressPayload?.maxRetries) || 0;
+
+    if (progressStatus === 'retrying') {
+        if (progressPayload?.message) {
+            return String(progressPayload.message);
+        }
+        if (retryAttempt > 0 && maxRetries > 0) {
+            return `جاري إعادة المحاولة ${retryAttempt} من ${maxRetries}`;
+        }
+        return 'جاري إعادة المحاولة...';
+    }
 
     if (hasPercent && totalBytes > 0) {
         return `${percentValue}% - ${formatUpdateBytes(downloadedBytes)} / ${formatUpdateBytes(totalBytes)}`;
@@ -644,7 +848,7 @@ function buildUpdateProgressMeta(progressPayload) {
 
 function handleAppUpdateProgress(progressPayload = {}) {
     const progressStatus = String(progressPayload.status || '');
-    if (!isAppUpdateDownloadRunning && progressStatus !== 'completed' && progressStatus !== 'error') {
+    if (!isAppUpdateDownloadRunning && progressStatus !== 'completed' && progressStatus !== 'error' && progressStatus !== 'retrying') {
         return;
     }
 
@@ -658,11 +862,27 @@ function handleAppUpdateProgress(progressPayload = {}) {
 
     if (progressPayload.status === 'downloading' || progressPayload.status === 'starting') {
         isAppUpdateDownloadRunning = true;
+        setUpdateRetryButtonVisibility(false);
         const statusText = safePercent > 0
             ? `جاري تنزيل التحديث... ${safePercent}%`
             : 'جاري تنزيل التحديث...';
         setStatus(updateStatusEl, statusText);
         setUpdateButtonState('loading', 'جاري تنزيل التحديث...');
+        const statusInfo = buildSystemUpdateStatus(progressPayload);
+        setInfoText(appUpdateStatusValueEl, statusInfo.value);
+        setInfoText(appUpdateStatusMetaEl, statusInfo.meta);
+        scheduleAppUpdateProgressPolling();
+        return;
+    }
+
+    if (progressStatus === 'retrying') {
+        isAppUpdateDownloadRunning = true;
+        setUpdateRetryButtonVisibility(false);
+        setStatus(updateStatusEl, progressPayload.message || 'ضعف في الاتصال. جاري إعادة المحاولة...');
+        setUpdateButtonState('loading', 'جاري إعادة المحاولة...');
+        const statusInfo = buildSystemUpdateStatus(progressPayload);
+        setInfoText(appUpdateStatusValueEl, statusInfo.value);
+        setInfoText(appUpdateStatusMetaEl, statusInfo.meta);
         scheduleAppUpdateProgressPolling();
         return;
     }
@@ -670,7 +890,11 @@ function handleAppUpdateProgress(progressPayload = {}) {
     if (progressStatus === 'error') {
         isAppUpdateDownloadRunning = false;
         setUpdateButtonState('idle');
+        setUpdateRetryButtonVisibility(true);
         setStatus(updateStatusEl, progressPayload.error || 'تعذر تنزيل ملف التحديث.', true);
+        const statusInfo = buildSystemUpdateStatus(progressPayload);
+        setInfoText(appUpdateStatusValueEl, statusInfo.value);
+        setInfoText(appUpdateStatusMetaEl, statusInfo.meta);
         stopAppUpdateProgressPolling();
         return;
     }
@@ -678,6 +902,10 @@ function handleAppUpdateProgress(progressPayload = {}) {
     if (progressStatus === 'completed') {
         isAppUpdateDownloadRunning = false;
         setUpdateButtonState('idle');
+        setUpdateRetryButtonVisibility(false);
+        const statusInfo = buildSystemUpdateStatus(progressPayload);
+        setInfoText(appUpdateStatusValueEl, statusInfo.value);
+        setInfoText(appUpdateStatusMetaEl, statusInfo.meta);
         stopAppUpdateProgressPolling();
     }
 }
@@ -697,8 +925,9 @@ async function syncAppUpdateProgressState() {
         const progressState = result.progress;
         const progressStatus = String(progressState.status || 'idle');
 
-        if (progressStatus === 'starting' || progressStatus === 'downloading') {
+        if (progressStatus === 'starting' || progressStatus === 'downloading' || progressStatus === 'retrying') {
             isAppUpdateDownloadRunning = true;
+            setUpdateRetryButtonVisibility(false);
             handleAppUpdateProgress(progressState);
             scheduleAppUpdateProgressPolling();
             return;
@@ -712,6 +941,10 @@ async function syncAppUpdateProgressState() {
                 percent: 100
             }));
             setUpdateButtonState('idle');
+            setUpdateRetryButtonVisibility(false);
+            const statusInfo = buildSystemUpdateStatus(progressState);
+            setInfoText(appUpdateStatusValueEl, statusInfo.value);
+            setInfoText(appUpdateStatusMetaEl, statusInfo.meta);
             stopAppUpdateProgressPolling();
             return;
         }
@@ -719,12 +952,17 @@ async function syncAppUpdateProgressState() {
         if (progressStatus === 'error') {
             isAppUpdateDownloadRunning = false;
             setUpdateButtonState('idle');
+            setUpdateRetryButtonVisibility(true);
             setStatus(updateStatusEl, progressState.error || 'تعذر تنزيل ملف التحديث.', true);
+            const statusInfo = buildSystemUpdateStatus(progressState);
+            setInfoText(appUpdateStatusValueEl, statusInfo.value);
+            setInfoText(appUpdateStatusMetaEl, statusInfo.meta);
             stopAppUpdateProgressPolling();
             return;
         }
 
         isAppUpdateDownloadRunning = false;
+        setUpdateRetryButtonVisibility(false);
         stopAppUpdateProgressPolling();
     } catch (_) {
         stopAppUpdateProgressPolling();
@@ -746,18 +984,20 @@ async function handleBackup() {
             } else if (window.toast && typeof window.toast.success === 'function') {
                 window.toast.success('تم الحفظ محليًا وعلى السحابة بنجاح.');
             }
+            await loadSystemStatusSummary();
             return;
         }
 
         const cloudError = result.cloud && result.cloud.error
             ? result.cloud.error
             : 'تعذر رفع النسخة للسحابة.';
-        setStatus(backupStatusEl, `${localBackupMessage} (فشل الحفظ السحابي)`);
+        setStatus(backupStatusEl, `${localBackupMessage} (فشل الحفظ السحابي: ${cloudError})`);
         if (window.showToast && typeof window.showToast === 'function') {
             window.showToast(`تم الحفظ المحلي بنجاح، لكن فشل الحفظ السحابي: ${cloudError}`, 'warning');
         } else if (window.toast && typeof window.toast.error === 'function') {
             window.toast.error(`تم الحفظ المحلي بنجاح، لكن فشل الحفظ السحابي: ${cloudError}`);
         }
+        await loadSystemStatusSummary();
     } else if (result.canceled) {
         setStatus(backupStatusEl, t('settings.status.operationCanceled'));
     } else {
@@ -766,6 +1006,7 @@ async function handleBackup() {
             fmt(t('settings.status.backupFailed'), { error: result.error || 'Unknown error' }),
             true
         );
+        await loadSystemStatusSummary();
     }
 }
 
@@ -809,13 +1050,17 @@ async function handleAppUpdate() {
 
     try {
         isAppUpdateDownloadRunning = false;
+        setUpdateRetryButtonVisibility(false);
         resetUpdateProgress();
         setUpdateButtonState('loading', 'جاري فحص التحديث...');
         setStatus(updateStatusEl, 'جاري فحص آخر إصدار من GitHub Releases...');
 
         const checkResult = await window.electronAPI.checkAppUpdate();
         if (!checkResult || !checkResult.success) {
+            setUpdateRetryButtonVisibility(true);
             setStatus(updateStatusEl, checkResult?.error || 'تعذر فحص التحديث.', true);
+            setInfoText(appUpdateStatusValueEl, 'فشل فحص التحديث');
+            setInfoText(appUpdateStatusMetaEl, checkResult?.error || 'تعذر الوصول إلى معلومات الإصدار');
             return;
         }
 
@@ -824,7 +1069,10 @@ async function handleAppUpdate() {
                 ? `أنت تستخدم أحدث إصدار (${checkResult.currentVersion}).`
                 : 'أنت تستخدم أحدث إصدار.';
             resetUpdateProgress();
+            setUpdateRetryButtonVisibility(false);
             setStatus(updateStatusEl, latestMessage);
+            setInfoText(appUpdateStatusValueEl, 'أحدث إصدار مثبت');
+            setInfoText(appUpdateStatusMetaEl, checkResult.currentVersion ? `الإصدار الحالي ${checkResult.currentVersion}` : latestMessage);
             if (window.showToast) window.showToast(latestMessage, 'success');
             return;
         }
@@ -840,6 +1088,7 @@ async function handleAppUpdate() {
             isAppUpdateDownloadRunning = false;
             setUpdateProgressVisibility(true);
             setUpdateProgress(100, '100%');
+            setUpdateRetryButtonVisibility(false);
             const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} بنجاح. سيتم الآن إغلاق البرنامج وبدء التثبيت: ${downloadResult.path}`.trim();
             setStatus(updateStatusEl, successMessage);
             if (window.showToast) window.showToast('تم تنزيل التحديث. سيتم الآن إغلاق البرنامج وبدء التثبيت.', 'success');
@@ -850,16 +1099,22 @@ async function handleAppUpdate() {
         }
 
         isAppUpdateDownloadRunning = false;
+        setUpdateRetryButtonVisibility(true);
         const errorMessage = downloadResult?.error || 'تعذر تنزيل ملف التحديث.';
         setStatus(updateStatusEl, errorMessage, true);
-        if (downloadResult?.releaseUrl && typeof window.electronAPI.openAppReleasePage === 'function') {
+        setInfoText(appUpdateStatusValueEl, 'فشل تنزيل التحديث');
+        setInfoText(appUpdateStatusMetaEl, errorMessage);
+        if (downloadResult?.openReleasePage && downloadResult?.releaseUrl && typeof window.electronAPI.openAppReleasePage === 'function') {
             await window.electronAPI.openAppReleasePage();
         }
         if (window.showToast) window.showToast(errorMessage, 'error');
     } catch (error) {
         isAppUpdateDownloadRunning = false;
+        setUpdateRetryButtonVisibility(true);
         const fallbackMessage = error.message || 'حدث خطأ أثناء التحديث.';
         setStatus(updateStatusEl, fallbackMessage, true);
+        setInfoText(appUpdateStatusValueEl, 'فشل التحديث');
+        setInfoText(appUpdateStatusMetaEl, fallbackMessage);
         if (window.showToast) window.showToast(fallbackMessage, 'error');
     } finally {
         isAppUpdateDownloadRunning = false;

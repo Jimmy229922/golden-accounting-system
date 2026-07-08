@@ -1080,8 +1080,9 @@ async function submitInvoice() {
     if (salesState.isSubmitting) return;
     salesState.isSubmitting = true;
 
-    const saveBtn = document.querySelector('#invoiceForm .btn-success');
+    const saveBtn = salesState.dom.invoiceForm?.querySelector('[data-action="submit-invoice"]');
     if (saveBtn) {
+        saveBtn.disabled = true;
         saveBtn.style.opacity = '0.6';
         saveBtn.style.cursor = 'not-allowed';
     }
@@ -1095,6 +1096,7 @@ async function submitInvoice() {
     } finally {
         salesState.isSubmitting = false;
         if (saveBtn) {
+            saveBtn.disabled = false;
             saveBtn.style.opacity = '1';
             saveBtn.style.cursor = 'pointer';
         }

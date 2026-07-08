@@ -7,6 +7,7 @@ const state = {
     totalPages: 1,
     rows: [],
     editingId: null,
+    isSaving: false,
     totalAmount: 0,
     totalCount: 0
 };
@@ -34,6 +35,14 @@ function showMessage(message, type = 'info') {
     }
 
     console.log(message);
+}
+
+function setSubmitButtonLoading(loading) {
+    const submitBtn = document.querySelector('#pettyForm .submit-btn');
+    if (!submitBtn) return;
+    submitBtn.disabled = Boolean(loading);
+    submitBtn.style.opacity = loading ? '0.6' : '1';
+    submitBtn.style.cursor = loading ? 'not-allowed' : 'pointer';
 }
 
 function formatMoney(value) {
@@ -395,6 +404,7 @@ async function deleteExpense(id) {
 
 async function saveExpense(event) {
     event.preventDefault();
+    if (state.isSaving) return;
     const payload = {
         expense_date: document.getElementById('expenseDate').value || today(),
         amount: document.getElementById('amount').value,
@@ -402,35 +412,42 @@ async function saveExpense(event) {
         notes: document.getElementById('notes').value
     };
 
-    if (state.editingId) {
-        payload.id = state.editingId;
-        const result = await window.electronAPI.updateInspectionExpense(payload);
-        if (!result || !result.success) {
-            showMessage((result && result.error) || 'تعذر تعديل الفحص', 'error');
+    state.isSaving = true;
+    setSubmitButtonLoading(true);
+    try {
+        if (state.editingId) {
+            payload.id = state.editingId;
+            const result = await window.electronAPI.updateInspectionExpense(payload);
+            if (!result || !result.success) {
+                showMessage((result && result.error) || 'تعذر تعديل الفحص', 'error');
+                return;
+            }
+
+            showMessage('تم تعديل الفحص بنجاح', 'success');
+            state.editingId = null;
+            document.getElementById('addExpenseModal').classList.add('hidden');
+            document.getElementById('pettyForm').reset();
+            await loadExpenses();
             return;
         }
 
-        showMessage('تم تعديل الفحص بنجاح', 'success');
-        state.editingId = null;
+        const result = await window.electronAPI.saveInspectionExpense(payload);
+        if (!result || !result.success) {
+            showMessage((result && result.error) || 'تعذر حفظ الفحص', 'error');
+            return;
+        }
+
+        showMessage('تم حفظ الفحص بنجاح', 'success');
         document.getElementById('addExpenseModal').classList.add('hidden');
         document.getElementById('pettyForm').reset();
+        document.getElementById('expenseDate').value = today();
+        await refreshDocumentNumber();
+        state.page = 1;
         await loadExpenses();
-        return;
+    } finally {
+        state.isSaving = false;
+        setSubmitButtonLoading(false);
     }
-
-    const result = await window.electronAPI.saveInspectionExpense(payload);
-    if (!result || !result.success) {
-        showMessage((result && result.error) || 'تعذر حفظ الفحص', 'error');
-        return;
-    }
-
-    showMessage('تم حفظ الفحص بنجاح', 'success');
-    document.getElementById('addExpenseModal').classList.add('hidden'); // إغلاق المودال عند الحفظ بنجاح
-    document.getElementById('pettyForm').reset();
-    document.getElementById('expenseDate').value = today();
-    await refreshDocumentNumber();
-    state.page = 1;
-    await loadExpenses();
 }
 
 async function exportPdf() {
