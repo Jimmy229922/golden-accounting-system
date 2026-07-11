@@ -98,7 +98,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Treasury API
     getTreasuryBalance: () => invokeChannel('get-treasury-balance'),
-    getTreasuryTransactions: () => invokeChannel('get-treasury-transactions'),
+    getTreasuryTransactions: (params) => invokeChannel('get-treasury-transactions', params),
     getNextTreasuryVoucherNumber: (type) => invokeChannel('get-next-treasury-voucher-number', type),
     addTreasuryTransaction: (data) => invokeChannel('add-treasury-transaction', data),
     updateTreasuryTransaction: (data) => invokeChannel('update-treasury-transaction', data),

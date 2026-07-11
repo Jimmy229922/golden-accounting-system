@@ -76,12 +76,73 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-treasury-transactions', () => {
+    ipcMain.handle('get-treasury-transactions', (event, params = null) => {
+        const hasPagination = params && typeof params === 'object';
         try {
-            return db.prepare('SELECT * FROM treasury_transactions ORDER BY transaction_date DESC, id DESC').all();
+            if (!hasPagination) {
+                return db.prepare('SELECT * FROM treasury_transactions ORDER BY transaction_date DESC, id DESC').all();
+            }
+
+            const parsedPage = Number.parseInt(params.page, 10);
+            const parsedPageSize = Number.parseInt(params.pageSize, 10);
+            const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+            const pageSize = Number.isFinite(parsedPageSize) && parsedPageSize > 0
+                ? Math.min(parsedPageSize, 100)
+                : 50;
+            const today = new Date().toISOString().slice(0, 10);
+            const relatedTypeFilter = `COALESCE(related_type, '') NOT IN (?, ?)`;
+            const filterParams = [
+                CUSTOMER_COLLECTION_PENDING_RELATED_TYPE,
+                CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE
+            ];
+
+            const totalRow = db
+                .prepare(`SELECT COUNT(*) AS total FROM treasury_transactions WHERE ${relatedTypeFilter}`)
+                .get(...filterParams);
+            const total = Number(totalRow?.total || 0);
+            const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
+            const currentPage = Math.min(page, totalPages);
+            const offset = (currentPage - 1) * pageSize;
+
+            const rows = db
+                .prepare(`
+                    SELECT *
+                    FROM treasury_transactions
+                    WHERE ${relatedTypeFilter}
+                    ORDER BY transaction_date DESC, id DESC
+                    LIMIT ? OFFSET ?
+                `)
+                .all(...filterParams, pageSize, offset);
+
+            const totalsRow = db
+                .prepare(`
+                    SELECT
+                        COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS totalIncome,
+                        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS totalExpense,
+                        COALESCE(SUM(CASE WHEN type = 'income' AND transaction_date = ? THEN amount ELSE 0 END), 0) AS todayIncome,
+                        COALESCE(SUM(CASE WHEN type = 'expense' AND transaction_date = ? THEN amount ELSE 0 END), 0) AS todayExpense
+                    FROM treasury_transactions
+                    WHERE ${relatedTypeFilter}
+                `)
+                .get(today, today, ...filterParams);
+
+            return {
+                success: true,
+                rows,
+                total,
+                page: currentPage,
+                pageSize,
+                totalPages,
+                totalIncome: Number(totalsRow?.totalIncome || 0),
+                totalExpense: Number(totalsRow?.totalExpense || 0),
+                todayIncome: Number(totalsRow?.todayIncome || 0),
+                todayExpense: Number(totalsRow?.todayExpense || 0)
+            };
         } catch (error) {
             console.error('[get-treasury-transactions] Error:', error);
-            return [];
+            return hasPagination
+                ? { success: false, error: error.message || 'Failed to load treasury transactions' }
+                : [];
         }
     });
 

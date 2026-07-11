@@ -3,6 +3,7 @@ let transactionsTableBody;
 let transactionForm;
 let transDateInput;
 let newTransactionBtn;
+let paginationContainer;
 let transactionsById = new Map();
 let ar = {};
 let isSavingTransaction = false;
@@ -10,6 +11,13 @@ let isUpdatingTransaction = false;
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
 const CUSTOMER_COLLECTION_PENDING_RELATED_TYPE = 'customer_collection_pending';
 const CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE = 'customer_collection_shift_close';
+const FINANCE_PAGE_SIZE = 50;
+const financeState = {
+    page: 1,
+    pageSize: FINANCE_PAGE_SIZE,
+    total: 0,
+    totalPages: 1
+};
 
 function isExcludedCustomerCollectionTransaction(transaction) {
     const relatedType = String(transaction?.related_type || '').trim();
@@ -219,6 +227,7 @@ function renderPage() {
                         <!-- Data loaded via JS -->
                     </tbody>
                 </table>
+                <div class="finance-pagination" id="financePagination"></div>
             </div>
         </div>
     `;
@@ -227,6 +236,7 @@ function renderPage() {
 function initializeElements() {
     treasuryBalanceEl = document.getElementById('treasuryBalance');
     transactionsTableBody = document.getElementById('transactionsTableBody');
+    paginationContainer = document.getElementById('financePagination');
     transactionForm = document.getElementById('transactionForm');
     transDateInput = document.getElementById('transDate');
     newTransactionBtn = document.getElementById('newTransactionBtn');
@@ -234,12 +244,34 @@ function initializeElements() {
     document.addEventListener('click', handleOutsideModalClick);
 }
 
-async function loadFinanceData() {
+async function loadFinanceData(page = financeState.page) {
     const balance = await window.electronAPI.getTreasuryBalance();
-    const transactions = await window.electronAPI.getTreasuryTransactions();
-    const financialTransactions = Array.isArray(transactions)
-        ? transactions.filter((tr) => !isExcludedCustomerCollectionTransaction(tr))
+    const transactionsResponse = await window.electronAPI.getTreasuryTransactions({
+        page,
+        pageSize: financeState.pageSize
+    });
+
+    if (!transactionsResponse?.success) {
+        showFinanceToast(
+            fmt(t('finance.toast.loadError', 'حدث خطأ أثناء تحميل البيانات: {error}'), {
+                error: transactionsResponse?.error || t('finance.toast.loadErrorGeneric', 'تعذر تحميل البيانات')
+            }),
+            'error'
+        );
+        financeState.total = 0;
+        financeState.totalPages = 1;
+        renderTransactions([]);
+        renderPagination();
+        return;
+    }
+
+    const financialTransactions = Array.isArray(transactionsResponse.rows)
+        ? transactionsResponse.rows.filter((tr) => !isExcludedCustomerCollectionTransaction(tr))
         : [];
+    financeState.page = Number(transactionsResponse.page) || 1;
+    financeState.pageSize = Number(transactionsResponse.pageSize) || FINANCE_PAGE_SIZE;
+    financeState.total = Number(transactionsResponse.total) || 0;
+    financeState.totalPages = Number(transactionsResponse.totalPages) || 1;
     
     treasuryBalanceEl.textContent = formatNumberWithCommas(balance);
     if (balance >= 0) {
@@ -248,35 +280,28 @@ async function loadFinanceData() {
         treasuryBalanceEl.className = 'stat-value negative';
     }
 
-    // Calculate stats from transactions
-    let totalIncome = 0;
-    let totalExpense = 0;
-    let todayIncome = 0;
-    let todayExpense = 0;
-    const today = new Date().toISOString().slice(0, 10);
-
-    financialTransactions.forEach(tr => {
-        if (tr.type === 'income') {
-            totalIncome += tr.amount;
-            if (tr.transaction_date === today) todayIncome += tr.amount;
-        } else {
-            totalExpense += tr.amount;
-            if (tr.transaction_date === today) todayExpense += tr.amount;
-        }
-    });
-
-    document.getElementById('totalIncome').textContent = formatNumberWithCommas(totalIncome);
-    document.getElementById('totalExpense').textContent = formatNumberWithCommas(totalExpense);
-    document.getElementById('transCount').textContent = financialTransactions.length;
-    document.getElementById('todayIncome').textContent = formatNumberWithCommas(todayIncome);
-    document.getElementById('todayExpense').textContent = formatNumberWithCommas(todayExpense);
+    document.getElementById('totalIncome').textContent = formatNumberWithCommas(transactionsResponse.totalIncome);
+    document.getElementById('totalExpense').textContent = formatNumberWithCommas(transactionsResponse.totalExpense);
+    document.getElementById('transCount').textContent = financeState.total;
+    document.getElementById('todayIncome').textContent = formatNumberWithCommas(transactionsResponse.todayIncome);
+    document.getElementById('todayExpense').textContent = formatNumberWithCommas(transactionsResponse.todayExpense);
 
     renderTransactions(financialTransactions);
+    renderPagination();
 }
 
 function renderTransactions(transactions) {
     transactionsTableBody.innerHTML = '';
     transactionsById = new Map();
+
+    if (!transactions.length) {
+        transactionsTableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="finance-empty-state">${t('finance.noTransactions', 'لا توجد معاملات مالية')}</td>
+            </tr>
+        `;
+        return;
+    }
     
     transactions.forEach(tr => {
         transactionsById.set(String(tr.id), tr);
@@ -317,6 +342,42 @@ function renderTransactions(transactions) {
         `;
         transactionsTableBody.appendChild(row);
     });
+}
+
+function renderPagination() {
+    if (!paginationContainer) return;
+
+    if (financeState.total <= 0) {
+        paginationContainer.innerHTML = '';
+        return;
+    }
+
+    const start = ((financeState.page - 1) * financeState.pageSize) + 1;
+    const end = Math.min(financeState.page * financeState.pageSize, financeState.total);
+
+    paginationContainer.innerHTML = `
+        <span class="finance-pagination__info">
+            ${fmt(t('finance.pagination.info', 'عرض {start} - {end} من {total} حركة'), {
+                start,
+                end,
+                total: financeState.total
+            })}
+        </span>
+        <div class="finance-pagination__actions">
+            <button type="button" class="btn btn-outline btn-sm" data-action="change-page" data-page="${financeState.page - 1}" ${financeState.page <= 1 ? 'disabled' : ''}>
+                ${t('finance.pagination.previous', 'السابق')}
+            </button>
+            <span class="finance-pagination__page">
+                ${fmt(t('finance.pagination.page', 'صفحة {current} من {total}'), {
+                    current: financeState.page,
+                    total: financeState.totalPages
+                })}
+            </span>
+            <button type="button" class="btn btn-outline btn-sm" data-action="change-page" data-page="${financeState.page + 1}" ${financeState.page >= financeState.totalPages ? 'disabled' : ''}>
+                ${t('finance.pagination.next', 'التالي')}
+            </button>
+        </div>
+    `;
 }
 
 function handleAppClick(event) {
@@ -361,6 +422,14 @@ function handleAppClick(event) {
         const id = Number.parseInt(target.dataset.id || '', 10);
         if (Number.isFinite(id)) {
             deleteTransaction(id);
+        }
+        return;
+    }
+
+    if (action === 'change-page') {
+        const nextPage = Number.parseInt(target.dataset.page || '', 10);
+        if (Number.isFinite(nextPage) && nextPage > 0 && nextPage <= financeState.totalPages) {
+            loadFinanceData(nextPage);
         }
     }
 }
@@ -417,7 +486,8 @@ async function saveTransaction() {
         if (result.success) {
             showFinanceToast(t('finance.toast.saveSuccess', 'تم حفظ الحركة بنجاح'), 'success');
             hideForm();
-            loadFinanceData();
+            financeState.page = 1;
+            loadFinanceData(1);
         } else {
             showFinanceToast(fmt(t('finance.toast.saveError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
         }
@@ -442,7 +512,7 @@ async function deleteTransaction(id) {
     const result = await window.electronAPI.deleteTreasuryTransaction(id);
     if (result.success) {
         showFinanceToast(t('finance.toast.deleteSuccess', 'تم الحذف بنجاح'), 'success');
-        loadFinanceData();
+        loadFinanceData(financeState.page);
     } else {
         showFinanceToast(fmt(t('finance.toast.deleteError', 'حدث خطأ أثناء الحذف: {error}'), { error: result.error }), 'error');
     }
@@ -496,7 +566,8 @@ async function updateTransaction() {
         if (result.success) {
             showFinanceToast(t('finance.toast.updateSuccess', 'تم تحديث الحركة بنجاح'), 'success');
             closeEditModal();
-            loadFinanceData();
+            financeState.page = 1;
+            loadFinanceData(1);
         } else {
             showFinanceToast(fmt(t('finance.toast.updateError', 'حدث خطأ: {error}'), { error: result.error }), 'error');
         }

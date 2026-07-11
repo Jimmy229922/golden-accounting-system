@@ -396,6 +396,12 @@
     "financialSummary": "ملخص مالي",
     "recentTransactions": "آخر المعاملات المالية",
     "noTransactions": "لا توجد معاملات مالية",
+    "pagination": {
+      "previous": "السابق",
+      "next": "التالي",
+      "page": "صفحة {current} من {total}",
+      "info": "عرض {start} - {end} من {total} حركة"
+    },
     "sale": "بيع",
     "purchase": "شراء",
     "receiptIn": "تحصيل",
@@ -405,6 +411,8 @@
       "descriptionRequired": "الرجاء إدخال وصف للحركة",
       "saveSuccess": "تم حفظ الحركة بنجاح",
       "saveError": "حدث خطأ: {error}",
+      "loadError": "حدث خطأ أثناء تحميل البيانات: {error}",
+      "loadErrorGeneric": "تعذر تحميل البيانات",
       "deleteConfirm": "هل أنت متأكد من حذف هذه الحركة؟ لا يمكن التراجع عن هذا الإجراء.",
       "deleteSuccess": "تم الحذف بنجاح",
       "deleteError": "حدث خطأ أثناء الحذف: {error}",

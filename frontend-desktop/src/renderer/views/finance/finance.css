@@ -219,6 +219,27 @@
         }
         .table tr:hover { background-color: rgba(37,99,235,0.06); }
         [data-theme="dark"] .table tr:hover { background-color: rgba(96,165,250,0.08); }
+        .finance-empty-state { text-align: center; color: var(--text-muted); padding: 24px; }
+        .finance-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 20px;
+            border-top: 1px solid var(--table-border);
+            background: var(--card-bg);
+            flex-wrap: wrap;
+        }
+        .finance-pagination__info,
+        .finance-pagination__page {
+            color: var(--text-color);
+            font-weight: 600;
+        }
+        .finance-pagination__actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
         /* Badges & Colors */
         .badge { padding: 5px 12px; border-radius: 15px; font-size: 0.85rem; font-weight: 500; }
@@ -319,5 +340,14 @@
 @media (max-width: 768px) {
     :where(.content, .sales-content, .reports-content) {
         padding: 16px;
+    }
+
+    .finance-pagination {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .finance-pagination__actions {
+        justify-content: space-between;
     }
 }
