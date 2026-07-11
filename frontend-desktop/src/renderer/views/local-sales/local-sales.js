@@ -431,6 +431,18 @@ function bindEvents() {
 
     attachNumberFormatting(document.getElementById('quantityInput'));
     attachNumberFormatting(document.getElementById('priceInput'));
+
+    window.financialPagination?.bind(document.getElementById('pagination'), {
+        onPageChange: (page) => {
+            state.page = page;
+            loadRecords();
+        },
+        onPageSizeChange: (pageSize) => {
+            state.pageSize = pageSize;
+            state.page = 1;
+            loadRecords();
+        }
+    });
 }
 
 async function refreshDocumentNumber() {
@@ -457,6 +469,8 @@ async function loadRecords() {
     }
 
     state.rows = Array.isArray(result.rows) ? result.rows : [];
+    state.page = Number(result.page) || state.page;
+    state.pageSize = Number(result.pageSize) || state.pageSize;
     state.totalPages = Number(result.totalPages) || 1;
     state.totalAmount = Number(result.totalAmount) || 0;
     state.totalQuantity = Number(result.totalQuantity) || 0;
@@ -519,26 +533,11 @@ function renderRows() {
 
 function renderPagination() {
     const pagination = document.getElementById('pagination');
-    if (state.totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-
-    pagination.innerHTML = `
-        <button type="button" class="btn btn-outline" id="prevPage" ${state.page <= 1 ? 'disabled' : ''}>السابق</button>
-        <span>صفحة ${state.page} من ${state.totalPages}</span>
-        <button type="button" class="btn btn-outline" id="nextPage" ${state.page >= state.totalPages ? 'disabled' : ''}>التالي</button>
-    `;
-
-    document.getElementById('prevPage')?.addEventListener('click', () => {
-        if (state.page <= 1) return;
-        state.page -= 1;
-        loadRecords();
-    });
-    document.getElementById('nextPage')?.addEventListener('click', () => {
-        if (state.page >= state.totalPages) return;
-        state.page += 1;
-        loadRecords();
+    window.financialPagination?.render(pagination, {
+        page: state.page,
+        pageSize: state.pageSize,
+        totalPages: state.totalPages,
+        total: state.totalCount
     });
 }
 
