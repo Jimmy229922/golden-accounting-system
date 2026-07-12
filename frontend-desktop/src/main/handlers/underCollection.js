@@ -48,7 +48,7 @@ function normalizePayload(data = {}) {
         container_40: isContainer40,
         statement: String(data.statement || '').trim(),
         invoice_number: String(data.invoice_number || '').trim(),
-        tons_count: roundMoney(tonsCount),
+        tons_count: tonsCount,
         ton_price: roundMoney(tonPrice),
         total_usd: totalUsd,
         remaining_type: remainingType,

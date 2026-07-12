@@ -198,7 +198,7 @@ function renderPage() {
                                 <div class="form-group">
                                     <label><i class="fas fa-money-bill-wave text-icon"></i> المبلغ <span class="required-asterisk">*</span></label>
                                     <div class="input-with-currency">
-                                        <input type="number" id="amount" class="form-control amount-input" min="0" step="0.01" placeholder="0.00" required>
+                                        <input type="number" id="amount" class="form-control amount-input" min="0" step="any" placeholder="0.00" required>
                                         <span class="currency-badge">ج.م</span>
                                     </div>
                                 </div>

@@ -213,7 +213,7 @@ function renderPage() {
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-dollar-sign text-icon"></i> إجمالي الفاتورة ($) <span class="required-asterisk">*</span></label>
-                                    <input type="number" id="invoiceTotal" class="form-control" min="0" step="1" placeholder="0" required>
+                                    <input type="number" id="invoiceTotal" class="form-control" min="0" step="any" placeholder="0" required>
                                 </div>
                             </div>
 
@@ -224,11 +224,11 @@ function renderPage() {
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-hand-holding-usd text-icon"></i> الوصول من الفاتورة ($)</label>
-                                    <input type="number" id="arrivalAmount" class="form-control" min="0" step="1" placeholder="0">
+                                    <input type="number" id="arrivalAmount" class="form-control" min="0" step="any" placeholder="0">
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-coins text-icon"></i> المتبقي من الفاتورة ($)</label>
-                                    <input type="number" id="remainingAmount" class="form-control" min="0" step="1" placeholder="0">
+                                    <input type="number" id="remainingAmount" class="form-control" min="0" step="any" placeholder="0">
                                 </div>
                             </div>
                         </div>

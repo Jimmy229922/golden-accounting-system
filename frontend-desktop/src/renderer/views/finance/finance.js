@@ -160,7 +160,7 @@ function renderPage() {
                     </div>
                     <div class="form-group">
                         <label>${t('finance.amount', 'المبلغ')}</label>
-                        <input type="number" id="transAmount" class="form-control" placeholder="0.00" step="0.01">
+                        <input type="number" id="transAmount" class="form-control" placeholder="0.00" step="any">
                     </div>
                     <div class="form-group">
                         <label>${t('finance.date', 'التاريخ')}</label>
@@ -194,7 +194,7 @@ function renderPage() {
                         </div>
                         <div class="form-group">
                             <label>${t('finance.amount', 'المبلغ')}</label>
-                            <input type="number" id="editTransAmount" class="form-control" step="0.01" min="0">
+                            <input type="number" id="editTransAmount" class="form-control" step="any" min="0">
                         </div>
                         <div class="form-group">
                             <label>${t('finance.date', 'التاريخ')}</label>

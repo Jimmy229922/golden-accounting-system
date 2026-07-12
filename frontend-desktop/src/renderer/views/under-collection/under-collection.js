@@ -61,6 +61,13 @@ function formatMoney(value) {
     });
 }
 
+function formatQuantity(value) {
+    return (Number(value) || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3
+    });
+}
+
 function getRowById(id) {
     return state.rows.find((row) => String(row.id) === String(id));
 }
@@ -260,10 +267,10 @@ function renderPage() {
                                     <label><i class="fas fa-weight-hanging text-icon"></i> عدد الأطنان * السعر <span class="required-asterisk">*</span></label>
                                     <div class="tons-price-box">
                                         <div class="input-with-unit">
-                                            <input type="number" id="tonsCount" class="form-control" min="0" step="0.01" placeholder="0.00" required>
+                                            <input type="number" id="tonsCount" class="form-control" min="0" step="any" placeholder="0.00" required>
                                             <span class="unit-badge">طن</span>
                                         </div>
-                                        <input type="number" id="tonPrice" class="form-control" min="0" step="0.01" placeholder="السعر" required>
+                                        <input type="number" id="tonPrice" class="form-control" min="0" step="any" placeholder="السعر" required>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -274,7 +281,7 @@ function renderPage() {
                                             <option value="percent" selected>%</option>
                                             <option value="usd">دولار</option>
                                         </select>
-                                        <input type="number" id="remainingValue" class="form-control" min="0" step="0.01" placeholder="المتبقي">
+                                        <input type="number" id="remainingValue" class="form-control" min="0" step="any" placeholder="المتبقي">
                                     </div>
                                 </div>
                             </div>
@@ -404,7 +411,7 @@ function renderRows() {
             <td>${escapeHtml(getContainerText(row))}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
             <td>${escapeHtml(row.invoice_number || '')}</td>
-            <td>${formatMoney(row.tons_count)} طن × ${formatMoney(row.ton_price)}</td>
+            <td>${formatQuantity(row.tons_count)} طن × ${formatMoney(row.ton_price)}</td>
             <td>
                 <div class="invoice-total-cell">
                     <strong>${formatMoney(row.total_usd)}</strong>
