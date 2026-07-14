@@ -1085,6 +1085,7 @@ function hydrateRowBaskeel(row, existingItem) {
     let rawWeights = [];
     let method = 'normal';
     let rate = 0;
+    let manualNet1 = 0;
     
     if (typeof existingItem.raw_weights === 'string' && existingItem.raw_weights.trim()) {
         try {
@@ -1097,6 +1098,7 @@ function hydrateRowBaskeel(row, existingItem) {
                 rawWeights = Array.isArray(parsed.weights) ? parsed.weights.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0) : [];
                 method = parsed.method || 'normal';
                 rate = parsed.rate || 0;
+                manualNet1 = Number.isFinite(Number(parsed.manualNet1)) && Number(parsed.manualNet1) > 0 ? Number(parsed.manualNet1) : 0;
             }
         } catch (_error) {
             rawWeights = [];
@@ -1122,7 +1124,9 @@ function hydrateRowBaskeel(row, existingItem) {
         rawWeights = [rawQuantity];
     }
 
-    const weightsDataToSave = method === 'normal' ? rawWeights : { weights: rawWeights, method, rate };
+    const weightsDataToSave = method === 'normal' && manualNet1 <= 0
+        ? rawWeights
+        : { weights: rawWeights, method, rate, manualNet1 };
     setRowBaskeelData(row, { rawQuantity, rawWeights: weightsDataToSave }, { skipAutoAdd: true });
 }
 
