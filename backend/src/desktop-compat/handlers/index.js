@@ -20,6 +20,7 @@ const underCollection = require('./underCollection');
 const remainingUnderCollection = require('./remainingUnderCollection');
 const exportRevenues = require('./exportRevenues');
 const localSales = require('./localSales');
+const workersManagement = require('./workersManagement');
 
 function setupIPC() {
     repairWarehouseNamesEncoding();
@@ -54,6 +55,7 @@ function setupIPC() {
     remainingUnderCollection.register();
     exportRevenues.register();
     localSales.register();
+    workersManagement.register();
 }
 
 module.exports = { setupIPC };

@@ -592,6 +592,61 @@ function initDB() {
         )
     `);
 
+    // 21. Workers Management Tables (جداول إدارة العمال)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS workers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            daily_wage REAL NOT NULL DEFAULT 0 CHECK (daily_wage >= 0),
+            job_title TEXT NOT NULL DEFAULT '',
+            notes TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS worker_weekly_attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            worker_id INTEGER NOT NULL,
+            week_start_date TEXT NOT NULL,
+            daily_wage REAL NOT NULL DEFAULT 0 CHECK (daily_wage >= 0),
+            saturday_present INTEGER NOT NULL DEFAULT 0 CHECK (saturday_present IN (0, 1)),
+            saturday_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_duration IN (0, 0.5, 1, 1.5)),
+            sunday_present INTEGER NOT NULL DEFAULT 0 CHECK (sunday_present IN (0, 1)),
+            sunday_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_duration IN (0, 0.5, 1, 1.5)),
+            monday_present INTEGER NOT NULL DEFAULT 0 CHECK (monday_present IN (0, 1)),
+            monday_duration REAL NOT NULL DEFAULT 0 CHECK (monday_duration IN (0, 0.5, 1, 1.5)),
+            tuesday_present INTEGER NOT NULL DEFAULT 0 CHECK (tuesday_present IN (0, 1)),
+            tuesday_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_duration IN (0, 0.5, 1, 1.5)),
+            wednesday_present INTEGER NOT NULL DEFAULT 0 CHECK (wednesday_present IN (0, 1)),
+            wednesday_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_duration IN (0, 0.5, 1, 1.5)),
+            thursday_present INTEGER NOT NULL DEFAULT 0 CHECK (thursday_present IN (0, 1)),
+            thursday_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_duration IN (0, 0.5, 1, 1.5)),
+            friday_present INTEGER NOT NULL DEFAULT 0 CHECK (friday_present IN (0, 1)),
+            friday_duration REAL NOT NULL DEFAULT 0 CHECK (friday_duration IN (0, 0.5, 1, 1.5)),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
+            UNIQUE (worker_id, week_start_date),
+            FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE RESTRICT
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS worker_advances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            worker_id INTEGER NOT NULL,
+            week_start_date TEXT NOT NULL,
+            advance_date TEXT NOT NULL,
+            amount REAL NOT NULL CHECK (amount > 0),
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
+            FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE RESTRICT
+        )
+    `);
+
     // ── Performance Indexes ──
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_unit_id ON items(unit_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_is_deleted ON items(is_deleted)`);
@@ -628,6 +683,11 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_damaged_stock_logs_item_id ON damaged_stock_logs(item_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_damaged_stock_logs_warehouse_id ON damaged_stock_logs(warehouse_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_damaged_stock_logs_damaged_date ON damaged_stock_logs(damaged_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_workers_is_active ON workers(is_active)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_weekly_attendance_week ON worker_weekly_attendance(week_start_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_weekly_attendance_worker ON worker_weekly_attendance(worker_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_advances_week ON worker_advances(week_start_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_advances_worker ON worker_advances(worker_id)`);
 
     // ── Data Safety Guard Rails ──
     db.exec(`

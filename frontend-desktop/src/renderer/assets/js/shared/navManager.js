@@ -158,7 +158,8 @@ function buildTopNavItems(prefix) {
             children: [
                 { key: 'common.nav.generalReports', fallback: 'General Reports', href: withPrefix('reports/index.html') },
                 { key: 'common.nav.customerReports', fallback: 'Customer Reports', href: withPrefix('customer-reports/index.html') },
-                { key: 'common.nav.debtorCreditor', fallback: 'Debtor & Creditor', href: withPrefix('reports/debtor-creditor/index.html') }
+                { key: 'common.nav.debtorCreditor', fallback: 'Debtor & Creditor', href: withPrefix('reports/debtor-creditor/index.html') },
+                { key: 'common.nav.workersManagement', fallback: 'Workers Management', href: withPrefix('workers-management/index.html') }
             ]
         },
         { key: 'common.nav.settings', fallback: 'Settings', href: withPrefix('settings/index.html') }

@@ -163,6 +163,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteLocalSale: (id) => invokeChannel('delete-local-sale', id),
     saveLocalSalesPdf: (options) => invokeChannel('save-local-sales-pdf', options),
 
+    // Workers Management API
+    getWorkersManagementWeek: (params = {}) => invokeChannel('get-workers-management-week', params),
+    getWorkersManagementWeeks: () => invokeChannel('get-workers-management-weeks'),
+    saveWorker: (data) => invokeChannel('save-worker', data),
+    updateWorker: (data) => invokeChannel('update-worker', data),
+    archiveWorker: (id) => invokeChannel('archive-worker', id),
+    restoreWorker: (id) => invokeChannel('restore-worker', id),
+    saveWorkersWeekAttendance: (data) => invokeChannel('save-workers-week-attendance', data),
+    saveWorkerAdvance: (data) => invokeChannel('save-worker-advance', data),
+    updateWorkerAdvance: (data) => invokeChannel('update-worker-advance', data),
+    deleteWorkerAdvance: (id) => invokeChannel('delete-worker-advance', id),
+
     // Inventory API
     getItemTransactions: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-transactions', { itemId, startDate, endDate }),
     getItemLedger: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-ledger', { itemId, startDate, endDate }),

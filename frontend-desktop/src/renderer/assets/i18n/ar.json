@@ -22,6 +22,7 @@
       "customerStatement": "تقارير العملاء",
       "customerReports": "تقارير العملاء",
       "debtorCreditor": "كشف المدين والدائن",
+      "workersManagement": "إدارة العمال",
       "settings": "الإعدادات"
     },
     "actions": {
@@ -1166,6 +1167,16 @@
     "fetchError": "حدث خطأ في جلب البيانات",
     "fetchMovementError": "حدث خطأ في جلب حركة الصنف",
     "backToSearch": "رجوع للبحث"
+  },
+  "workersManagement": {
+    "title": "إدارة العمال",
+    "addWorker": "إضافة عامل",
+    "recordAdvance": "تسجيل سلفة",
+    "weeklyAttendance": "الحضور الأسبوعي",
+    "totalWages": "إجمالي الأجور",
+    "totalAdvances": "إجمالي السُلف",
+    "netPayable": "صافي المستحق",
+    "weeklyReport": "كشف الأسبوع"
   },
   "settings": {
     "title": "إعدادات النظام",
