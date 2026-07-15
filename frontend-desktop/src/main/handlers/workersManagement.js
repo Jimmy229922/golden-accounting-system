@@ -161,7 +161,7 @@ function getWeekData(weekStart, includeArchived = false) {
            AND a.week_start_date = @week_start_date
         WHERE (@include_archived = 0 AND w.is_active = 1)
            OR (@include_archived = 1 AND w.is_active = 0)
-        ORDER BY w.is_active DESC, w.name COLLATE NOCASE ASC, w.id ASC
+        ORDER BY w.is_active DESC, w.id ASC
     `).all({
         week_start_date: weekStart,
         include_archived: includeArchived ? 1 : 0

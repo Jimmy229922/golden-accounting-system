@@ -29,13 +29,23 @@ function buildTopNavHTML() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     try {
-    if (window.i18n && typeof window.i18n.loadArabicDictionary === 'function') {
-        ar = await window.i18n.loadArabicDictionary();
-    }
-    renderPage();
-    initializeElements();
-    await loadSettings();
-    await loadSystemStatusSummary();
+        if (window.i18n && typeof window.i18n.loadArabicDictionary === 'function') {
+            ar = await window.i18n.loadArabicDictionary();
+        }
+        renderPage();
+        initializeElements();
+        await loadSettings();
+        await loadSystemStatusSummary();
+
+        // التحقق من إظهار ملاحظات التحديث تلقائياً لمرة واحدة
+        const CURRENT_VERSION = '7.0.7';
+        const lastSeenVersion = localStorage.getItem('last_seen_changelog_version');
+        if (lastSeenVersion !== CURRENT_VERSION) {
+            setTimeout(() => {
+                document.getElementById('changelogModal')?.classList.remove('hidden');
+                localStorage.setItem('last_seen_changelog_version', CURRENT_VERSION);
+            }, 800);
+        }
     } catch (error) {
         console.error('Initialization Error:', error);
         if (window.toast && typeof window.toast.error === 'function') {
@@ -199,6 +209,7 @@ function renderPage() {
                         <p class="action-card-desc">${t('settings.updateDesc', 'تحقق من آخر إصدار من GitHub Releases ونزل ملف التحديث على جهاز العميل.')}</p>
                         <button id="updateBtn" class="btn-action update-btn"><i class="fas fa-cloud-download-alt"></i> <span class="update-btn-text">${t('settings.updateNow', 'فحص وتنزيل التحديث')}</span></button>
                         <button id="updateRetryBtn" class="btn-action update-retry-btn" hidden><i class="fas fa-redo-alt"></i> <span class="update-retry-btn-text">إعادة المحاولة</span></button>
+                        <button type="button" id="showChangelogBtn" class="btn-action changelog-btn" style="margin-top: 10px; background-color: var(--background-secondary, #f1f5f9); color: var(--text-color, #0f172a); border: 1px solid var(--border-color, #e2e8f0);"><i class="fas fa-bullhorn"></i> ما الجديد في هذا التحديث؟</button>
                         <div id="updateProgressWrap" class="update-progress" hidden>
                             <div class="update-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                                 <div id="updateProgressBar" class="update-progress-fill"></div>
@@ -275,6 +286,67 @@ function renderPage() {
                 </div>
             </div>
         </main>
+
+        <div class="workers-modal-overlay hidden" id="changelogModal">
+            <div class="workers-modal changelog-modal" role="dialog" aria-modal="true" aria-labelledby="changelogModalTitle">
+                <div class="workers-modal-header">
+                    <h2 id="changelogModalTitle"><i class="fas fa-sparkles"></i> ما الجديد في التحديث الجديد (إصدار 7.0.7) ✨</h2>
+                    <button type="button" class="workers-modal-close" data-close-modal="changelogModal"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="workers-modal-body">
+                    <div class="changelog-welcome">
+                        <p>مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار الأحدث بنجاح. إليك أهم الميزات والتعديلات المضافة في هذا الإصدار:</p>
+                    </div>
+                    <ul class="changelog-list">
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>تعديل حساب الوقت الإضافي للعمال:</strong>
+                                <p>أصبح حضور العامل (علامة صح) يحتسب تلقائياً كـ <strong>يوم كامل أساسي</strong>، والقائمة المنسدلة تستخدم فقط لتحديد <strong>الوقت الإضافي</strong> الإضافي للراتب.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>الخيار الافتراضي للإضافي:</strong>
+                                <p>تم تعيين الخيار الافتراضي للحضور ليكون <strong>"بدون إضافي"</strong> لتجنب مضاعفة الأجور دون قصد.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>تحديث أجر العامل لحظياً في أسبوع الحضور:</strong>
+                                <p>عند تعديل أجر العامل اليومي من نافذة البيانات، يتم فوراً تحديث وتعديل أجره في الأسبوع الحالي المفتوح في الجدول دون المساس بالأسابيع القديمة المقفلة.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>إصلاح بطاقات الإحصائيات للأجهزة المعربة:</strong>
+                                <p>تم حل مشكلة ظهور إجمالي الأجور والصافي كـ 0.00 على الأنظمة المعربة، وأصبح الحساب والتجميع يعمل بدقة تامة وبشكل فوري.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>زر الحفظ العلوي:</strong>
+                                <p>تمت إضافة زر حفظ حضور الأسبوع في أعلى الصفحة لتسهيل الحفظ السريع دون الحاجة للنزول لأسفل الجدول.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>تحسين أزرار التنقل وحظر الأسابيع المستقبلية:</strong>
+                                <p>تنسيق أزرار الأسابيع بشكل إحترافي للتمييز بينها، وحظر الانتقال لأسابيع مستقبلية بعد أسبوع العمل الحالي الفعلي.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="workers-modal-footer">
+                    <button type="button" class="workers-btn workers-btn-primary" data-close-modal="changelogModal">فهمت، إغلاق</button>
+                </div>
+            </div>
+        </div>
     `;
 }
 
@@ -321,6 +393,18 @@ function initializeElements() {
     if (updateRetryBtn) {
         updateRetryBtn.addEventListener('click', handleAppUpdate);
     }
+    const showChangelogBtn = document.getElementById('showChangelogBtn');
+    if (showChangelogBtn) {
+        showChangelogBtn.addEventListener('click', () => {
+            document.getElementById('changelogModal').classList.remove('hidden');
+        });
+    }
+    const closeButtons = document.querySelectorAll('[data-close-modal="changelogModal"]');
+    closeButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.getElementById('changelogModal').classList.add('hidden');
+        });
+    });
     bindAppUpdateProgress();
     syncAppUpdateProgressState();
 
