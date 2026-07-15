@@ -149,6 +149,9 @@ function renderPage() {
                     <button type="button" class="workers-btn workers-btn-light" id="printWeekBtn">
                         <i class="fas fa-print"></i> طباعة كشف الأسبوع
                     </button>
+                    <button type="button" class="workers-btn workers-btn-light" id="showChangelogBtn">
+                        <i class="fas fa-bullhorn"></i> ما الجديد؟
+                    </button>
                 </div>
             </section>
 
@@ -324,6 +327,67 @@ function renderPage() {
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div class="workers-modal-overlay hidden" id="changelogModal">
+            <div class="workers-modal changelog-modal" role="dialog" aria-modal="true" aria-labelledby="changelogModalTitle">
+                <div class="workers-modal-header">
+                    <h2 id="changelogModalTitle"><i class="fas fa-sparkles"></i> ما الجديد في التحديث الجديد (إصدار 7.0.7) ✨</h2>
+                    <button type="button" class="workers-modal-close" data-close-modal="changelogModal"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="workers-modal-body">
+                    <div class="changelog-welcome">
+                        <p>مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار الأحدث بنجاح. إليك أهم الميزات والتعديلات المضافة في هذا الإصدار:</p>
+                    </div>
+                    <ul class="changelog-list">
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>تعديل حساب الوقت الإضافي للعمال:</strong>
+                                <p>أصبح حضور العامل (علامة صح) يحتسب تلقائياً كـ <strong>يوم كامل أساسي</strong>، والقائمة المنسدلة تستخدم فقط لتحديد <strong>الوقت الإضافي</strong> الإضافي للراتب.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>الخيار الافتراضي للإضافي:</strong>
+                                <p>تم تعيين الخيار الافتراضي للحضور ليكون <strong>"بدون إضافي"</strong> لتجنب مضاعفة الأجور دون قصد.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>تحديث أجر العامل لحظياً في أسبوع الحضور:</strong>
+                                <p>عند تعديل أجر العامل اليومي من نافذة البيانات، يتم فوراً تحديث وتعديل أجره في الأسبوع الحالي المفتوح في الجدول دون المساس بالأسابيع القديمة المقفلة.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>إصلاح بطاقات الإحصائيات للأجهزة المعربة:</strong>
+                                <p>تم حل مشكلة ظهور إجمالي الأجور والصافي كـ 0.00 على الأنظمة المعربة، وأصبح الحساب والتجميع يعمل بدقة تامة وبشكل فوري.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>زر الحفظ العلوي:</strong>
+                                <p>تمت إضافة زر حفظ حضور الأسبوع في أعلى الصفحة لتسهيل الحفظ السريع دون الحاجة للنزول لأسفل الجدول.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>تحسين أزرار التنقل وحظر الأسابيع المستقبلية:</strong>
+                                <p>تنسيق أزرار الأسابيع بشكل إحترافي للتمييز بينها، وحظر الانتقال لأسابيع مستقبلية بعد أسبوع العمل الحالي الفعلي.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="workers-modal-footer">
+                    <button type="button" class="workers-btn workers-btn-primary" data-close-modal="changelogModal">فهمت، إغلاق</button>
+                </div>
             </div>
         </div>
     `;
@@ -1029,6 +1093,12 @@ function bindEvents() {
     document.getElementById('addWorkerBtn').addEventListener('click', () => openWorkerModal());
     document.getElementById('printWeekBtn').addEventListener('click', () => window.print());
     document.getElementById('saveWeekBtn').addEventListener('click', saveWeekAttendance);
+    const showChangelogBtn = document.getElementById('showChangelogBtn');
+    if (showChangelogBtn) {
+        showChangelogBtn.addEventListener('click', () => {
+            document.getElementById('changelogModal').classList.remove('hidden');
+        });
+    }
     const saveWeekBtnTop = document.getElementById('saveWeekBtnTop');
     if (saveWeekBtnTop) {
         saveWeekBtnTop.addEventListener('click', saveWeekAttendance);
@@ -1158,4 +1228,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('weekStartInput').value = state.weekStart;
     updateWeekLabels();
     await Promise.all([loadWeek(), loadWeeksHistory()]);
+
+    // التحقق من إظهار ملاحظات التحديث تلقائياً
+    const CURRENT_VERSION = '7.0.7';
+    const lastSeenVersion = localStorage.getItem('last_seen_changelog_version');
+    if (lastSeenVersion !== CURRENT_VERSION) {
+        setTimeout(() => {
+            document.getElementById('changelogModal')?.classList.remove('hidden');
+            localStorage.setItem('last_seen_changelog_version', CURRENT_VERSION);
+        }, 800);
+    }
 });

@@ -308,16 +308,26 @@ function register() {
             }
 
             const payload = normalizeWorkerPayload(data);
-            db.prepare(`
-                UPDATE workers
-                SET name = @name,
-                    daily_wage = @daily_wage,
-                    job_title = @job_title,
-                    notes = @notes,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = @id
-            `).run({ ...payload, id });
+            const updateTransaction = db.transaction(() => {
+                db.prepare(`
+                    UPDATE workers
+                    SET name = @name,
+                        daily_wage = @daily_wage,
+                        job_title = @job_title,
+                        notes = @notes,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = @id
+                `).run({ ...payload, id });
 
+                db.prepare(`
+                    UPDATE worker_weekly_attendance
+                    SET daily_wage = @daily_wage
+                    WHERE worker_id = @id
+                      AND week_start_date >= '2026-07-11'
+                `).run({ daily_wage: payload.daily_wage, id });
+            });
+
+            updateTransaction();
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
