@@ -140,6 +140,9 @@ function renderPage() {
                     <p>تسجيل الحضور ومدد العمل والسُلف وحساب مستحقات الأسبوع</p>
                 </div>
                 <div class="workers-hero-actions">
+                    <button type="button" class="workers-btn workers-btn-primary" id="saveWeekBtnTop">
+                        <i class="fas fa-floppy-disk"></i> حفظ حضور الأسبوع
+                    </button>
                     <button type="button" class="workers-btn workers-btn-light" id="addWorkerBtn">
                         <i class="fas fa-user-plus"></i> إضافة عامل
                     </button>
@@ -161,11 +164,11 @@ function renderPage() {
                     </select>
                 </div>
                 <div class="workers-toolbar-actions">
-                    <button type="button" class="workers-btn workers-btn-outline" id="previousWeekBtn">
+                    <button type="button" class="workers-btn workers-btn-prev" id="previousWeekBtn">
                         <i class="fas fa-chevron-right"></i> السابق
                     </button>
-                    <button type="button" class="workers-btn workers-btn-outline" id="currentWeekBtn">الأسبوع الحالي</button>
-                    <button type="button" class="workers-btn workers-btn-outline" id="nextWeekBtn">
+                    <button type="button" class="workers-btn workers-btn-curr" id="currentWeekBtn">الأسبوع الحالي</button>
+                    <button type="button" class="workers-btn workers-btn-next" id="nextWeekBtn">
                         التالي <i class="fas fa-chevron-left"></i>
                     </button>
                 </div>
@@ -326,33 +329,50 @@ function renderPage() {
     `;
 }
 
-function getDurationLabel(duration) {
-    if (Number(duration) === 0.5) return 'نصف يوم';
-    if (Number(duration) === 1.5) return 'يوم ونصف';
-    return 'يوم كامل';
+function getDurationLabel(duration, isNewLogic = false) {
+    const val = Number(duration);
+    if (isNewLogic) {
+        if (val === 0) return 'بدون إضافي';
+        if (val === 0.5) return 'نصف يوم إضافي';
+        if (val === 1) return 'يوم كامل إضافي';
+        if (val === 1.5) return 'يوم ونصف إضافي';
+        return 'بدون إضافي';
+    } else {
+        if (val === 0.5) return 'نصف يوم';
+        if (val === 1.5) return 'يوم ونصف';
+        return 'يوم كامل';
+    }
 }
 
-function buildDurationOptions(selectedDuration) {
-    return [
+function buildDurationOptions(selectedDuration, isNewLogic = false) {
+    const options = isNewLogic ? [
+        { value: 0, label: 'بدون إضافي' },
+        { value: 0.5, label: 'نصف يوم إضافي' },
+        { value: 1, label: 'يوم كامل إضافي' },
+        { value: 1.5, label: 'يوم ونصف إضافي' }
+    ] : [
         { value: 0.5, label: 'نصف يوم' },
         { value: 1, label: 'يوم كامل' },
         { value: 1.5, label: 'يوم ونصف' }
-    ].map((option) => (
+    ];
+    return options.map((option) => (
         `<option value="${option.value}" ${Number(selectedDuration) === option.value ? 'selected' : ''}>${option.label}</option>`
     )).join('');
 }
 
 function buildAttendanceCell(row, day) {
-    const attendance = row.attendance?.[day.key] || { present: false, duration: 0 };
-    const selectedDuration = attendance.present ? Number(attendance.duration) || 1 : 1;
-    const printText = attendance.present ? `حضور - ${getDurationLabel(selectedDuration)}` : 'غياب';
+    const isNewLogic = state.weekStart >= '2026-07-11';
+    const defaultDuration = isNewLogic ? 0 : 1;
+    const attendance = row.attendance?.[day.key] || { present: false, duration: defaultDuration };
+    const selectedDuration = attendance.present ? (attendance.duration ?? defaultDuration) : defaultDuration;
+    const printText = attendance.present ? `حضور - ${getDurationLabel(selectedDuration, isNewLogic)}` : 'غياب';
 
     return `
         <td class="attendance-day-cell ${attendance.present ? 'is-present' : 'is-absent'}" data-day="${day.key}">
             <div class="attendance-editor">
                 <input type="checkbox" class="attendance-check" ${attendance.present ? 'checked' : ''} aria-label="حضور ${day.label}">
                 <select class="workers-select attendance-duration" ${attendance.present ? '' : 'disabled'}>
-                    ${buildDurationOptions(selectedDuration)}
+                    ${buildDurationOptions(selectedDuration, isNewLogic)}
                 </select>
             </div>
             <span class="print-attendance">${printText}</span>
@@ -398,7 +418,7 @@ function renderRows() {
         const netClass = Number(row.net_pay) < 0 ? 'is-negative' : '';
 
         return `
-            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${row.advances_total}" class="${row.is_active ? '' : 'is-archived'}">
+            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${row.advances_total}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'}">
                 <td>${index + 1}</td>
                 <td class="worker-name-cell"${notesTitle}>
                     <strong>${escapeHtml(row.name)}</strong>
@@ -462,20 +482,23 @@ function updateAttendancePrintText(cell) {
     const printText = cell.querySelector('.print-attendance');
     if (!checkbox || !select || !printText) return;
 
+    const isNewLogic = state.weekStart >= '2026-07-11';
     printText.textContent = checkbox.checked
-        ? `حضور - ${getDurationLabel(Number(select.value))}`
+        ? `حضور - ${getDurationLabel(Number(select.value), isNewLogic)}`
         : 'غياب';
 }
 
 function updateRowCalculations(rowElement) {
     if (!rowElement) return;
 
+    const isNewLogic = state.weekStart >= '2026-07-11';
     let attendanceUnits = 0;
     rowElement.querySelectorAll('.attendance-day-cell').forEach((cell) => {
         const checkbox = cell.querySelector('.attendance-check');
         const select = cell.querySelector('.attendance-duration');
         if (checkbox?.checked) {
-            attendanceUnits += Number(select?.value) || 0;
+            const val = Number(select?.value) || 0;
+            attendanceUnits += isNewLogic ? (1 + val) : val;
         }
         updateAttendancePrintText(cell);
     });
@@ -484,6 +507,10 @@ function updateRowCalculations(rowElement) {
     const advancesTotal = Number(rowElement.dataset.advancesTotal) || 0;
     const grossPay = Math.round((dailyWage * attendanceUnits + Number.EPSILON) * 100) / 100;
     const netPay = Math.round((grossPay - advancesTotal + Number.EPSILON) * 100) / 100;
+
+    rowElement.dataset.grossPay = grossPay;
+    rowElement.dataset.netPay = netPay;
+
     const unitsElement = rowElement.querySelector('.attendance-units-value');
     const grossElement = rowElement.querySelector('.gross-pay-value');
     const netElement = rowElement.querySelector('.worker-net-value');
@@ -504,6 +531,7 @@ function syncAttendanceStateFromRow(rowElement) {
     const worker = getWorkerById(rowElement.dataset.workerId);
     if (!worker) return;
 
+    const isNewLogic = state.weekStart >= '2026-07-11';
     let attendanceUnits = 0;
     worker.attendance = worker.attendance || {};
 
@@ -512,10 +540,11 @@ function syncAttendanceStateFromRow(rowElement) {
         const checkbox = cell?.querySelector('.attendance-check');
         const select = cell?.querySelector('.attendance-duration');
         const present = Boolean(checkbox?.checked);
-        const duration = present ? Number(select?.value) || 1 : 0;
+        const defaultDuration = isNewLogic ? 0 : 1;
+        const duration = present ? (select ? Number(select.value) : defaultDuration) : 0;
 
         worker.attendance[day.key] = { present, duration };
-        attendanceUnits += duration;
+        attendanceUnits += present ? (isNewLogic ? (1 + duration) : duration) : 0;
     });
 
     worker.attendance_units = attendanceUnits;
@@ -525,14 +554,19 @@ function syncAttendanceStateFromRow(rowElement) {
 }
 
 function restoreUnsavedAttendance(rows, attendanceByWorker) {
+    const isNewLogic = state.weekStart >= '2026-07-11';
     rows.forEach((row) => {
         const attendance = attendanceByWorker.get(String(row.id));
         if (!attendance) return;
 
         row.attendance = attendance;
-        row.attendance_units = ATTENDANCE_DAYS.reduce((total, day) => (
-            total + (attendance[day.key]?.present ? Number(attendance[day.key].duration) || 1 : 0)
-        ), 0);
+        row.attendance_units = ATTENDANCE_DAYS.reduce((total, day) => {
+            const att = attendance[day.key];
+            if (!att?.present) return total;
+            const defaultDuration = isNewLogic ? 0 : 1;
+            const duration = att.duration ?? defaultDuration;
+            return total + (isNewLogic ? (1 + duration) : duration);
+        }, 0);
         row.gross_pay = Math.round(((Number(row.daily_wage) || 0) * row.attendance_units + Number.EPSILON) * 100) / 100;
         row.net_pay = Math.round((row.gross_pay - (Number(row.advances_total) || 0) + Number.EPSILON) * 100) / 100;
     });
@@ -550,9 +584,9 @@ function updateSummaryFromTable() {
     let netPay = 0;
 
     rows.forEach((row) => {
-        grossPay += getMoneyFromCell(row.querySelector('.gross-pay-value'));
+        grossPay += Number(row.dataset.grossPay) || 0;
         advancesTotal += Number(row.dataset.advancesTotal) || 0;
-        netPay += getMoneyFromCell(row.querySelector('.worker-net-value'));
+        netPay += Number(row.dataset.netPay) || 0;
     });
 
     document.getElementById('workersCountValue').textContent = String(rows.length);
@@ -567,6 +601,15 @@ function updateWeekLabels() {
     const printElement = document.getElementById('printWeekLabel');
     if (rangeElement) rangeElement.textContent = label;
     if (printElement) printElement.textContent = label;
+}
+
+function updateNavigationButtonsState() {
+    const nextBtn = document.getElementById('nextWeekBtn');
+    if (!nextBtn) return;
+
+    const currentActualWeek = getSaturday(new Date());
+    const isAtOrAfterCurrentWeek = state.weekStart >= currentActualWeek;
+    nextBtn.disabled = isAtOrAfterCurrentWeek;
 }
 
 async function loadWeek({ preserveAttendance = false } = {}) {
@@ -606,6 +649,7 @@ async function loadWeek({ preserveAttendance = false } = {}) {
         if (attendanceByWorker) restoreUnsavedAttendance(state.rows, attendanceByWorker);
         renderRows();
         updateWeekLabels();
+        updateNavigationButtonsState();
         updateJobFilterOptions();
     } catch (error) {
         showMessage(error.message || 'تعذر تحميل بيانات الأسبوع', 'error');
@@ -683,8 +727,10 @@ async function saveWeekAttendance() {
     }
 
     const button = document.getElementById('saveWeekBtn');
+    const buttonTop = document.getElementById('saveWeekBtnTop');
     state.isSavingWeek = true;
     if (button) button.disabled = true;
+    if (buttonTop) buttonTop.disabled = true;
 
     try {
         const result = await window.electronAPI.saveWorkersWeekAttendance({
@@ -705,6 +751,7 @@ async function saveWeekAttendance() {
     } finally {
         state.isSavingWeek = false;
         if (button) button.disabled = false;
+        if (buttonTop) buttonTop.disabled = false;
     }
 }
 
@@ -982,6 +1029,10 @@ function bindEvents() {
     document.getElementById('addWorkerBtn').addEventListener('click', () => openWorkerModal());
     document.getElementById('printWeekBtn').addEventListener('click', () => window.print());
     document.getElementById('saveWeekBtn').addEventListener('click', saveWeekAttendance);
+    const saveWeekBtnTop = document.getElementById('saveWeekBtnTop');
+    if (saveWeekBtnTop) {
+        saveWeekBtnTop.addEventListener('click', saveWeekAttendance);
+    }
     document.getElementById('workerForm').addEventListener('submit', saveWorker);
     document.getElementById('advanceForm').addEventListener('submit', saveAdvance);
     document.getElementById('cancelAdvanceEditBtn').addEventListener('click', resetAdvanceForm);
@@ -1011,7 +1062,10 @@ function bindEvents() {
             const select = cell.querySelector('.attendance-duration');
             if (select) {
                 select.disabled = !event.target.checked;
-                if (event.target.checked && !Number(select.value)) select.value = '1';
+                const isNewLogic = state.weekStart >= '2026-07-11';
+                if (event.target.checked && !isNewLogic && !Number(select.value)) {
+                    select.value = '1';
+                }
             }
             cell.classList.toggle('is-present', event.target.checked);
             cell.classList.toggle('is-absent', !event.target.checked);

@@ -1,19 +1,20 @@
 {
   "name": "accounting-system-desktop",
-  "version": "7.0.5",
+  "version": "7.0.6",
   "description": "Professional Accounting System",
   "main": "src/main/main.js",
   "scripts": {
     "prestart": "node ../scripts/sync-workspace-version.js",
     "prebuild": "node ../scripts/sync-workspace-version.js",
     "start": "electron .",
-    "build": "electron-builder",
+    "build": "electron-builder --publish never",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "check-backend": "node -e \"require('./src/main/backendClient').checkBackendHealth().then((r)=>console.log(JSON.stringify(r,null,2)))\""
   },
   "build": {
     "appId": "com.accountingsystem.app",
     "productName": "Accounting System",
+    "publish": null,
     "win": {
       "target": "nsis",
       "icon": "src/main/assets/icon.ico"

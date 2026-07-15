@@ -10,7 +10,7 @@ const ATTENDANCE_DAYS = [
     'thursday',
     'friday'
 ];
-const ALLOWED_DURATIONS = new Set([0.5, 1, 1.5]);
+const ALLOWED_DURATIONS = new Set([0, 0.5, 1, 1.5]);
 
 function roundMoney(value) {
     const n = Number(value) || 0;
@@ -87,7 +87,7 @@ function normalizeAttendanceEntry(entry = {}) {
         const duration = present ? Number(entry[`${day}_duration`]) : 0;
 
         if (present && !ALLOWED_DURATIONS.has(duration)) {
-            throw new Error('مدة العمل يجب أن تكون نصف يوم أو يومًا أو يومًا ونصف');
+            throw new Error('مدة العمل يجب أن تكون نصف يوم أو يومًا أو يومًا ونصف أو بدون إضافي');
         }
 
         normalized[`${day}_present`] = present;
@@ -184,18 +184,20 @@ function getWeekData(weekStart, includeArchived = false) {
         advancesByWorker.set(advance.worker_id, workerAdvances);
     }
 
+    const isNewLogic = weekStart >= '2026-07-11';
     const rows = workers.map((worker) => {
         const attendance = {};
         let attendanceUnits = 0;
 
         for (const day of ATTENDANCE_DAYS) {
             const present = Boolean(worker[`${day}_present`]);
+            const defaultDuration = isNewLogic ? 0 : 1;
             const duration = present && ALLOWED_DURATIONS.has(Number(worker[`${day}_duration`]))
                 ? Number(worker[`${day}_duration`])
-                : 0;
+                : (present ? defaultDuration : 0);
 
             attendance[day] = { present, duration };
-            attendanceUnits += duration;
+            attendanceUnits += present ? (isNewLogic ? (1 + duration) : duration) : 0;
         }
 
         const dailyWage = worker.attendance_id
