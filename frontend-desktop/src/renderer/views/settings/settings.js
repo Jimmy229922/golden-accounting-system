@@ -10,6 +10,7 @@ let unsubscribeAppUpdateProgress = null;
 let appUpdateProgressPollTimer = null;
 let isAppUpdateDownloadRunning = false;
 let initialFormSnapshot = '';
+let currentAppVersion = '';
 const SETTINGS_TRACKING_FIELDS = [
     { key: 'companyName', label: 'اسم المؤسسة' },
     { key: 'companyPhone', label: 'رقم الهاتف' },
@@ -38,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadSystemStatusSummary();
 
         // التحقق من إظهار ملاحظات التحديث تلقائياً لمرة واحدة
-        const CURRENT_VERSION = '7.0.7';
+        const CURRENT_VERSION = getCurrentChangelogVersion();
         const lastSeenVersion = localStorage.getItem('last_seen_changelog_version');
         if (lastSeenVersion !== CURRENT_VERSION) {
             setTimeout(() => {
@@ -290,7 +291,7 @@ function renderPage() {
         <div class="workers-modal-overlay hidden" id="changelogModal">
             <div class="workers-modal changelog-modal" role="dialog" aria-modal="true" aria-labelledby="changelogModalTitle">
                 <div class="workers-modal-header">
-                    <h2 id="changelogModalTitle"><i class="fas fa-sparkles"></i> ما الجديد في التحديث الجديد (إصدار 7.0.7) ✨</h2>
+                    <h2 id="changelogModalTitle"><i class="fas fa-sparkles"></i> ما الجديد في التحديث الجديد ✨</h2>
                     <button type="button" class="workers-modal-close" data-close-modal="changelogModal"><i class="fas fa-times"></i></button>
                 </div>
                 <div class="workers-modal-body">
@@ -301,43 +302,36 @@ function renderPage() {
                         <li>
                             <i class="fas fa-check-circle"></i>
                             <div>
-                                <strong>تعديل حساب الوقت الإضافي للعمال:</strong>
-                                <p>أصبح حضور العامل (علامة صح) يحتسب تلقائياً كـ <strong>يوم كامل أساسي</strong>، والقائمة المنسدلة تستخدم فقط لتحديد <strong>الوقت الإضافي</strong> الإضافي للراتب.</p>
+                                <strong>إضافة نثريات المصنع:</strong>
+                                <p>تمت إضافة صفحة مستقلة لتسجيل ومتابعة نثريات المصنع، مع جدول منفصل وأرقام مستندات تبدأ من <strong>FNTH-0001</strong>.</p>
                             </div>
                         </li>
                         <li>
                             <i class="fas fa-check-circle"></i>
                             <div>
-                                <strong>الخيار الافتراضي للإضافي:</strong>
-                                <p>تم تعيين الخيار الافتراضي للحضور ليكون <strong>"بدون إضافي"</strong> لتجنب مضاعفة الأجور دون قصد.</p>
+                                <strong>ربط نثريات المصنع بالمالية:</strong>
+                                <p>حفظ أو تعديل أو حذف مستند نثريات المصنع ينعكس على الخزينة بنفس أسلوب النثريات الحالية.</p>
                             </div>
                         </li>
                         <li>
                             <i class="fas fa-check-circle"></i>
                             <div>
-                                <strong>تحديث أجر العامل لحظياً في أسبوع الحضور:</strong>
-                                <p>عند تعديل أجر العامل اليومي من نافذة البيانات، يتم فوراً تحديث وتعديل أجره في الأسبوع الحالي المفتوح في الجدول دون المساس بالأسابيع القديمة المقفلة.</p>
+                                <strong>وضع الصفحة في التقارير:</strong>
+                                <p>تمت إضافة رابط نثريات المصنع تحت قائمة التقارير بجانب إدارة العمال لسهولة الوصول لها.</p>
                             </div>
                         </li>
                         <li>
                             <i class="fas fa-check-circle"></i>
                             <div>
-                                <strong>إصلاح بطاقات الإحصائيات للأجهزة المعربة:</strong>
-                                <p>تم حل مشكلة ظهور إجمالي الأجور والصافي كـ 0.00 على الأنظمة المعربة، وأصبح الحساب والتجميع يعمل بدقة تامة وبشكل فوري.</p>
+                                <strong>تحديث شاشة ما الجديد:</strong>
+                                <p>أصبحت شاشة ما الجديد تعتمد على رقم إصدار البرنامج الحالي تلقائياً بدلاً من رقم ثابت قديم.</p>
                             </div>
                         </li>
                         <li>
                             <i class="fas fa-check-circle"></i>
                             <div>
-                                <strong>زر الحفظ العلوي:</strong>
-                                <p>تمت إضافة زر حفظ حضور الأسبوع في أعلى الصفحة لتسهيل الحفظ السريع دون الحاجة للنزول لأسفل الجدول.</p>
-                            </div>
-                        </li>
-                        <li>
-                            <i class="fas fa-check-circle"></i>
-                            <div>
-                                <strong>تحسين أزرار التنقل وحظر الأسابيع المستقبلية:</strong>
-                                <p>تنسيق أزرار الأسابيع بشكل إحترافي للتمييز بينها، وحظر الانتقال لأسابيع مستقبلية بعد أسبوع العمل الحالي الفعلي.</p>
+                                <strong>تحديث رقم الإصدار:</strong>
+                                <p>تم تجهيز هذا الإصدار برقم <strong>7.0.11</strong> استعداداً للرفع على GitHub Releases.</p>
                             </div>
                         </li>
                     </ul>
@@ -445,18 +439,34 @@ async function loadSettings() {
     resetDirtyTracking();
 }
 
+function getCurrentChangelogVersion() {
+    return currentAppVersion || 'unknown';
+}
+
+function renderChangelogTitle() {
+    const titleEl = document.getElementById('changelogModalTitle');
+    if (!titleEl) return;
+
+    const versionText = currentAppVersion ? ` (إصدار ${currentAppVersion})` : '';
+    titleEl.innerHTML = `<i class="fas fa-sparkles"></i> ما الجديد في التحديث الجديد${versionText} ✨`;
+}
+
 async function loadAppVersion() {
     if (!appVersionValueEl || !window.electronAPI || typeof window.electronAPI.getAppVersion !== 'function') {
+        renderChangelogTitle();
         return;
     }
 
     try {
         const result = await window.electronAPI.getAppVersion();
         if (result && result.success && result.version) {
+            currentAppVersion = result.version;
             appVersionValueEl.textContent = result.version;
         }
     } catch (_) {
     }
+
+    renderChangelogTitle();
 }
 
 function setInfoText(element, value) {

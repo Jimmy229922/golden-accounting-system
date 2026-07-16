@@ -438,6 +438,26 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN updated_by TEXT", 'petty_expenses', 'updated_by');
 
     db.exec(`
+        CREATE TABLE IF NOT EXISTS factory_petty_expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL DEFAULT 'factory',
+            document_number TEXT UNIQUE,
+            expense_date TEXT DEFAULT CURRENT_DATE,
+            amount REAL NOT NULL DEFAULT 0,
+            statement TEXT NOT NULL,
+            notes TEXT,
+            treasury_transaction_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (treasury_transaction_id) REFERENCES treasury_transactions(id)
+        )
+    `);
+
+    runAddColumnMigration("ALTER TABLE factory_petty_expenses ADD COLUMN category TEXT DEFAULT 'factory'", 'factory_petty_expenses', 'category');
+    runAddColumnMigration("ALTER TABLE factory_petty_expenses ADD COLUMN updated_at TEXT", 'factory_petty_expenses', 'updated_at');
+    runAddColumnMigration("ALTER TABLE factory_petty_expenses ADD COLUMN created_by TEXT", 'factory_petty_expenses', 'created_by');
+    runAddColumnMigration("ALTER TABLE factory_petty_expenses ADD COLUMN updated_by TEXT", 'factory_petty_expenses', 'updated_by');
+
+    db.exec(`
         CREATE TABLE IF NOT EXISTS under_collection_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             document_number TEXT UNIQUE,
@@ -1264,6 +1284,9 @@ function initDB() {
             WHERE pl.party_id = parties.id
         ), 0)
     `);
+
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_factory_petty_expenses_category ON factory_petty_expenses(category)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_factory_petty_expenses_date ON factory_petty_expenses(expense_date)`);
 
     console.log('Database initialized at:', dbPath);
 }

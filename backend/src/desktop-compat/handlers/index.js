@@ -16,6 +16,7 @@ const invoices = require('./invoices');
 const reports = require('./reports');
 const backup = require('./backup');
 const pettyExpenses = require('./pettyExpenses');
+const factoryPettyExpenses = require('./factoryPettyExpenses');
 const underCollection = require('./underCollection');
 const remainingUnderCollection = require('./remainingUnderCollection');
 const exportRevenues = require('./exportRevenues');
@@ -51,6 +52,7 @@ function setupIPC() {
     reports.register();
     backup.register();
     pettyExpenses.register();
+    factoryPettyExpenses.register();
     underCollection.register();
     remainingUnderCollection.register();
     exportRevenues.register();
