@@ -11,6 +11,7 @@ const ATTENDANCE_DAYS = [
     'friday'
 ];
 const ALLOWED_DURATIONS = new Set([0, 0.5, 1, 1.5]);
+const ALLOWED_BASE_DURATIONS = new Set([0.5, 1]);
 
 function roundMoney(value) {
     const n = Number(value) || 0;
@@ -75,22 +76,29 @@ function normalizeWorkerPayload(data = {}) {
     };
 }
 
-function normalizeAttendanceEntry(entry = {}) {
+function normalizeAttendanceEntry(entry = {}, weekStart = '') {
     const workerId = Number(entry.worker_id);
     if (!Number.isInteger(workerId) || workerId <= 0) {
         throw new Error('معرف العامل غير صحيح');
     }
 
+    const isNewLogic = weekStart >= '2026-07-11';
     const normalized = { worker_id: workerId };
     for (const day of ATTENDANCE_DAYS) {
         const present = entry[`${day}_present`] ? 1 : 0;
         const duration = present ? Number(entry[`${day}_duration`]) : 0;
+        const baseDuration = present ? Number(entry[`${day}_base_duration`]) : 0;
 
         if (present && !ALLOWED_DURATIONS.has(duration)) {
             throw new Error('مدة العمل يجب أن تكون نصف يوم أو يومًا أو يومًا ونصف أو بدون إضافي');
         }
 
+        if (present && isNewLogic && !ALLOWED_BASE_DURATIONS.has(baseDuration)) {
+            throw new Error('مدة الحضور الأساسي يجب أن تكون نصف يوم أو يومًا كاملًا');
+        }
+
         normalized[`${day}_present`] = present;
+        normalized[`${day}_base_duration`] = present && isNewLogic ? baseDuration : 0;
         normalized[`${day}_duration`] = present ? duration : 0;
     }
 
@@ -142,18 +150,25 @@ function getWeekData(weekStart, includeArchived = false) {
             a.id AS attendance_id,
             a.daily_wage AS week_daily_wage,
             a.saturday_present,
+            a.saturday_base_duration,
             a.saturday_duration,
             a.sunday_present,
+            a.sunday_base_duration,
             a.sunday_duration,
             a.monday_present,
+            a.monday_base_duration,
             a.monday_duration,
             a.tuesday_present,
+            a.tuesday_base_duration,
             a.tuesday_duration,
             a.wednesday_present,
+            a.wednesday_base_duration,
             a.wednesday_duration,
             a.thursday_present,
+            a.thursday_base_duration,
             a.thursday_duration,
             a.friday_present,
+            a.friday_base_duration,
             a.friday_duration
         FROM workers w
         LEFT JOIN worker_weekly_attendance a
@@ -195,9 +210,12 @@ function getWeekData(weekStart, includeArchived = false) {
             const duration = present && ALLOWED_DURATIONS.has(Number(worker[`${day}_duration`]))
                 ? Number(worker[`${day}_duration`])
                 : (present ? defaultDuration : 0);
+            const baseDuration = present && isNewLogic && ALLOWED_BASE_DURATIONS.has(Number(worker[`${day}_base_duration`]))
+                ? Number(worker[`${day}_base_duration`])
+                : (present ? 1 : 0);
 
-            attendance[day] = { present, duration };
-            attendanceUnits += present ? (isNewLogic ? (1 + duration) : duration) : 0;
+            attendance[day] = { present, base_duration: baseDuration, duration };
+            attendanceUnits += present ? (isNewLogic ? (baseDuration + duration) : duration) : 0;
         }
 
         const dailyWage = worker.attendance_id
@@ -388,7 +406,7 @@ function register() {
         try {
             const weekStart = normalizeWeekStart(data.week_start_date);
             const entries = Array.isArray(data.entries) ? data.entries : [];
-            const normalizedEntries = entries.map(normalizeAttendanceEntry);
+            const normalizedEntries = entries.map((entry) => normalizeAttendanceEntry(entry, weekStart));
             const getWorker = db.prepare('SELECT id, daily_wage FROM workers WHERE id = ?');
             const getExisting = db.prepare(`
                 SELECT daily_wage
@@ -398,37 +416,44 @@ function register() {
             const upsertAttendance = db.prepare(`
                 INSERT INTO worker_weekly_attendance (
                     worker_id, week_start_date, daily_wage,
-                    saturday_present, saturday_duration,
-                    sunday_present, sunday_duration,
-                    monday_present, monday_duration,
-                    tuesday_present, tuesday_duration,
-                    wednesday_present, wednesday_duration,
-                    thursday_present, thursday_duration,
-                    friday_present, friday_duration
+                    saturday_present, saturday_base_duration, saturday_duration,
+                    sunday_present, sunday_base_duration, sunday_duration,
+                    monday_present, monday_base_duration, monday_duration,
+                    tuesday_present, tuesday_base_duration, tuesday_duration,
+                    wednesday_present, wednesday_base_duration, wednesday_duration,
+                    thursday_present, thursday_base_duration, thursday_duration,
+                    friday_present, friday_base_duration, friday_duration
                 ) VALUES (
                     @worker_id, @week_start_date, @daily_wage,
-                    @saturday_present, @saturday_duration,
-                    @sunday_present, @sunday_duration,
-                    @monday_present, @monday_duration,
-                    @tuesday_present, @tuesday_duration,
-                    @wednesday_present, @wednesday_duration,
-                    @thursday_present, @thursday_duration,
-                    @friday_present, @friday_duration
+                    @saturday_present, @saturday_base_duration, @saturday_duration,
+                    @sunday_present, @sunday_base_duration, @sunday_duration,
+                    @monday_present, @monday_base_duration, @monday_duration,
+                    @tuesday_present, @tuesday_base_duration, @tuesday_duration,
+                    @wednesday_present, @wednesday_base_duration, @wednesday_duration,
+                    @thursday_present, @thursday_base_duration, @thursday_duration,
+                    @friday_present, @friday_base_duration, @friday_duration
                 )
                 ON CONFLICT(worker_id, week_start_date) DO UPDATE SET
                     saturday_present = excluded.saturday_present,
+                    saturday_base_duration = excluded.saturday_base_duration,
                     saturday_duration = excluded.saturday_duration,
                     sunday_present = excluded.sunday_present,
+                    sunday_base_duration = excluded.sunday_base_duration,
                     sunday_duration = excluded.sunday_duration,
                     monday_present = excluded.monday_present,
+                    monday_base_duration = excluded.monday_base_duration,
                     monday_duration = excluded.monday_duration,
                     tuesday_present = excluded.tuesday_present,
+                    tuesday_base_duration = excluded.tuesday_base_duration,
                     tuesday_duration = excluded.tuesday_duration,
                     wednesday_present = excluded.wednesday_present,
+                    wednesday_base_duration = excluded.wednesday_base_duration,
                     wednesday_duration = excluded.wednesday_duration,
                     thursday_present = excluded.thursday_present,
+                    thursday_base_duration = excluded.thursday_base_duration,
                     thursday_duration = excluded.thursday_duration,
                     friday_present = excluded.friday_present,
+                    friday_base_duration = excluded.friday_base_duration,
                     friday_duration = excluded.friday_duration,
                     updated_at = CURRENT_TIMESTAMP
             `);

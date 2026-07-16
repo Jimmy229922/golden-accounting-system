@@ -4,6 +4,15 @@ const { app } = require('electron');
 
 const dbPath = path.join(app.getPath('userData'), 'accounting.db');
 const db = new Database(dbPath);
+const ATTENDANCE_BASE_DURATION_COLUMNS = [
+    'saturday_base_duration',
+    'sunday_base_duration',
+    'monday_base_duration',
+    'tuesday_base_duration',
+    'wednesday_base_duration',
+    'thursday_base_duration',
+    'friday_base_duration'
+];
 
 function isExpectedAddColumnError(error) {
     return /duplicate column name/i.test(String(error?.message || ''));
@@ -630,18 +639,25 @@ function initDB() {
             week_start_date TEXT NOT NULL,
             daily_wage REAL NOT NULL DEFAULT 0 CHECK (daily_wage >= 0),
             saturday_present INTEGER NOT NULL DEFAULT 0 CHECK (saturday_present IN (0, 1)),
+            saturday_base_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_base_duration IN (0, 0.5, 1)),
             saturday_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_duration IN (0, 0.5, 1, 1.5)),
             sunday_present INTEGER NOT NULL DEFAULT 0 CHECK (sunday_present IN (0, 1)),
+            sunday_base_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_base_duration IN (0, 0.5, 1)),
             sunday_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_duration IN (0, 0.5, 1, 1.5)),
             monday_present INTEGER NOT NULL DEFAULT 0 CHECK (monday_present IN (0, 1)),
+            monday_base_duration REAL NOT NULL DEFAULT 0 CHECK (monday_base_duration IN (0, 0.5, 1)),
             monday_duration REAL NOT NULL DEFAULT 0 CHECK (monday_duration IN (0, 0.5, 1, 1.5)),
             tuesday_present INTEGER NOT NULL DEFAULT 0 CHECK (tuesday_present IN (0, 1)),
+            tuesday_base_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_base_duration IN (0, 0.5, 1)),
             tuesday_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_duration IN (0, 0.5, 1, 1.5)),
             wednesday_present INTEGER NOT NULL DEFAULT 0 CHECK (wednesday_present IN (0, 1)),
+            wednesday_base_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_base_duration IN (0, 0.5, 1)),
             wednesday_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_duration IN (0, 0.5, 1, 1.5)),
             thursday_present INTEGER NOT NULL DEFAULT 0 CHECK (thursday_present IN (0, 1)),
+            thursday_base_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_base_duration IN (0, 0.5, 1)),
             thursday_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_duration IN (0, 0.5, 1, 1.5)),
             friday_present INTEGER NOT NULL DEFAULT 0 CHECK (friday_present IN (0, 1)),
+            friday_base_duration REAL NOT NULL DEFAULT 0 CHECK (friday_base_duration IN (0, 0.5, 1)),
             friday_duration REAL NOT NULL DEFAULT 0 CHECK (friday_duration IN (0, 0.5, 1, 1.5)),
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT,
@@ -649,6 +665,14 @@ function initDB() {
             FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE RESTRICT
         )
     `);
+
+    ATTENDANCE_BASE_DURATION_COLUMNS.forEach((column) => {
+        runAddColumnMigration(
+            `ALTER TABLE worker_weekly_attendance ADD COLUMN ${column} REAL NOT NULL DEFAULT 0 CHECK (${column} IN (0, 0.5, 1))`,
+            'worker_weekly_attendance',
+            column
+        );
+    });
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS worker_advances (

@@ -360,17 +360,41 @@ function buildDurationOptions(selectedDuration, isNewLogic = false) {
     )).join('');
 }
 
+function getBaseDurationLabel(baseDuration) {
+    const val = Number(baseDuration);
+    if (val === 0.5) return 'نصف يوم';
+    return 'يوم كامل';
+}
+
+function buildBaseDurationOptions(selectedDuration) {
+    const options = [
+        { value: 1, label: 'يوم كامل' },
+        { value: 0.5, label: 'نصف يوم' }
+    ];
+    return options.map((option) => (
+        `<option value="${option.value}" ${Number(selectedDuration) === option.value ? 'selected' : ''}>${option.label}</option>`
+    )).join('');
+}
+
 function buildAttendanceCell(row, day) {
     const isNewLogic = state.weekStart >= '2026-07-11';
     const defaultDuration = isNewLogic ? 0 : 1;
-    const attendance = row.attendance?.[day.key] || { present: false, duration: defaultDuration };
+    const attendance = row.attendance?.[day.key] || { present: false, base_duration: 1, duration: defaultDuration };
+    const selectedBaseDuration = attendance.present ? (attendance.base_duration ?? 1) : 1;
     const selectedDuration = attendance.present ? (attendance.duration ?? defaultDuration) : defaultDuration;
-    const printText = attendance.present ? `حضور - ${getDurationLabel(selectedDuration, isNewLogic)}` : 'غياب';
+    const printText = attendance.present
+        ? (isNewLogic ? `حضور - ${getBaseDurationLabel(selectedBaseDuration)} - ${getDurationLabel(selectedDuration, isNewLogic)}` : `حضور - ${getDurationLabel(selectedDuration, isNewLogic)}`)
+        : 'غياب';
 
     return `
         <td class="attendance-day-cell ${attendance.present ? 'is-present' : 'is-absent'}" data-day="${day.key}">
             <div class="attendance-editor">
                 <input type="checkbox" class="attendance-check" ${attendance.present ? 'checked' : ''} aria-label="حضور ${day.label}">
+                ${isNewLogic ? `
+                    <select class="workers-select attendance-base-duration" ${attendance.present ? '' : 'disabled'}>
+                        ${buildBaseDurationOptions(selectedBaseDuration)}
+                    </select>
+                ` : ''}
                 <select class="workers-select attendance-duration" ${attendance.present ? '' : 'disabled'}>
                     ${buildDurationOptions(selectedDuration, isNewLogic)}
                 </select>
@@ -478,13 +502,14 @@ function updateJobFilterOptions() {
 function updateAttendancePrintText(cell) {
     if (!cell) return;
     const checkbox = cell.querySelector('.attendance-check');
+    const baseSelect = cell.querySelector('.attendance-base-duration');
     const select = cell.querySelector('.attendance-duration');
     const printText = cell.querySelector('.print-attendance');
     if (!checkbox || !select || !printText) return;
 
     const isNewLogic = state.weekStart >= '2026-07-11';
     printText.textContent = checkbox.checked
-        ? `حضور - ${getDurationLabel(Number(select.value), isNewLogic)}`
+        ? (isNewLogic ? `حضور - ${getBaseDurationLabel(Number(baseSelect?.value) || 1)} - ${getDurationLabel(Number(select.value), isNewLogic)}` : `حضور - ${getDurationLabel(Number(select.value), isNewLogic)}`)
         : 'غياب';
 }
 
@@ -495,10 +520,12 @@ function updateRowCalculations(rowElement) {
     let attendanceUnits = 0;
     rowElement.querySelectorAll('.attendance-day-cell').forEach((cell) => {
         const checkbox = cell.querySelector('.attendance-check');
+        const baseSelect = cell.querySelector('.attendance-base-duration');
         const select = cell.querySelector('.attendance-duration');
         if (checkbox?.checked) {
+            const baseVal = Number(baseSelect?.value) || 1;
             const val = Number(select?.value) || 0;
-            attendanceUnits += isNewLogic ? (1 + val) : val;
+            attendanceUnits += isNewLogic ? (baseVal + val) : val;
         }
         updateAttendancePrintText(cell);
     });
@@ -538,13 +565,15 @@ function syncAttendanceStateFromRow(rowElement) {
     ATTENDANCE_DAYS.forEach((day) => {
         const cell = rowElement.querySelector(`.attendance-day-cell[data-day="${day.key}"]`);
         const checkbox = cell?.querySelector('.attendance-check');
+        const baseSelect = cell?.querySelector('.attendance-base-duration');
         const select = cell?.querySelector('.attendance-duration');
         const present = Boolean(checkbox?.checked);
         const defaultDuration = isNewLogic ? 0 : 1;
+        const baseDuration = present && isNewLogic ? (baseSelect ? Number(baseSelect.value) : 1) : 0;
         const duration = present ? (select ? Number(select.value) : defaultDuration) : 0;
 
-        worker.attendance[day.key] = { present, duration };
-        attendanceUnits += present ? (isNewLogic ? (1 + duration) : duration) : 0;
+        worker.attendance[day.key] = { present, base_duration: present ? (baseDuration || 1) : 0, duration };
+        attendanceUnits += present ? (isNewLogic ? ((baseDuration || 1) + duration) : duration) : 0;
     });
 
     worker.attendance_units = attendanceUnits;
@@ -564,8 +593,9 @@ function restoreUnsavedAttendance(rows, attendanceByWorker) {
             const att = attendance[day.key];
             if (!att?.present) return total;
             const defaultDuration = isNewLogic ? 0 : 1;
+            const baseDuration = att.base_duration ?? 1;
             const duration = att.duration ?? defaultDuration;
-            return total + (isNewLogic ? (1 + duration) : duration);
+            return total + (isNewLogic ? (baseDuration + duration) : duration);
         }, 0);
         row.gross_pay = Math.round(((Number(row.daily_wage) || 0) * row.attendance_units + Number.EPSILON) * 100) / 100;
         row.net_pay = Math.round((row.gross_pay - (Number(row.advances_total) || 0) + Number.EPSILON) * 100) / 100;
@@ -712,11 +742,14 @@ function collectAttendanceEntries() {
         ATTENDANCE_DAYS.forEach((day) => {
             const cell = row.querySelector(`.attendance-day-cell[data-day="${day.key}"]`);
             const checkbox = cell?.querySelector('.attendance-check');
+            const baseSelect = cell?.querySelector('.attendance-base-duration');
             const select = cell?.querySelector('.attendance-duration');
             const present = Boolean(checkbox?.checked);
+            const baseDurationVal = baseSelect ? Number(baseSelect.value) : 1;
             const durationVal = select ? Number(select.value) : defaultDuration;
 
             entry[`${day.key}_present`] = present;
+            entry[`${day.key}_base_duration`] = present && isNewLogic ? (isNaN(baseDurationVal) ? 1 : baseDurationVal) : 0;
             entry[`${day.key}_duration`] = present ? (isNaN(durationVal) ? defaultDuration : durationVal) : 0;
         });
         return entry;
@@ -1065,7 +1098,11 @@ function bindEvents() {
         if (!row || !cell) return;
 
         if (event.target.classList.contains('attendance-check')) {
+            const baseSelect = cell.querySelector('.attendance-base-duration');
             const select = cell.querySelector('.attendance-duration');
+            if (baseSelect) {
+                baseSelect.disabled = !event.target.checked;
+            }
             if (select) {
                 select.disabled = !event.target.checked;
                 const isNewLogic = state.weekStart >= '2026-07-11';

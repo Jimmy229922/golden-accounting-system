@@ -367,12 +367,15 @@
     gap: 7px;
 }
 
+.attendance-base-duration,
 .attendance-duration {
+    grid-column: 2;
     min-height: 34px;
     padding: 0 7px;
     font-size: 0.78rem;
 }
 
+.attendance-base-duration:disabled,
 .attendance-duration:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -789,4 +792,3 @@
     font-size: 0.85rem;
     line-height: 1.45;
 }
-
