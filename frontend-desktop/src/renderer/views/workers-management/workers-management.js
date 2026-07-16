@@ -708,22 +708,25 @@ async function loadWeeksHistory() {
     }
 }
 
+async function confirmDiscardUnsavedAttendance() {
+    if (!state.hasUnsavedAttendance) return true;
+
+    return typeof window.showConfirmDialog === 'function'
+        ? await window.showConfirmDialog('يوجد حضور غير محفوظ. هل تريد المتابعة وتجاهل التعديلات؟')
+        : window.confirm('يوجد حضور غير محفوظ. هل تريد المتابعة وتجاهل التعديلات؟');
+}
+
 async function changeWeek(weekStart) {
     const nextWeekStart = getSaturday(weekStart);
     if (nextWeekStart === state.weekStart) return;
 
-    if (state.hasUnsavedAttendance) {
-        const confirmed = typeof window.showConfirmDialog === 'function'
-            ? await window.showConfirmDialog('يوجد حضور غير محفوظ. هل تريد الانتقال إلى أسبوع آخر وتجاهل التعديلات؟')
-            : window.confirm('يوجد حضور غير محفوظ. هل تريد الانتقال إلى أسبوع آخر وتجاهل التعديلات؟');
-
-        if (!confirmed) {
-            const currentInput = document.getElementById('weekStartInput');
-            const historySelect = document.getElementById('weekHistorySelect');
-            if (currentInput) currentInput.value = state.weekStart;
-            if (historySelect) historySelect.value = '';
-            return;
-        }
+    const confirmed = await confirmDiscardUnsavedAttendance();
+    if (!confirmed) {
+        const currentInput = document.getElementById('weekStartInput');
+        const historySelect = document.getElementById('weekHistorySelect');
+        if (currentInput) currentInput.value = state.weekStart;
+        if (historySelect) historySelect.value = '';
+        return;
     }
 
     state.hasUnsavedAttendance = false;
@@ -951,19 +954,25 @@ function renderWorkerAdvances() {
     `;
 }
 
-function openAdvanceModal(workerId) {
-    const worker = getWorkerById(workerId);
+function updateAdvanceModalHeader() {
+    const worker = getWorkerById(state.advanceWorkerId);
     if (!worker) return;
 
-    state.advanceWorkerId = Number(workerId);
     document.getElementById('advanceModalTitle').textContent = `سُلف العامل: ${worker.name}`;
-    
+
     const histElement = document.getElementById('historicalAdvancesTotal');
     if (histElement) {
         const totalHist = worker.historical_advances_total || 0;
         histElement.textContent = `إجمالي السلف التراكمية: ${formatMoney(totalHist)} ج.م`;
     }
-    
+}
+
+function openAdvanceModal(workerId) {
+    const worker = getWorkerById(workerId);
+    if (!worker) return;
+
+    state.advanceWorkerId = Number(workerId);
+    updateAdvanceModalHeader();
     resetAdvanceForm();
     renderWorkerAdvances();
     document.getElementById('advanceModal').classList.remove('hidden');
@@ -1034,6 +1043,7 @@ async function saveAdvance(event) {
         const workerId = state.advanceWorkerId;
         await Promise.all([loadWeek({ preserveAttendance: true }), loadWeeksHistory()]);
         state.advanceWorkerId = workerId;
+        updateAdvanceModalHeader();
         resetAdvanceForm();
         renderWorkerAdvances();
     } catch (error) {
@@ -1060,11 +1070,46 @@ async function deleteAdvance(id) {
     const workerId = state.advanceWorkerId;
     await loadWeek({ preserveAttendance: true });
     state.advanceWorkerId = workerId;
+    updateAdvanceModalHeader();
     resetAdvanceForm();
     renderWorkerAdvances();
 }
 
+async function handleUnsavedAttendanceNavigation(event) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!state.hasUnsavedAttendance) return;
+
+    const link = event.target.closest('.top-nav a');
+    if (!link) return;
+
+    const href = link.getAttribute('href');
+    if (!href || href === '#' || href.startsWith('javascript:')) return;
+
+    const currentUrl = new URL(window.location.href);
+    const targetUrl = new URL(link.href, window.location.href);
+    const isSamePage =
+        currentUrl.pathname === targetUrl.pathname &&
+        currentUrl.search === targetUrl.search &&
+        currentUrl.hash === targetUrl.hash;
+
+    if (isSamePage) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    const confirmed = await confirmDiscardUnsavedAttendance();
+    if (!confirmed) return;
+
+    state.hasUnsavedAttendance = false;
+    if (window.__navigateWithinShell && window.__navigateWithinShell(targetUrl.href)) {
+        return;
+    }
+
+    window.location.href = targetUrl.href;
+}
+
 function bindEvents() {
+    document.addEventListener('click', handleUnsavedAttendanceNavigation, true);
     document.getElementById('addWorkerBtn').addEventListener('click', () => openWorkerModal());
     document.getElementById('printWeekBtn').addEventListener('click', () => window.print());
     document.getElementById('saveWeekBtn').addEventListener('click', saveWeekAttendance);
