@@ -1,6 +1,6 @@
 {
   "name": "accounting-system-backend",
-  "version": "7.0.13",
+  "version": "7.0.14",
   "private": true,
   "description": "Backend API for Accounting System",
   "main": "src/server.js",

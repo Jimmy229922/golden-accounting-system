@@ -407,6 +407,34 @@ function navigateTo(rawTarget, options = {}) {
     return true;
 }
 
+async function confirmCurrentFrameNavigation(targetHref) {
+    let targetUrl;
+    try {
+        targetUrl = toUrl(targetHref || DEFAULT_ROUTE);
+    } catch (_e) {
+        return true;
+    }
+
+    if (shellState.currentHref) {
+        try {
+            const currentUrl = toUrl(shellState.currentHref);
+            if (sameLocation(currentUrl, targetUrl)) {
+                return true;
+            }
+        } catch (_e) {
+            // Ignore parse issue and continue confirmation.
+        }
+    }
+
+    const frame = document.getElementById('shellFrame');
+    const frameWindow = frame?.contentWindow;
+    if (frameWindow && typeof frameWindow.__confirmLeavePage === 'function') {
+        return await frameWindow.__confirmLeavePage(targetUrl.href);
+    }
+
+    return true;
+}
+
 window.__shellNavigate = (rawTarget) => navigateTo(rawTarget, { pushHistory: true });
 window.__syncThemeFromChild = (theme) => {
     const safeTheme = theme === 'dark' ? 'dark' : 'light';
@@ -425,7 +453,7 @@ function bindShellNavEvents() {
     const navHost = document.getElementById('shellNav');
     if (!navHost) return;
 
-    navHost.addEventListener('click', (event) => {
+    navHost.addEventListener('click', async (event) => {
         if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
             return;
         }
@@ -458,6 +486,9 @@ function bindShellNavEvents() {
         }
 
         event.preventDefault();
+        const confirmed = await confirmCurrentFrameNavigation(href);
+        if (!confirmed) return;
+
         navigateTo(href, { pushHistory: true });
     });
 }

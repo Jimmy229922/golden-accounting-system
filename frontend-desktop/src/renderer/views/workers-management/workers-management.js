@@ -716,6 +716,8 @@ async function confirmDiscardUnsavedAttendance() {
         : window.confirm('يوجد حضور غير محفوظ. هل تريد المتابعة وتجاهل التعديلات؟');
 }
 
+window.__confirmLeavePage = confirmDiscardUnsavedAttendance;
+
 async function changeWeek(weekStart) {
     const nextWeekStart = getSaturday(weekStart);
     if (nextWeekStart === state.weekStart) return;
