@@ -526,17 +526,23 @@ function register() {
             }
         } catch (error) {
             const fallbackMessage = translateUpdaterError(error);
-            console.warn('[app-update] Differential update download failed, falling back to full installer:', error?.message || error);
+            const stopMessage = `${fallbackMessage} لم يتم تنزيل ملف التثبيت الكامل تلقائياً لتجنب تكرار التحميل. تأكد من رفع ملفات الإصدار الثلاثة الصحيحة ثم أعد المحاولة.`;
+            console.warn('[app-update] Differential update download failed, full installer fallback stopped:', error?.message || error);
             setAppUpdateProgressState({
-                status: 'retrying',
-                error: '',
-                message: `${fallbackMessage} جاري استخدام ملف التثبيت الكامل كخطة احتياطية...`
+                status: 'error',
+                error: stopMessage,
+                message: stopMessage
             });
             emitAppUpdateProgress(event.sender, {
-                status: 'retrying',
-                error: '',
-                message: `${fallbackMessage} جاري استخدام ملف التثبيت الكامل كخطة احتياطية...`
+                status: 'error',
+                error: stopMessage,
+                message: stopMessage
             });
+            return {
+                success: false,
+                error: stopMessage,
+                openReleasePage: false
+            };
         }
 
         const releaseResult = await fetchLatestReleaseDetails();
