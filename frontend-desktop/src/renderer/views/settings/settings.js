@@ -1183,9 +1183,7 @@ async function handleAppUpdate() {
             setUpdateProgressVisibility(true);
             setUpdateProgress(100, '100%');
             setUpdateRetryButtonVisibility(false);
-            const updateModeText = downloadResult.differential ? 'التفاضلي' : '';
-            const installerPathText = downloadResult.differential ? '' : `: ${downloadResult.path}`;
-            const successMessage = `تم تنزيل التحديث ${updateModeText} ${downloadResult.latestVersion || ''} بنجاح. سيتم الآن إغلاق البرنامج وبدء التثبيت${installerPathText}`.trim();
+            const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} بنجاح. سيتم الآن إغلاق البرنامج وبدء التثبيت: ${downloadResult.path}`.trim();
             setStatus(updateStatusEl, successMessage);
             if (window.showToast) window.showToast('تم تنزيل التحديث. سيتم الآن إغلاق البرنامج وبدء التثبيت.', 'success');
             if (downloadResult.closeForInstall && typeof window.electronAPI.quitAndInstallAppUpdate === 'function') {

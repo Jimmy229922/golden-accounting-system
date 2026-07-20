@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 const rootDir = path.resolve(__dirname, '..');
@@ -82,40 +81,6 @@ function createZip(zipPath) {
     }
 }
 
-function yamlQuote(value) {
-    return `'${String(value || '').replace(/'/g, "''")}'`;
-}
-
-function getSha512(filePath) {
-    return crypto
-        .createHash('sha512')
-        .update(fs.readFileSync(filePath))
-        .digest('base64');
-}
-
-function createLatestYml(version, installerPath) {
-    const installerName = path.basename(installerPath);
-    const installerSize = fs.statSync(installerPath).size;
-    const installerSha512 = getSha512(installerPath);
-    const latestYmlPath = path.join(distDir, 'latest.yml');
-    const releaseDate = new Date().toISOString();
-
-    const content = [
-        `version: ${version}`,
-        'files:',
-        `  - url: ${yamlQuote(installerName)}`,
-        `    sha512: ${installerSha512}`,
-        `    size: ${installerSize}`,
-        `path: ${yamlQuote(installerName)}`,
-        `sha512: ${installerSha512}`,
-        `releaseDate: ${yamlQuote(releaseDate)}`,
-        ''
-    ].join('\n');
-
-    fs.writeFileSync(latestYmlPath, content, 'utf8');
-    return latestYmlPath;
-}
-
 function prepareArtifacts(version) {
     const installerPath = findInstaller(version);
     if (!installerPath) {
@@ -125,7 +90,6 @@ function prepareArtifacts(version) {
     recreatePortableDir();
 
     const installerName = path.basename(installerPath);
-    const latestYmlPath = createLatestYml(version, installerPath);
     const portableInstallerPath = path.join(portableDir, installerName);
     fs.copyFileSync(installerPath, portableInstallerPath);
 
@@ -139,12 +103,11 @@ function prepareArtifacts(version) {
     return {
         installerPath,
         portableInstallerPath,
-        zipPath,
-        latestYmlPath
+        zipPath
     };
 }
 
-function printSummary({ version, buildExecuted, installerPath, portableInstallerPath, zipPath, latestYmlPath }) {
+function printSummary({ version, buildExecuted, installerPath, portableInstallerPath, zipPath }) {
     console.log('');
     console.log('========================================');
     console.log(`جاهز لتجهيز Release الإصدار ${version}`);
@@ -159,14 +122,11 @@ function printSummary({ version, buildExecuted, installerPath, portableInstaller
     console.log('');
     console.log('الملفات النهائية:');
     console.log(`- Setup: ${path.relative(rootDir, installerPath)}`);
-    console.log(`- Latest YAML: ${path.relative(rootDir, latestYmlPath)}`);
     console.log(`- APP_JS: ${path.relative(rootDir, portableInstallerPath)}`);
     console.log(`- APP_JS ZIP: ${path.relative(rootDir, zipPath)}`);
     console.log('');
-    console.log('الملفات المطلوبة رفعها على GitHub Release للتحديث داخل البرنامج:');
+    console.log('الملف المطلوب رفعه على GitHub Release للتحديث داخل البرنامج:');
     console.log(`- ${path.basename(installerPath)}`);
-    console.log(`- ${path.basename(installerPath)}.blockmap`);
-    console.log('- latest.yml');
     console.log('');
     console.log('للتجهيز مع البناء: npm run release:build');
     console.log('للتجهيز بعد البناء فقط: npm run release:prepare');
