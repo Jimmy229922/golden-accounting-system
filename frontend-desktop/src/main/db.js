@@ -513,11 +513,18 @@ function initDB() {
             quantity REAL NOT NULL DEFAULT 0,
             price REAL NOT NULL DEFAULT 0,
             total REAL NOT NULL DEFAULT 0,
+            calculated_total REAL NOT NULL DEFAULT 0,
+            total_difference REAL NOT NULL DEFAULT 0,
+            is_total_manual INTEGER NOT NULL DEFAULT 0,
             statement TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (customer_id) REFERENCES parties(id) ON DELETE RESTRICT
         )
     `);
+
+    runAddColumnMigration("ALTER TABLE local_sales ADD COLUMN calculated_total REAL NOT NULL DEFAULT 0", 'local_sales', 'calculated_total');
+    runAddColumnMigration("ALTER TABLE local_sales ADD COLUMN total_difference REAL NOT NULL DEFAULT 0", 'local_sales', 'total_difference');
+    runAddColumnMigration("ALTER TABLE local_sales ADD COLUMN is_total_manual INTEGER NOT NULL DEFAULT 0", 'local_sales', 'is_total_manual');
 
     // 10. Sales Shift Closings Table (جدول إقفالات ورديات المبيعات)
     db.exec(`

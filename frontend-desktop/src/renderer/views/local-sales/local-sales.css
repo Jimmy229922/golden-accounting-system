@@ -37,6 +37,27 @@
     font-weight: 700;
 }
 
+.local-total-difference {
+    margin-top: -6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    direction: ltr;
+    text-align: right;
+    font-weight: 700;
+}
+
+.local-total-difference.positive {
+    color: #15803d;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.local-total-difference.negative {
+    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
 .petty-modal-row.three-cols {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }

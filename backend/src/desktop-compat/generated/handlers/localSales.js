@@ -10,6 +10,11 @@ function roundMoney(value) {
     return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+function roundDecimal(value) {
+    const n = Number(value) || 0;
+    return Math.round((n + Number.EPSILON) * 1000) / 1000;
+}
+
 function getNextDocumentNumber() {
     const row = db.prepare(`
         SELECT document_number
@@ -29,16 +34,22 @@ function normalizeDate(value) {
 }
 
 function normalizePayload(data = {}) {
-    const quantity = Number(data.quantity) || 0;
-    const price = Number(data.price) || 0;
-    const total = roundMoney(quantity * price);
+    const quantity = roundDecimal(Number(data.quantity) || 0);
+    const price = roundDecimal(Number(data.price) || 0);
+    const calculatedTotal = roundMoney(quantity * price);
+    const providedTotal = Number(data.total);
+    const total = Number.isFinite(providedTotal) ? roundMoney(providedTotal) : calculatedTotal;
+    const totalDifference = roundMoney(total - calculatedTotal);
 
     return {
         record_date: normalizeDate(data.record_date),
         customer_id: Number(data.customer_id) || 0,
-        quantity: roundMoney(quantity),
-        price: roundMoney(price),
+        quantity,
+        price,
         total,
+        calculated_total: calculatedTotal,
+        total_difference: totalDifference,
+        is_total_manual: (Number(data.is_total_manual) || totalDifference !== 0) ? 1 : 0,
         statement: String(data.statement || '').trim()
     };
 }
@@ -54,6 +65,10 @@ function validatePayload(payload) {
 
     if (payload.price <= 0) {
         return 'السعر غير صحيح';
+    }
+
+    if (payload.total <= 0) {
+        return 'الإجمالي غير صحيح';
     }
 
     return '';
@@ -102,7 +117,9 @@ function register() {
             `).get(args);
             const rows = db.prepare(`
                 SELECT l.id, l.document_number, l.record_date, l.customer_id,
-                       c.name as customer_name, l.quantity, l.price, l.total, l.statement, l.created_at
+                       c.name as customer_name, l.quantity, l.price, l.total,
+                       l.calculated_total, l.total_difference, l.is_total_manual,
+                       l.statement, l.created_at
                 FROM local_sales l
                 LEFT JOIN parties c ON c.id = l.customer_id
                 ${whereSql}
@@ -114,7 +131,7 @@ function register() {
                 success: true,
                 rows,
                 total,
-                totalQuantity: roundMoney(totals.totalQuantity),
+                totalQuantity: roundDecimal(totals.totalQuantity),
                 totalAmount: roundMoney(totals.totalAmount),
                 page,
                 pageSize,
@@ -141,11 +158,13 @@ function register() {
             const info = db.prepare(`
                 INSERT INTO local_sales (
                     document_number, record_date, customer_id,
-                    quantity, price, total, statement
+                    quantity, price, total, calculated_total,
+                    total_difference, is_total_manual, statement
                 )
                 VALUES (
                     @document_number, @record_date, @customer_id,
-                    @quantity, @price, @total, @statement
+                    @quantity, @price, @total, @calculated_total,
+                    @total_difference, @is_total_manual, @statement
                 )
             `).run({ ...payload, document_number: documentNumber });
 
@@ -184,6 +203,9 @@ function register() {
                     quantity = @quantity,
                     price = @price,
                     total = @total,
+                    calculated_total = @calculated_total,
+                    total_difference = @total_difference,
+                    is_total_manual = @is_total_manual,
                     statement = @statement
                 WHERE id = @id
             `).run({ ...payload, id });

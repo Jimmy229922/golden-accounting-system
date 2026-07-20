@@ -10,7 +10,9 @@ const state = {
     isSaving: false,
     totalAmount: 0,
     totalQuantity: 0,
-    totalCount: 0
+    totalCount: 0,
+    manualTotalEdited: false,
+    calculatedTotal: NaN
 };
 
 let customers = [];
@@ -100,6 +102,39 @@ function formatNumber(value, options = {}) {
     });
 }
 
+function formatDecimalNumber(value) {
+    return formatNumber(value, { max: 3 });
+}
+
+function roundMoney(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return NaN;
+    return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+function formatSignedAmount(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '';
+    return `${num > 0 ? '+' : ''}${formatNumber(num)}`;
+}
+
+function renderTotalDifferenceNotice() {
+    const notice = document.getElementById('totalDifferenceNotice');
+    if (!notice) return;
+
+    const total = parseNumberInput(document.getElementById('totalInput')?.value);
+    const difference = roundMoney(total - state.calculatedTotal);
+
+    if (!state.manualTotalEdited || !Number.isFinite(difference) || difference === 0) {
+        notice.className = 'local-total-difference hidden';
+        notice.textContent = '';
+        return;
+    }
+
+    notice.className = `local-total-difference ${difference > 0 ? 'positive' : 'negative'}`;
+    notice.textContent = `فرق الإجمالي: ${formatSignedAmount(difference)}`;
+}
+
 function formatInputValue(rawValue) {
     const normalized = normalizeNumberString(rawValue);
     if (!normalized) return '';
@@ -110,10 +145,10 @@ function formatInputValue(rawValue) {
 
     if (!Number.isFinite(num)) return '';
 
-    const fractionLength = Math.min(decimals.length, 2);
+    const fractionLength = Math.min(decimals.length, 3);
     const formatted = num.toLocaleString('en-US', {
         minimumFractionDigits: fractionLength,
-        maximumFractionDigits: 2
+        maximumFractionDigits: 3
     });
 
     return hasTrailingDot ? `${formatted}.` : formatted;
@@ -197,18 +232,26 @@ function updateTotal() {
     const totalInput = document.getElementById('totalInput');
 
     if (!Number.isFinite(quantity) || !Number.isFinite(price)) {
+        state.calculatedTotal = NaN;
         totalInput.value = '';
+        renderTotalDifferenceNotice();
         return;
     }
 
-    totalInput.value = formatNumber(quantity * price);
+    state.calculatedTotal = roundMoney(quantity * price);
+    if (!state.manualTotalEdited) {
+        totalInput.value = formatNumber(state.calculatedTotal);
+    }
+    renderTotalDifferenceNotice();
 }
 
-function attachNumberFormatting(input) {
+function attachNumberFormatting(input, shouldUpdateTotal = true) {
     input.addEventListener('input', () => {
         const formatted = formatInputValue(input.value);
         input.value = formatted;
-        updateTotal();
+        if (shouldUpdateTotal) {
+            updateTotal();
+        }
     });
 }
 
@@ -372,9 +415,10 @@ function renderPage() {
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-calculator text-icon"></i> الإجمالي</label>
-                                    <input type="text" id="totalInput" class="form-control uneditable number-input" readonly>
+                                    <input type="text" id="totalInput" class="form-control number-input" placeholder="0" required>
                                 </div>
                             </div>
+                            <div id="totalDifferenceNotice" class="local-total-difference hidden"></div>
 
                             <div class="form-group">
                                 <label><i class="fas fa-pen text-icon"></i> البيان</label>
@@ -414,6 +458,9 @@ function bindEvents() {
         document.getElementById('localSalesForm').reset();
         document.getElementById('recordDate').value = today();
         document.getElementById('totalInput').value = '';
+        state.manualTotalEdited = false;
+        state.calculatedTotal = NaN;
+        renderTotalDifferenceNotice();
         setCustomerSelection('');
         await refreshDocumentNumber();
         modal.classList.remove('hidden');
@@ -431,6 +478,11 @@ function bindEvents() {
 
     attachNumberFormatting(document.getElementById('quantityInput'));
     attachNumberFormatting(document.getElementById('priceInput'));
+    attachNumberFormatting(document.getElementById('totalInput'), false);
+    document.getElementById('totalInput').addEventListener('input', () => {
+        state.manualTotalEdited = true;
+        renderTotalDifferenceNotice();
+    });
 
     window.financialPagination?.bind(document.getElementById('pagination'), {
         onPageChange: (page) => {
@@ -485,7 +537,7 @@ function renderSummary() {
     const totalAmountEl = document.getElementById('localSalesTotalAmount');
 
     if (totalQtyEl) {
-        totalQtyEl.textContent = formatNumber(state.totalQuantity);
+        totalQtyEl.textContent = formatDecimalNumber(state.totalQuantity);
     }
 
     if (totalAmountEl) {
@@ -507,8 +559,8 @@ function renderRows() {
             <td class="customer-cell">${escapeHtml(row.customer_name || '')}</td>
             <td class="day-cell">${escapeHtml(formatWeekday(row.record_date))}</td>
             <td>${escapeHtml(row.record_date || '')}</td>
-            <td class="qty-cell">${formatNumber(row.quantity)}</td>
-            <td class="price-cell">${formatNumber(row.price)}</td>
+            <td class="qty-cell">${formatDecimalNumber(row.quantity)}</td>
+            <td class="price-cell">${formatDecimalNumber(row.price)}</td>
             <td class="total-cell">${formatNumber(row.total)}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
             <td>
@@ -552,10 +604,13 @@ async function openEditModal(id) {
     document.getElementById('documentNumber').value = row.document_number || '';
     document.getElementById('recordDate').value = row.record_date || today();
     setCustomerSelection(row.customer_id);
-    document.getElementById('quantityInput').value = formatNumber(row.quantity);
-    document.getElementById('priceInput').value = formatNumber(row.price);
+    document.getElementById('quantityInput').value = formatDecimalNumber(row.quantity);
+    document.getElementById('priceInput').value = formatDecimalNumber(row.price);
     document.getElementById('totalInput').value = formatNumber(row.total);
     document.getElementById('statementInput').value = row.statement || '';
+    state.manualTotalEdited = false;
+    state.calculatedTotal = roundMoney(parseNumberInput(row.quantity) * parseNumberInput(row.price));
+    renderTotalDifferenceNotice();
     document.getElementById('addRecordModal').classList.remove('hidden');
 }
 
@@ -596,8 +651,33 @@ async function saveRecord(event) {
         customer_id: customerId,
         quantity: parseNumberInput(document.getElementById('quantityInput').value),
         price: parseNumberInput(document.getElementById('priceInput').value),
+        total: parseNumberInput(document.getElementById('totalInput').value),
+        is_total_manual: state.manualTotalEdited ? 1 : 0,
         statement: document.getElementById('statementInput').value
     };
+
+    const calculatedTotal = roundMoney(payload.quantity * payload.price);
+    const approvedTotal = roundMoney(payload.total);
+    const totalDifference = roundMoney(approvedTotal - calculatedTotal);
+    if (state.manualTotalEdited && Number.isFinite(totalDifference) && totalDifference !== 0) {
+        if (typeof window.showConfirmDialog !== 'function') {
+            showMessage('تعذر فتح نافذة تأكيد تعديل الإجمالي', 'error');
+            return;
+        }
+
+        const confirmed = await window.showConfirmDialog(
+            `تم تعديل الإجمالي يدويًا.\n\nالإجمالي الصحيح: ${formatNumber(calculatedTotal)}\nالإجمالي المعتمد: ${formatNumber(approvedTotal)}\nالفرق: ${formatSignedAmount(totalDifference)}\n\nهل تريد حفظ واعتماد هذا الإجمالي؟`,
+            {
+                title: 'تأكيد تعديل الإجمالي',
+                confirmText: 'تأكيد',
+                cancelText: 'إلغاء'
+            }
+        );
+
+        if (!confirmed) {
+            return;
+        }
+    }
 
     state.isSaving = true;
     setSubmitButtonLoading(true);
@@ -612,6 +692,9 @@ async function saveRecord(event) {
 
             showMessage('تم تعديل السجل بنجاح', 'success');
             state.editingId = null;
+            state.manualTotalEdited = false;
+            state.calculatedTotal = NaN;
+            renderTotalDifferenceNotice();
             document.getElementById('addRecordModal').classList.add('hidden');
             document.getElementById('localSalesForm').reset();
             await loadRecords();
@@ -625,10 +708,13 @@ async function saveRecord(event) {
         }
 
         showMessage('تم حفظ السجل بنجاح', 'success');
-        document.getElementById('addRecordModal').classList.add('hidden');
         document.getElementById('localSalesForm').reset();
         document.getElementById('recordDate').value = today();
         document.getElementById('totalInput').value = '';
+        state.manualTotalEdited = false;
+        state.calculatedTotal = NaN;
+        renderTotalDifferenceNotice();
+        setCustomerSelection('');
         await refreshDocumentNumber();
         state.page = 1;
         await loadRecords();
