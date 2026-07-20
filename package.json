@@ -1,7 +1,7 @@
 {
   "name": "accounting-system-monorepo",
   "private": true,
-  "version": "7.0.15",
+  "version": "8.0.0",
   "description": "Monorepo for desktop, backend, and future android client",
   "scripts": {
     "version:sync": "node scripts/sync-workspace-version.js",
