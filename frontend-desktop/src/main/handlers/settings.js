@@ -4,6 +4,12 @@ const path = require('path');
 const { db } = require('../db');
 const { requirePermission } = require('./auth');
 const { markMainWindowClosingForUpdate } = require('../windowManager');
+const {
+    checkDifferentialUpdate,
+    downloadDifferentialUpdate,
+    quitAndInstallDifferentialUpdate,
+    translateUpdaterError
+} = require('../appUpdater');
 
 const CUSTOMER_COLLECTION_PENDING_RELATED_TYPE = 'customer_collection_pending';
 const CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE = 'customer_collection_shift_close';
@@ -451,10 +457,88 @@ function register() {
     });
 
     ipcMain.handle('check-app-update', async () => {
+        try {
+            const differentialResult = await checkDifferentialUpdate();
+            if (differentialResult && differentialResult.success) {
+                return differentialResult;
+            }
+        } catch (error) {
+            console.warn('[app-update] Differential update check failed, falling back to full installer:', error?.message || error);
+        }
+
         return fetchLatestReleaseDetails();
     });
 
     ipcMain.handle('download-app-update', async (event) => {
+        try {
+            const differentialCheck = await checkDifferentialUpdate();
+            if (differentialCheck && differentialCheck.success && differentialCheck.updateAvailable) {
+                setAppUpdateProgressState({
+                    status: 'starting',
+                    latestVersion: differentialCheck.latestVersion,
+                    assetName: 'تحديث تفاضلي',
+                    downloadedBytes: 0,
+                    totalBytes: 0,
+                    percent: 0,
+                    error: '',
+                    message: 'جاري بدء تنزيل التحديث التفاضلي...',
+                    retryAttempt: 1,
+                    maxRetries: 1
+                });
+                emitAppUpdateProgress(event.sender, {
+                    status: 'starting',
+                    latestVersion: differentialCheck.latestVersion,
+                    assetName: 'تحديث تفاضلي',
+                    downloadedBytes: 0,
+                    totalBytes: 0,
+                    percent: 0,
+                    message: 'جاري بدء تنزيل التحديث التفاضلي...',
+                    retryAttempt: 1,
+                    maxRetries: 1
+                });
+
+                const differentialDownload = await downloadDifferentialUpdate(event);
+                setAppUpdateProgressState({
+                    status: 'completed',
+                    latestVersion: differentialCheck.latestVersion,
+                    assetName: 'تحديث تفاضلي',
+                    percent: 100,
+                    error: '',
+                    message: 'اكتمل تنزيل التحديث التفاضلي.',
+                    retryAttempt: 1,
+                    maxRetries: 1
+                });
+
+                return {
+                    ...differentialDownload,
+                    latestVersion: differentialCheck.latestVersion || differentialDownload.latestVersion,
+                    assetName: 'تحديث تفاضلي'
+                };
+            }
+
+            if (differentialCheck && differentialCheck.success && !differentialCheck.updateAvailable) {
+                return {
+                    success: true,
+                    updateAvailable: false,
+                    currentVersion: differentialCheck.currentVersion,
+                    latestVersion: differentialCheck.latestVersion
+                };
+            }
+        } catch (error) {
+            const fallbackMessage = translateUpdaterError(error);
+            console.warn('[app-update] Differential update download failed, falling back to full installer:', error?.message || error);
+            setAppUpdateProgressState({
+                status: 'retrying',
+                error: '',
+                message: `${fallbackMessage} جاري استخدام ملف التثبيت الكامل كخطة احتياطية...`
+            });
+            emitAppUpdateProgress(event.sender, {
+                status: 'retrying',
+                error: '',
+                message: `${fallbackMessage} جاري استخدام ملف التثبيت الكامل كخطة احتياطية...`
+            });
+        }
+
         const releaseResult = await fetchLatestReleaseDetails();
         if (!releaseResult.success) {
             return releaseResult;
@@ -597,6 +681,13 @@ function register() {
             const targetPath = String(installerPath || '').trim();
             if (!targetPath) {
                 return { success: false, error: 'مسار ملف التثبيت غير صالح.' };
+            }
+
+            if (targetPath === '__electron_updater__') {
+                app.isQuittingForAppUpdate = true;
+                markMainWindowClosingForUpdate();
+                quitAndInstallDifferentialUpdate();
+                return { success: true };
             }
 
             if (!fs.existsSync(targetPath)) {

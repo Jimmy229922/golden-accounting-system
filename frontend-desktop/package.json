@@ -1,6 +1,6 @@
 {
   "name": "accounting-system-desktop",
-  "version": "7.0.15",
+  "version": "7.0.16",
   "description": "Professional Accounting System",
   "main": "src/main/main.js",
   "scripts": {
@@ -14,7 +14,15 @@
   "build": {
     "appId": "com.accountingsystem.app",
     "productName": "Accounting System",
-    "publish": null,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Jimmy229922",
+        "repo": "golden-accounting-system",
+        "vPrefixedTagName": true,
+        "releaseType": "release"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "src/main/assets/icon.ico"
@@ -47,6 +55,7 @@
   "dependencies": {
     "accounting-system-monorepo": "file:..",
     "better-sqlite3": "^12.5.0",
+    "electron-updater": "^6.8.9",
     "pdf-lib": "^1.17.1"
   }
 }

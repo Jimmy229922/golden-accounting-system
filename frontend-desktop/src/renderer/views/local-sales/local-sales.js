@@ -395,12 +395,12 @@ function renderPage() {
                                     <input type="text" id="documentNumber" class="form-control uneditable" readonly>
                                 </div>
                                 <div class="form-group">
-                                    <label><i class="fas fa-calendar-alt text-icon"></i> التاريخ</label>
-                                    <input type="date" id="recordDate" class="form-control" required>
-                                </div>
-                                <div class="form-group">
                                     <label><i class="fas fa-user text-icon"></i> العميل <span class="required-asterisk">*</span></label>
                                     <select id="customerSelect" class="form-control" required></select>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-calendar-alt text-icon"></i> التاريخ</label>
+                                    <input type="date" id="recordDate" class="form-control" required>
                                 </div>
                             </div>
 
