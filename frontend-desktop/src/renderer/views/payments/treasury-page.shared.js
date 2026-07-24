@@ -178,25 +178,13 @@
         async function applyStatementBalances(entities) {
             if (!config.entity.useStatementBalance) return entities;
 
-            const statementEntities = await Promise.all(entities.map(async (entity) => {
-                try {
-                    const result = await window.electronAPI.getCustomerDetailedStatement({
-                        customerId: entity.id
-                    });
-                    if (!result || !result.success || !result.totals) return entity;
-
-                    const closingBalance = Number(result.totals.closingBalance) || 0;
-                    return {
-                        ...entity,
-                        balance: config.entity.invertStatementBalance ? -closingBalance : closingBalance
-                    };
-                } catch (error) {
-                    console.error('[payments] Error loading statement balance:', error);
-                    return entity;
-                }
-            }));
-
-            return statementEntities;
+            return entities.map((entity) => {
+                const originalBalance = Number(entity.balance) || 0;
+                return {
+                    ...entity,
+                    balance: config.entity.invertStatementBalance ? -originalBalance : originalBalance
+                };
+            });
         }
 
         async function loadData() {
@@ -437,6 +425,7 @@
 
             showToast(text('toastSelectEntityWithBalance'), 'warning');
         }
+
         async function handleSubmit(e) {
             e.preventDefault();
 
@@ -567,5 +556,3 @@
 
     window.initializeTreasuryVoucherPage = initializeTreasuryVoucherPage;
 })();
-
-
