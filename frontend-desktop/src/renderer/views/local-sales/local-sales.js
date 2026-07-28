@@ -17,6 +17,7 @@ const state = {
 
 let customers = [];
 let customerAutocomplete = null;
+let filterCustomerAutocomplete = null;
 
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
@@ -173,18 +174,34 @@ function resolveCustomerByName(name) {
 
 function buildCustomersList() {
     const select = document.getElementById('customerSelect');
-    if (!select) return;
+    const filterSelect = document.getElementById('filterCustomerId');
 
-    const selected = select.value;
-    select.innerHTML = [
-        '<option value="">اختر العميل</option>',
-        ...customers.map((customer) => `<option value="${customer.id}">${escapeHtml(customer.name || '')}</option>`)
-    ].join('');
+    if (select) {
+        const selected = select.value;
+        select.innerHTML = [
+            '<option value="">اختر العميل</option>',
+            ...customers.map((customer) => `<option value="${customer.id}">${escapeHtml(customer.name || '')}</option>`)
+        ].join('');
 
-    if (selected && customers.some((customer) => String(customer.id) === String(selected))) {
-        select.value = selected;
-    } else {
-        select.value = '';
+        if (selected && customers.some((customer) => String(customer.id) === String(selected))) {
+            select.value = selected;
+        } else {
+            select.value = '';
+        }
+    }
+
+    if (filterSelect) {
+        const filterSelected = filterSelect.value;
+        filterSelect.innerHTML = [
+            '<option value="">كل العملاء</option>',
+            ...customers.map((customer) => `<option value="${customer.id}">${escapeHtml(customer.name || '')}</option>`)
+        ].join('');
+
+        if (filterSelected && customers.some((customer) => String(customer.id) === String(filterSelected))) {
+            filterSelect.value = filterSelected;
+        } else {
+            filterSelect.value = '';
+        }
     }
 
     ensureCustomerAutocomplete();
@@ -192,13 +209,24 @@ function buildCustomersList() {
 
 function ensureCustomerAutocomplete() {
     const select = document.getElementById('customerSelect');
-    if (!select || typeof Autocomplete === 'undefined') return;
+    const filterSelect = document.getElementById('filterCustomerId');
 
-    select.classList.add('item-select', 'autocomplete-show-all-on-click');
-    if (customerAutocomplete) {
-        customerAutocomplete.refresh();
-    } else {
-        customerAutocomplete = new Autocomplete(select);
+    if (select && typeof Autocomplete !== 'undefined') {
+        select.classList.add('item-select', 'autocomplete-show-all-on-click');
+        if (customerAutocomplete) {
+            customerAutocomplete.refresh();
+        } else {
+            customerAutocomplete = new Autocomplete(select);
+        }
+    }
+
+    if (filterSelect && typeof Autocomplete !== 'undefined') {
+        filterSelect.classList.add('item-select', 'autocomplete-show-all-on-click');
+        if (filterCustomerAutocomplete) {
+            filterCustomerAutocomplete.refresh();
+        } else {
+            filterCustomerAutocomplete = new Autocomplete(filterSelect);
+        }
     }
 }
 
@@ -329,6 +357,10 @@ function renderPage() {
                             <label>التاريخ إلى</label>
                             <input type="date" id="endDate" class="form-control">
                         </div>
+                        <div class="form-group">
+                            <label>العميل</label>
+                            <select id="filterCustomerId" class="form-control"></select>
+                        </div>
                         <div class="petty-filter-actions">
                             <button type="button" class="btn btn-primary" id="filterBtn" style="border-radius: 8px; flex: 1;">
                                 <i class="fas fa-search" style="margin-inline-end: 5px;"></i> بحث
@@ -447,6 +479,13 @@ function bindEvents() {
     document.getElementById('resetFilterBtn').addEventListener('click', () => {
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
+        const filterSelect = document.getElementById('filterCustomerId');
+        if (filterSelect) {
+            filterSelect.value = '';
+            if (filterCustomerAutocomplete) {
+                filterCustomerAutocomplete.refresh();
+            }
+        }
         state.page = 1;
         loadRecords();
     });
@@ -509,7 +548,8 @@ function getFilters() {
         page: state.page,
         pageSize: state.pageSize,
         startDate: document.getElementById('startDate').value,
-        endDate: document.getElementById('endDate').value
+        endDate: document.getElementById('endDate').value,
+        customerId: document.getElementById('filterCustomerId') ? document.getElementById('filterCustomerId').value : ''
     };
 }
 

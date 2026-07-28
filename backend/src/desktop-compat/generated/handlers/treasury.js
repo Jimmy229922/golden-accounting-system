@@ -284,12 +284,10 @@ function register() {
             if (!trans) return; // Already deleted
             const isInvoiceLinked = trans.related_invoice_id && (trans.related_type === 'sales' || trans.related_type === 'purchase');
 
-            if (trans.related_invoice_id) {
+            if (isInvoiceLinked) {
                 if (trans.related_type === 'sales') {
-                    // Revert Sales Payment
                     updateSalesInvoice.run({ amount: trans.amount, id: trans.related_invoice_id });
                 } else if (trans.related_type === 'purchase') {
-                    // Revert Purchase Payment
                     updatePurchaseInvoice.run({ amount: trans.amount, id: trans.related_invoice_id });
                 }
             }

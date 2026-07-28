@@ -106,6 +106,11 @@ function register() {
                 args.endDate = params.endDate;
             }
 
+            if (params.customerId) {
+                where.push('l.customer_id = @customerId');
+                args.customerId = params.customerId;
+            }
+
             const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
             const total = db.prepare(`SELECT COUNT(*) as count FROM local_sales l ${whereSql}`).get(args).count || 0;
             const totals = db.prepare(`
@@ -272,4 +277,3 @@ function register() {
 }
 
 module.exports = { register };
-

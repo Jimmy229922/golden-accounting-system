@@ -1217,39 +1217,11 @@ function initDB() {
         END
     `);
 
-    // 5. Local Sales
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_insert
-        AFTER INSERT ON local_sales
-        FOR EACH ROW
-        BEGIN
-            INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
-            VALUES (NEW.customer_id, 'local_sale', NEW.total, NEW.record_date, NEW.id, NEW.created_at);
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_update
-        AFTER UPDATE OF total, customer_id, record_date ON local_sales
-        FOR EACH ROW
-        BEGIN
-            UPDATE party_ledger
-            SET amount = NEW.total,
-                party_id = NEW.customer_id,
-                transaction_date = NEW.record_date
-            WHERE transaction_type = 'local_sale' AND reference_id = NEW.id;
-        END
-    `);
-
-    db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_local_sale_delete
-        AFTER DELETE ON local_sales
-        FOR EACH ROW
-        BEGIN
-            DELETE FROM party_ledger
-            WHERE transaction_type = 'local_sale' AND reference_id = OLD.id;
-        END
-    `);
+    // 5. Local Sales - Removed triggers to completely sever local sales from party_ledger
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_local_sale_insert`);
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_local_sale_update`);
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_local_sale_delete`);
+    db.exec(`DELETE FROM party_ledger WHERE transaction_type = 'local_sale'`);
 
     // Migrate old data if party_ledger is empty
     const hasPartyLedger = db.prepare('SELECT 1 FROM party_ledger LIMIT 1').get();
@@ -1283,12 +1255,6 @@ function initDB() {
                        transaction_date, id, created_at
                 FROM treasury_transactions
                 WHERE customer_id IS NOT NULL AND amount != 0
-            `);
-            // Local Sales
-            db.exec(`
-                INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
-                SELECT customer_id, 'local_sale', total, record_date, id, created_at
-                FROM local_sales
             `);
         });
         resetPartyTx();

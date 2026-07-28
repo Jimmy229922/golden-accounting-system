@@ -100,6 +100,7 @@ function register() {
         const isSales = type === 'sales';
         const invoiceTable = isSales ? 'sales_invoices' : 'purchase_invoices';
         const detailsTable = isSales ? 'sales_invoice_details' : 'purchase_invoice_details';
+
         const invoice = db.prepare(`SELECT * FROM ${invoiceTable} WHERE id = ?`).get(id);
         if (!invoice) return { success: false, error: 'Invoice not found' };
 
@@ -125,17 +126,14 @@ function register() {
             // 1. Reverse Stock
             for (const item of details) {
                 if (isSales) {
-                    // Sales reduced stock, so add it back
                     db.prepare('UPDATE items SET stock_quantity = stock_quantity + ? WHERE id = ?').run(item.quantity, item.item_id);
                 } else {
-                    // Purchase added stock, so remove it
                     db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
                 }
             }
 
             // 2. Reverse Treasury (if paid > 0)
             if (invoice.paid_amount > 0) {
-                // Delete the treasury transaction
                 db.prepare('DELETE FROM treasury_transactions WHERE related_invoice_id = ? AND related_type = ?').run(id, type);
             }
 
@@ -157,4 +155,3 @@ function register() {
 }
 
 module.exports = { register };
-

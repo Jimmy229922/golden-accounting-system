@@ -527,14 +527,6 @@ function register() {
             const purchaseItems = db.prepare(purchaseItemsQuery).all(...purchaseParams);
             const salesReturnItems = [];
             const purchaseReturnItems = [];
-            let localSalesTotalsQuery = `
-                SELECT COALESCE(SUM(total), 0) as total_amount
-                FROM local_sales
-                WHERE customer_id = ?`;
-            const localSalesParams = [custId];
-            if (startDate) { localSalesTotalsQuery += ' AND record_date >= ?'; localSalesParams.push(startDate); }
-            if (endDate) { localSalesTotalsQuery += ' AND record_date <= ?'; localSalesParams.push(endDate); }
-            const localSalesTotalsRow = db.prepare(localSalesTotalsQuery).get(...localSalesParams);
 
             // --- إجماليات التحصيلات والسداد ---
             let paymentsQuery = `
@@ -576,7 +568,7 @@ function register() {
                 openingBalance = obResult.net;
             }
 
-            const totalSales = salesItems.reduce((s, i) => s + i.total_amount, 0) + Number(localSalesTotalsRow?.total_amount || 0);
+            const totalSales = salesItems.reduce((s, i) => s + i.total_amount, 0);
             const totalPurchases = purchaseItems.reduce((s, i) => s + i.total_amount, 0);
             const totalSalesReturns = 0;
             const totalPurchaseReturns = 0;

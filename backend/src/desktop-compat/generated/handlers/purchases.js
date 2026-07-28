@@ -223,6 +223,7 @@ function register() {
             finalAmount: netSubtotalAmount
         });
 
+
         const insertInvoice = db.prepare(`
             INSERT INTO purchase_invoices (supplier_id, invoice_number, invoice_date, total_amount, discount_type, discount_value, discount_amount, paid_amount, remaining_amount, payment_type, notes)
             VALUES (@supplier_id, @invoice_number, @invoice_date, @total_amount, @discount_type, @discount_value, @discount_amount, @paid_amount, @remaining_amount, @payment_type, @notes)
@@ -239,6 +240,8 @@ function register() {
                 cost_price = @cost_price 
             WHERE id = @item_id
         `);
+
+        // Manual balance update removed; handled by trg_party_ledger_after_purchase_invoice_insert and trg_update_party_balance
 
         const transaction = db.transaction((data) => {
             const info = insertInvoice.run({
@@ -274,6 +277,8 @@ function register() {
                     item_id: item.item_id
                 });
             }
+
+            // Manual balance update removed
 
             return invoiceId;
         });
@@ -345,8 +350,6 @@ function register() {
 
         const transaction = db.transaction(() => {
             // --- REVERSE OLD ---
-            // Stock reversal moved to the end to prevent temporary negative values.
-            // Delete Details
             db.prepare('DELETE FROM purchase_invoice_details WHERE invoice_id = ?').run(id);
 
             // --- APPLY NEW ---
@@ -391,11 +394,9 @@ function register() {
                 updateItemStock.run({ quantity: item.quantity, cost_price: item.cost_price, item_id: item.item_id });
             }
 
-            // Reverse Stock (Remove old purchased items)
             for (const item of oldDetails) {
                 db.prepare('UPDATE items SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.item_id);
             }
-
         });
 
         try {

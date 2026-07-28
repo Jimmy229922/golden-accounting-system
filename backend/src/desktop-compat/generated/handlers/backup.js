@@ -90,110 +90,6 @@ function encodeStoragePath(pathValue) {
         .join('/');
 }
 
-function extractSupabaseErrorDetails(rawBody) {
-    const text = String(rawBody || '').trim();
-    if (!text) {
-        return '';
-    }
-
-    try {
-        const payload = JSON.parse(text);
-        return String(
-            payload?.message
-            || payload?.error
-            || payload?.error_description
-            || payload?.msg
-            || text
-        ).trim();
-    } catch (_) {
-        return text;
-    }
-}
-
-function translateCloudBackupError(rawError, options = {}) {
-    const statusCode = Number(options.statusCode) || 0;
-    const details = extractSupabaseErrorDetails(options.details || '');
-    const originalMessage = String(rawError || '').trim();
-    const sourceText = `${originalMessage} ${details}`.trim().toLowerCase();
-
-    if (
-        sourceText.includes('not configured') ||
-        sourceText.includes('supabase cloud backup is not configured')
-    ) {
-        return 'الحفظ السحابي غير مفعل لأن إعدادات Supabase غير مضبوطة على هذا الجهاز.';
-    }
-
-    if (
-        sourceText.includes('global fetch is not available') ||
-        sourceText.includes('fetch is not available in this runtime')
-    ) {
-        return 'تعذر تشغيل الرفع السحابي لأن خدمة الاتصال غير متاحة داخل البرنامج.';
-    }
-
-    if (
-        sourceText.includes('exceeds limit') ||
-        sourceText.includes('entity too large') ||
-        sourceText.includes('payload too large') ||
-        statusCode === 413
-    ) {
-        return 'حجم ملف النسخة الاحتياطية أكبر من الحد المسموح للرفع السحابي.';
-    }
-
-    if (
-        statusCode === 401 ||
-        statusCode === 403 ||
-        sourceText.includes('unauthorized') ||
-        sourceText.includes('forbidden') ||
-        sourceText.includes('invalid signature') ||
-        sourceText.includes('jwt') ||
-        sourceText.includes('permission denied') ||
-        sourceText.includes('row-level security')
-    ) {
-        return 'تم رفض الرفع السحابي بسبب مشكلة في صلاحية الوصول أو مفتاح الخدمة.';
-    }
-
-    if (
-        statusCode === 404 ||
-        sourceText.includes('bucket not found') ||
-        sourceText.includes('the resource was not found') ||
-        sourceText.includes('not found')
-    ) {
-        return 'فشل الرفع السحابي لأن حاوية النسخ الاحتياطية غير موجودة أو اسمها غير صحيح.';
-    }
-
-    if (
-        sourceText.includes('econnreset') ||
-        sourceText.includes('etimedout') ||
-        sourceText.includes('timeout') ||
-        sourceText.includes('socket hang up') ||
-        sourceText.includes('fetch failed') ||
-        sourceText.includes('network error') ||
-        sourceText.includes('failed to fetch') ||
-        sourceText.includes('terminated') ||
-        sourceText.includes('enotfound') ||
-        sourceText.includes('eai_again') ||
-        sourceText.includes('econnrefused')
-    ) {
-        return 'تعذر الرفع السحابي بسبب مشكلة في الاتصال بالإنترنت. تحقق من الشبكة ثم أعد المحاولة.';
-    }
-
-    if (
-        sourceText.includes('enoent') ||
-        sourceText.includes('no such file or directory')
-    ) {
-        return 'تعذر العثور على ملف النسخة الاحتياطية قبل رفعه إلى السحابة.';
-    }
-
-    if (
-        sourceText.includes('eacces') ||
-        sourceText.includes('eperm')
-    ) {
-        return 'تعذر الوصول إلى ملف النسخة الاحتياطية بسبب الصلاحيات على هذا الجهاز.';
-    }
-
-    return 'فشل رفع النسخة الاحتياطية إلى السحابة. تحقق من الإعدادات أو الاتصال ثم أعد المحاولة.';
-}
-
 function formatTimestampForFileName(dateValue) {
     const year = String(dateValue.getFullYear());
     const month = String(dateValue.getMonth() + 1).padStart(2, '0');
@@ -413,18 +309,11 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
     const config = getSupabaseConfig();
 
     if (!config.enabled) {
-        return {
-            success: false,
-            disabled: true,
-            error: translateCloudBackupError('Supabase cloud backup is not configured.')
-        };
+        return { success: false, disabled: true, error: 'Supabase cloud backup is not configured.' };
     }
 
     if (typeof fetch !== 'function') {
-        return {
-            success: false,
-            error: translateCloudBackupError('Global fetch is not available in this runtime.')
-        };
+        return { success: false, error: 'Global fetch is not available in this runtime.' };
     }
 
     try {
@@ -432,9 +321,7 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
         if (stat.size > config.maxUploadBytes) {
             return {
                 success: false,
-                error: translateCloudBackupError(
-                    `Backup file size exceeds limit (${Math.round(config.maxUploadBytes / (1024 * 1024))} MB).`
-                )
+                error: `Backup file size exceeds limit (${Math.round(config.maxUploadBytes / (1024 * 1024))} MB).`
             };
         }
 
@@ -464,13 +351,7 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
         if (!response.ok) {
             return {
                 success: false,
-                error: translateCloudBackupError(
-                    `Supabase upload failed (${response.status}): ${rawBody || response.statusText}`,
-                    {
-                        statusCode: response.status,
-                        details: rawBody || response.statusText
-                    }
-                )
+                error: `Supabase upload failed (${response.status}): ${rawBody || response.statusText}`
             };
         }
 
@@ -490,10 +371,7 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
             payload
         };
     } catch (error) {
-        return {
-            success: false,
-            error: translateCloudBackupError(error.message)
-        };
+        return { success: false, error: error.message };
     }
 }
 
@@ -855,7 +733,6 @@ function register() {
     ipcMain.handle('get-backup-status-summary', async () => {
         const config = getSupabaseConfig();
         const savedStatus = readBackupStatusSettings();
-        const dbFilePath = db.name || path.join(app.getPath('userData'), 'accounting.db');
 
         return {
             success: true,
