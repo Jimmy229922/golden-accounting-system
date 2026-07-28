@@ -100,7 +100,7 @@ function register() {
                        exchange_rate, amount_egp, statement, created_at
                 FROM export_revenues
                 ${whereSql}
-                ORDER BY id ASC
+                ORDER BY datetime(created_at) DESC, id DESC
                 LIMIT @limit OFFSET @offset
             `).all({ ...args, limit: pageSize, offset });
 

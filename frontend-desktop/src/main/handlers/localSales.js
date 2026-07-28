@@ -128,7 +128,7 @@ function register() {
                 FROM local_sales l
                 LEFT JOIN parties c ON c.id = l.customer_id
                 ${whereSql}
-                ORDER BY datetime(l.created_at) ASC, l.id ASC
+                ORDER BY datetime(l.created_at) DESC, l.id DESC
                 LIMIT @limit OFFSET @offset
             `).all({ ...args, limit: pageSize, offset });
 
