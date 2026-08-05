@@ -4,6 +4,7 @@
             allItems: [],
             editingInvoiceId: null,
             isEditLocked: false,
+            isRemainingCustomized: false,
             originalInvoiceItemTotalsByItemId: {},
             supplierAutocomplete: null,
             isSubmitting: false,
@@ -23,6 +24,7 @@
                 invoiceTotalSpan: null,
                 invoicePaidDisplaySpan: null,
                 invoiceRemainingSpan: null,
+                resetRemainingBtn: null,
                 invoiceForm: null,
                 baskeelModal: null,
                 baskeelWeightsList: null,
@@ -50,6 +52,7 @@
         state.dom.invoiceTotalSpan = document.getElementById('invoiceTotal');
         state.dom.invoicePaidDisplaySpan = document.getElementById('invoicePaidDisplay');
         state.dom.invoiceRemainingSpan = document.getElementById('invoiceRemaining');
+        state.dom.resetRemainingBtn = document.getElementById('resetRemainingBtn');
         state.dom.invoiceForm = document.getElementById('invoiceForm');
         state.dom.baskeelModal = document.getElementById('baskeelModal');
         state.dom.baskeelWeightsList = document.getElementById('baskeelWeightsList');

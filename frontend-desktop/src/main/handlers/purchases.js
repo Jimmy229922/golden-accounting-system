@@ -198,7 +198,7 @@ function register() {
     ipcMain.handle('save-purchase-invoice', (event, invoiceData) => {
         const denied = requirePermission('purchases', 'add');
         if (denied) return denied;
-        const { supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount } = invoiceData;
+        const { supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount, custom_remaining_amount } = invoiceData;
         const trimmedInvoiceNumber = String(invoice_number || '').trim();
         if (trimmedInvoiceNumber) {
             const duplicateInvoice = db.prepare('SELECT id FROM purchase_invoices WHERE TRIM(invoice_number) = TRIM(?) LIMIT 1').get(trimmedInvoiceNumber);
@@ -222,6 +222,10 @@ function register() {
             paidAmount: paid_amount,
             finalAmount: netSubtotalAmount
         });
+
+        if (custom_remaining_amount !== undefined && custom_remaining_amount !== null && Number.isFinite(Number(custom_remaining_amount))) {
+            financials.remaining_amount = roundMoney(Number(custom_remaining_amount));
+        }
 
 
         const insertInvoice = db.prepare(`
@@ -295,7 +299,7 @@ function register() {
     ipcMain.handle('update-purchase-invoice', (event, invoiceData) => {
         const denied = requirePermission('purchases', 'edit');
         if (denied) return denied;
-        const { id, supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount } = invoiceData;
+        const { id, supplier_id, invoice_number, invoice_date, notes, items, payment_type, paid_amount, custom_remaining_amount } = invoiceData;
         
         const oldInvoice = db.prepare('SELECT * FROM purchase_invoices WHERE id = ?').get(id);
         const oldDetails = db.prepare('SELECT * FROM purchase_invoice_details WHERE invoice_id = ?').all(id);
@@ -324,6 +328,10 @@ function register() {
             paidAmount: paid_amount,
             finalAmount: netSubtotalAmount
         });
+
+        if (custom_remaining_amount !== undefined && custom_remaining_amount !== null && Number.isFinite(Number(custom_remaining_amount))) {
+            financials.remaining_amount = roundMoney(Number(custom_remaining_amount));
+        }
 
         const getItemStock = db.prepare('SELECT name, stock_quantity FROM items WHERE id = ?');
         const itemDeltas = new Map();

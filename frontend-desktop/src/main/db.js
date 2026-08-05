@@ -1111,24 +1111,25 @@ function initDB() {
     `);
 
     // 2. Purchase Invoices
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_purchase_invoice_insert`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_purchase_invoice_insert
         AFTER INSERT ON purchase_invoices
         FOR EACH ROW
         BEGIN
             INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
-            VALUES (NEW.supplier_id, 'purchase_invoice', -(NEW.total_amount - NEW.paid_amount), NEW.invoice_date, NEW.id, NEW.created_at);
+            VALUES (NEW.supplier_id, 'purchase_invoice', -(NEW.remaining_amount), NEW.invoice_date, NEW.id, NEW.created_at);
         END
     `);
 
     db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_purchase_invoice_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_purchase_invoice_update
-        AFTER UPDATE OF total_amount, paid_amount, invoice_date, supplier_id ON purchase_invoices
+        AFTER UPDATE OF total_amount, paid_amount, remaining_amount, invoice_date, supplier_id ON purchase_invoices
         FOR EACH ROW
         BEGIN
             UPDATE party_ledger
-            SET amount = -(NEW.total_amount - NEW.paid_amount),
+            SET amount = -(NEW.remaining_amount),
                 transaction_date = NEW.invoice_date,
                 party_id = NEW.supplier_id
             WHERE transaction_type = 'purchase_invoice' AND reference_id = NEW.id;

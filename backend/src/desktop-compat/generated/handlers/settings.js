@@ -30,7 +30,7 @@ let appUpdateProgressState = {
 function normalizeVersion(versionValue) {
     return String(versionValue || '')
         .trim()
-        .replace(/^v/i, '');
+        .replace(/^[^0-9]*/, '');
 }
 
 function compareVersions(leftValue, rightValue) {

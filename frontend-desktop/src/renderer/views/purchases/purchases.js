@@ -103,6 +103,46 @@ function initializeElements() {
         purchasesState.dom.paidAmountInput.addEventListener('input', handlePaidAmountInput);
     }
 
+    if (purchasesState.dom.invoiceRemainingSpan) {
+        purchasesState.dom.invoiceRemainingSpan.addEventListener('input', (event) => {
+            purchasesState.isRemainingCustomized = true;
+            event.target.value = formatMoneyInputValue(event.target.value);
+            if (purchasesState.dom.resetRemainingBtn) {
+                purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
+            }
+        });
+    }
+
+    if (purchasesState.dom.resetRemainingBtn) {
+        purchasesState.dom.resetRemainingBtn.addEventListener('click', () => {
+            purchasesState.isRemainingCustomized = false;
+            if (purchasesState.dom.resetRemainingBtn) {
+                purchasesState.dom.resetRemainingBtn.style.display = 'none';
+            }
+            calculateInvoiceTotal();
+        });
+    }
+
+    if (purchasesState.dom.invoiceRemainingSpan) {
+        purchasesState.dom.invoiceRemainingSpan.addEventListener('input', (event) => {
+            purchasesState.isRemainingCustomized = true;
+            event.target.value = formatMoneyInputValue(event.target.value);
+            if (purchasesState.dom.resetRemainingBtn) {
+                purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
+            }
+        });
+    }
+
+    if (purchasesState.dom.resetRemainingBtn) {
+        purchasesState.dom.resetRemainingBtn.addEventListener('click', () => {
+            purchasesState.isRemainingCustomized = false;
+            if (purchasesState.dom.resetRemainingBtn) {
+                purchasesState.dom.resetRemainingBtn.style.display = 'none';
+            }
+            calculateInvoiceTotal();
+        });
+    }
+
     if (purchasesState.dom.baskeelWeightsList) {
         purchasesState.dom.baskeelWeightsList.addEventListener('input', onWeightsInputChange);
         purchasesState.dom.baskeelWeightsList.addEventListener('keydown', onWeightsKeyDown);
@@ -383,6 +423,25 @@ async function loadInvoiceForEdit(id) {
         purchasesState.dom.invoiceItemsBody.innerHTML = '';
         invoice.items.forEach((item) => addInvoiceRow(item));
         calculateInvoiceTotal();
+
+        const savedRem = Number(invoice.remaining_amount);
+        if (Number.isFinite(savedRem)) {
+            const currentFinancials = calculateInvoiceFinancialsFromForm();
+            if (Math.abs(savedRem - currentFinancials.supplierRemaining) > 0.01) {
+                purchasesState.isRemainingCustomized = true;
+                if (purchasesState.dom.invoiceRemainingSpan) {
+                    purchasesState.dom.invoiceRemainingSpan.value = formatMoneyWithCommas(savedRem);
+                }
+                if (purchasesState.dom.resetRemainingBtn) {
+                    purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
+                }
+            } else {
+                purchasesState.isRemainingCustomized = false;
+                if (purchasesState.dom.resetRemainingBtn) {
+                    purchasesState.dom.resetRemainingBtn.style.display = 'none';
+                }
+            }
+        }
         updateSelectedItemAvailability(purchasesState.dom.invoiceItemsBody.querySelector('tr'));
 
         purchasesRender.setEditModeUI(t);
@@ -1609,21 +1668,26 @@ function getInvoiceFinancials(rawSubtotal, netSubtotal) {
     };
 }
 
-function calculateInvoiceTotal() {
+function calculateInvoiceFinancialsFromForm() {
     let rawSubtotal = 0;
     let netSubtotal = 0;
-    purchasesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
-        const rowTotal = parseLocaleFloat(row.querySelector('.row-total')?.textContent) || 0;
-        netSubtotal += rowTotal;
+    if (purchasesState.dom.invoiceItemsBody) {
+        purchasesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
+            const rowTotal = parseLocaleFloat(row.querySelector('.row-total')?.textContent) || 0;
+            netSubtotal += rowTotal;
 
-        const rawQty = getRowRawQuantity(row);
-        const price = parseLocaleFloat(row.querySelector('.price-input')?.value);
-        if (rawQty > 0 && Number.isFinite(price)) {
-            rawSubtotal += rawQty * price;
-        }
-    });
+            const rawQty = getRowRawQuantity(row);
+            const price = parseLocaleFloat(row.querySelector('.price-input')?.value);
+            if (rawQty > 0 && Number.isFinite(price)) {
+                rawSubtotal += rawQty * price;
+            }
+        });
+    }
+    return getInvoiceFinancials(rawSubtotal, netSubtotal);
+}
 
-    const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
+function calculateInvoiceTotal() {
+    const financials = calculateInvoiceFinancialsFromForm();
 
     if (purchasesState.dom.invoiceSubtotalSpan) {
         purchasesState.dom.invoiceSubtotalSpan.textContent = formatMoneyWithCommas(financials.rawSubtotal);
@@ -1633,23 +1697,28 @@ function calculateInvoiceTotal() {
         purchasesState.dom.invoiceDiscountAmountSpan.textContent = formatMoneyWithCommas(financials.discountAmount);
     }
 
-    purchasesState.dom.invoiceTotalSpan.textContent = formatMoneyWithCommas(financials.netTotal);
+    if (purchasesState.dom.invoiceTotalSpan) {
+        purchasesState.dom.invoiceTotalSpan.textContent = formatMoneyWithCommas(financials.netTotal);
+    }
 
     if (purchasesState.dom.invoicePaidDisplaySpan) {
         purchasesState.dom.invoicePaidDisplaySpan.textContent = formatMoneyWithCommas(financials.paidAmount);
     }
 
     if (purchasesState.dom.invoiceRemainingSpan) {
-        if (financials.supplierRemaining > 0) {
-            purchasesState.dom.invoiceRemainingSpan.textContent = fmt(t('purchases.supplierDuePositive', 'علينا (دائن) {amount}'), { amount: formatMoneyWithCommas(financials.supplierRemaining) });
-            purchasesState.dom.invoiceRemainingSpan.className = 'customer-due-value due-positive';
-        } else if (financials.supplierRemaining < 0) {
-            purchasesState.dom.invoiceRemainingSpan.textContent = fmt(t('purchases.supplierDueNegative', 'لينا (مدين) {amount}'), { amount: formatMoneyWithCommas(Math.abs(financials.supplierRemaining)) });
-            purchasesState.dom.invoiceRemainingSpan.className = 'customer-due-value due-negative';
-        } else {
-            purchasesState.dom.invoiceRemainingSpan.textContent = formatMoneyWithCommas(0);
-            purchasesState.dom.invoiceRemainingSpan.className = 'customer-due-value';
+        if (!purchasesState.isRemainingCustomized) {
+            purchasesState.dom.invoiceRemainingSpan.value = formatMoneyWithCommas(financials.supplierRemaining);
         }
+        if (financials.supplierRemaining > 0) {
+            purchasesState.dom.invoiceRemainingSpan.className = 'form-control customer-due-value due-positive';
+        } else if (financials.supplierRemaining < 0) {
+            purchasesState.dom.invoiceRemainingSpan.className = 'form-control customer-due-value due-negative';
+        } else {
+            purchasesState.dom.invoiceRemainingSpan.className = 'form-control customer-due-value';
+        }
+    }
+    if (purchasesState.dom.resetRemainingBtn) {
+        purchasesState.dom.resetRemainingBtn.style.display = purchasesState.isRemainingCustomized ? 'inline-block' : 'none';
     }
 }
 
@@ -1706,8 +1775,8 @@ function collectInvoiceItemsFromForm() {
     return { items, isValid: isValid && items.length > 0 };
 }
 
-function buildInvoicePayload(financials) {
-    return {
+function buildInvoicePayload(financials, customRemaining) {
+    const payload = {
         supplier_id: purchasesState.dom.supplierSelect.value,
         invoice_number: document.getElementById('invoiceNumber').value,
         invoice_date: purchasesState.dom.invoiceDateInput.value || new Date().toISOString().slice(0, 10),
@@ -1718,6 +1787,67 @@ function buildInvoicePayload(financials) {
         paid_amount: financials.paidAmount,
         total_amount: financials.netTotal
     };
+
+    if (customRemaining !== undefined && customRemaining !== null) {
+        payload.custom_remaining_amount = customRemaining;
+    }
+
+    return payload;
+}
+
+async function confirmAndGetCustomRemaining(financials) {
+    const autoRemaining = financials.supplierRemaining;
+    const enteredRemainingVal = parseLocaleFloat(purchasesState.dom.invoiceRemainingSpan?.value || '0') || 0;
+
+    if (purchasesState.isRemainingCustomized || Math.abs(enteredRemainingVal - autoRemaining) > 0.01) {
+        const diff = enteredRemainingVal - autoRemaining;
+        const autoStr = formatMoneyWithCommas(autoRemaining);
+        const enteredStr = formatMoneyWithCommas(enteredRemainingVal);
+        const diffStr = formatMoneyWithCommas(Math.abs(diff));
+
+        const isPositive = diff > 0;
+        const diffColor = isPositive ? '#15803d' : '#b91c1c';
+        const diffBg = isPositive ? '#f0fdf4' : '#fef2f2';
+        const diffBorder = isPositive ? '#bbf7d0' : '#fecaca';
+        const diffSign = isPositive ? '+' : '-';
+        const changeLabel = isPositive ? 'بالزيادة' : 'بالنقصان';
+
+        const htmlMsg = `
+            <div style="font-family: inherit; font-size: 0.95rem; line-height: 1.6;">
+                <div style="margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; color: #b45309; font-weight: 700; font-size: 0.95rem;">
+                    ⚠️ تنبيه: لقد قمت بتعديل مبلغ "المتبقي على المورد" يدوياً (${changeLabel}).
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; color: #1e293b;">
+                        <span style="font-weight: 600;">• المبلغ المحسوب تلقائياً:</span>
+                        <strong style="font-size: 1.05rem; color: #0f172a;">${autoStr} ج.م</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; color: #1e293b;">
+                        <span style="font-weight: 600;">• المبلغ المعدل يدوياً:</span>
+                        <strong style="font-size: 1.05rem; color: #0f172a;">${enteredStr} ج.م</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; background: ${diffBg}; border: 1px solid ${diffBorder}; color: ${diffColor};">
+                        <span style="font-weight: 700;">• قيمة الفرق (${changeLabel}):</span>
+                        <strong style="font-size: 1.2rem; color: ${diffColor}; font-weight: 800;">${diffSign}${diffStr} ج.م</strong>
+                    </div>
+                </div>
+                <div style="text-align: center; font-weight: 700; font-size: 1rem; color: #1e293b; margin-top: 12px;">
+                    هل تريد الحفظ بهذا المبلغ المعدل؟
+                </div>
+            </div>
+        `;
+
+        const confirmed = typeof window.showConfirmDialog === 'function'
+            ? await window.showConfirmDialog(htmlMsg, { isHtml: true, title: 'تأكيد تعديل المبلغ المتبقي' })
+            : window.confirm(`تنبيه: لقد قمت بتعديل مبلغ المتبقي (${changeLabel}). الفرق: ${diffSign}${diffStr}. هل تريد الحفظ؟`);
+
+        if (!confirmed) {
+            return { confirmed: false, customRemaining: null };
+        }
+        return { confirmed: true, customRemaining: enteredRemainingVal };
+    }
+
+    return { confirmed: true, customRemaining: null };
 }
 
 async function saveInvoice() {
@@ -1732,12 +1862,13 @@ async function saveInvoice() {
         return;
     }
 
-    const rawSubtotal = parseLocaleFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
-    const netSubtotal = parseLocaleFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
-    const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
+    const financials = calculateInvoiceFinancialsFromForm();
+
+    const { confirmed, customRemaining } = await confirmAndGetCustomRemaining(financials);
+    if (!confirmed) return;
 
     const invoiceData = {
-        ...buildInvoicePayload(financials),
+        ...buildInvoicePayload(financials, customRemaining),
         items
     };
 
@@ -1766,12 +1897,13 @@ async function updateInvoice() {
         return;
     }
 
-    const rawSubtotal = parseLocaleFloat(purchasesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
-    const netSubtotal = parseLocaleFloat(purchasesState.dom.invoiceTotalSpan?.textContent || '0') || 0;
-    const financials = getInvoiceFinancials(rawSubtotal, netSubtotal);
+    const financials = calculateInvoiceFinancialsFromForm();
+
+    const { confirmed, customRemaining } = await confirmAndGetCustomRemaining(financials);
+    if (!confirmed) return;
 
     const invoiceData = {
-        ...buildInvoicePayload(financials),
+        ...buildInvoicePayload(financials, customRemaining),
         id: purchasesState.editingInvoiceId,
         items
     };
@@ -1810,11 +1942,15 @@ async function resetForm() {
     if (purchasesState.dom.invoiceDiscountAmountSpan) purchasesState.dom.invoiceDiscountAmountSpan.textContent = '0.00';
     purchasesState.dom.invoiceTotalSpan.textContent = '0.00';
     if (purchasesState.dom.invoicePaidDisplaySpan) purchasesState.dom.invoicePaidDisplaySpan.textContent = '0.00';
+
+    purchasesState.isRemainingCustomized = false;
     if (purchasesState.dom.invoiceRemainingSpan) {
-        purchasesState.dom.invoiceRemainingSpan.textContent = '0.00';
-        purchasesState.dom.invoiceRemainingSpan.className = 'customer-due-value';
+        purchasesState.dom.invoiceRemainingSpan.value = '0.00';
+        purchasesState.dom.invoiceRemainingSpan.className = 'form-control customer-due-value';
     }
-    clearSelectedItemAvailability();
+    if (purchasesState.dom.resetRemainingBtn) {
+        purchasesState.dom.resetRemainingBtn.style.display = 'none';
+    }
 
     purchasesState.editingInvoiceId = null;
     purchasesState.isEditLocked = false;

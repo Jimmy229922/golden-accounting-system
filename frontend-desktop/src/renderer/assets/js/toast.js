@@ -57,56 +57,76 @@ function ensureConfirmDialogStyles() {
         }
 
         .confirm-dialog-card {
-            width: min(460px, 100%);
+            width: min(480px, 94vw);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
             border-radius: 14px;
-            border: 1px solid var(--card-border, rgba(255, 255, 255, 0.15));
-            background: var(--card-bg, #0f172a);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--card-border, rgba(0, 0, 0, 0.12));
+            background: var(--card-bg, #ffffff);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
             overflow: hidden;
-            color: var(--text-color, #ffffff);
+            color: var(--text-color, #1e293b);
         }
 
         .confirm-dialog-header {
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--card-border, rgba(255, 255, 255, 0.15));
+            flex-shrink: 0;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--card-border, rgba(0, 0, 0, 0.1));
             font-weight: 800;
-            font-size: 1rem;
+            font-size: 1.05rem;
+            color: var(--text-color, #1e293b);
         }
 
         .confirm-dialog-message {
+            flex: 1;
+            overflow-y: auto;
             margin: 0;
-            padding: 16px;
-            color: var(--text-color, #ffffff);
-            line-height: 1.7;
-            white-space: pre-wrap;
+            padding: 18px 20px;
+            color: var(--text-color, #1e293b);
+            line-height: 1.6;
             word-break: break-word;
         }
 
         .confirm-dialog-actions {
+            flex-shrink: 0;
             display: flex;
             justify-content: flex-end;
             gap: 10px;
-            padding: 12px 16px 16px;
+            padding: 14px 18px;
+            border-top: 1px solid var(--card-border, rgba(0, 0, 0, 0.08));
+            background: var(--bg-card-footer, rgba(0, 0, 0, 0.02));
         }
 
         .confirm-dialog-btn {
             min-height: 40px;
-            padding: 0 14px;
+            padding: 0 18px;
             border-radius: 10px;
             border: 1px solid transparent;
             cursor: pointer;
             font-weight: 700;
-            color: var(--text-color, #ffffff);
-            background: rgba(51, 65, 85, 0.6);
+            font-size: 0.95rem;
+            transition: all 0.15s ease;
         }
 
         .confirm-dialog-btn.cancel {
-            border-color: var(--card-border, rgba(255, 255, 255, 0.15));
-            background: transparent;
+            border-color: var(--card-border, #cbd5e1);
+            background: var(--btn-cancel-bg, #f1f5f9);
+            color: var(--text-color, #334155);
+        }
+
+        .confirm-dialog-btn.cancel:hover {
+            background: var(--btn-cancel-hover, #e2e8f0);
         }
 
         .confirm-dialog-btn.confirm {
-            background: linear-gradient(135deg, rgba(22, 163, 74, 0.95), rgba(5, 150, 105, 0.9));
+            background: #10b981;
+            color: #ffffff;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        }
+
+        .confirm-dialog-btn.confirm:hover {
+            background: #059669;
         }
     `;
 
@@ -131,9 +151,13 @@ function showConfirmDialog(message, options = {}) {
         header.className = 'confirm-dialog-header';
         header.textContent = title;
 
-        const messageEl = document.createElement('p');
+        const messageEl = document.createElement('div');
         messageEl.className = 'confirm-dialog-message';
-        messageEl.textContent = String(message || '');
+        if (options && options.isHtml) {
+            messageEl.innerHTML = String(message || '');
+        } else {
+            messageEl.textContent = String(message || '');
+        }
 
         const actions = document.createElement('div');
         actions.className = 'confirm-dialog-actions';

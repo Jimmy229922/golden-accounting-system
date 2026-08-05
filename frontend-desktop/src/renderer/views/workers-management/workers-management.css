@@ -258,10 +258,21 @@
     font-size: 1.25rem;
 }
 
-.workers-summary-card.workers-count { --card-accent: #2563eb; }
-.workers-summary-card.workers-gross { --card-accent: #0d9488; }
-.workers-summary-card.workers-advances { --card-accent: #f59e0b; }
-.workers-summary-card.workers-net { --card-accent: #16a34a; }
+.workers-summary-card.workers-count {
+    --card-accent: #2563eb;
+}
+
+.workers-summary-card.workers-gross {
+    --card-accent: #0d9488;
+}
+
+.workers-summary-card.workers-advances {
+    --card-accent: #f59e0b;
+}
+
+.workers-summary-card.workers-net {
+    --card-accent: #16a34a;
+}
 
 .workers-table-card {
     border: 1px solid var(--border-color, #dfe6ef);
@@ -622,11 +633,13 @@
 }
 
 .attendance-day-cell.is-present {
-    background-color: rgba(34, 197, 94, 0.09) !important; /* أخضر هادئ جداً */
+    background-color: rgba(34, 197, 94, 0.09) !important;
+    /* أخضر هادئ جداً */
 }
 
 .attendance-day-cell.is-absent {
-    background-color: rgba(239, 68, 68, 0.06) !important; /* أحمر هادئ جداً */
+    background-color: rgba(239, 68, 68, 0.06) !important;
+    /* أحمر هادئ جداً */
 }
 
 [data-theme="dark"] .attendance-day-cell.is-present {
@@ -643,7 +656,8 @@
     margin-top: 4px;
     font-size: 0.85rem;
     font-weight: 700;
-    color: #d97706; /* لون برتقالي مميز للسلف */
+    color: #d97706;
+    /* لون برتقالي مميز للسلف */
     background: rgba(217, 119, 6, 0.1);
     padding: 2px 8px;
     border-radius: 6px;

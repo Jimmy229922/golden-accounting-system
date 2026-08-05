@@ -143,7 +143,12 @@
                             </div>
                             <div class="total-row total-row-due">
                                 <span class="customer-due-label">${t('purchases.supplierDue', 'المتبقي على المورد:')}</span>
-                                <span id="invoiceRemaining" class="customer-due-value">0.00</span>
+                                <div class="remaining-input-wrapper" style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="text" id="invoiceRemaining" class="form-control customer-due-value" value="0.00" autocomplete="off" style="width: 140px; text-align: left; font-weight: bold; font-size: 1.2rem; background: var(--bg-card, #fff);" />
+                                    <button type="button" id="resetRemainingBtn" class="btn btn-sm btn-outline-secondary" title="${t('purchases.resetRemaining', 'إعادة الحساب التلقائي')}" style="display: none; padding: 2px 8px; font-size: 0.85rem;" data-action="reset-remaining">
+                                        🔄
+                                    </button>
+                                </div>
                             </div>
                             <div class="invoice-actions-row">
                                 <button class="btn btn-success invoice-action-btn" type="button" data-action="submit-invoice">
