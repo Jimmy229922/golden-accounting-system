@@ -1735,8 +1735,6 @@ function updateProfitIndicator(row) {
 }
 
 function onItemSelect(select) {
-    if (isEditLocked()) return;
-
     const row = select.closest('tr');
     const itemId = parseInt(select.value, 10);
     const match = Number.isFinite(itemId) ? salesState.allItems.find((i) => i.id === itemId) : null;
@@ -1756,9 +1754,6 @@ function onItemSelect(select) {
     calculateRowTotal(select);
     updateProfitIndicator(row);
     maybeAutoAddRow(row);
-
-    // const qtyInput = row.querySelector('.quantity-input');
-    // if (qtyInput) qtyInput.focus();
 }
 
 function normalizeNumberString(value) {
@@ -1788,33 +1783,6 @@ function formatMoneyInputValue(value) {
     if (!normalized) return '';
 
     const parts = normalized.split('.');
-    const integerPart = (parts.shift() || '').replace(/[^0-9]/g, '');
-    const decimalPart = parts.join('').replace(/[^0-9]/g, '');
-    const formattedInteger = (integerPart ? Number(integerPart) : 0).toLocaleString('en-US');
-    const hasDot = normalized.includes('.');
-
-    if (hasDot) {
-        return `${formattedInteger}.${decimalPart}`;
-    }
-
-    return formattedInteger;
-}
-
-function handlePaidAmountInput(event) {
-    const input = event?.target;
-    if (!input) return;
-    input.value = formatMoneyInputValue(input.value);
-    calculateInvoiceTotal();
-}
-
-function roundMoney(value) {
-    const n = Number(value) || 0;
-    return Math.round((n + Number.EPSILON) * 100) / 100;
-}
-
-function getInvoiceFinancials(subtotal) {
-    const safeSubtotal = Number.isFinite(subtotal) ? Math.max(subtotal, 0) : 0;
-    const discountType = salesState.dom.discountTypeSelect?.value === 'percent' ? 'percent' : 'amount';
 
     const discountValueRaw = parseLocaleFloat(salesState.dom.discountValueInput?.value || '0');
     const discountValue = Number.isFinite(discountValueRaw) && discountValueRaw > 0 ? discountValueRaw : 0;

@@ -106,27 +106,7 @@ function initializeElements() {
     if (purchasesState.dom.invoiceRemainingSpan) {
         purchasesState.dom.invoiceRemainingSpan.addEventListener('input', (event) => {
             purchasesState.isRemainingCustomized = true;
-            event.target.value = formatMoneyInputValue(event.target.value);
-            if (purchasesState.dom.resetRemainingBtn) {
-                purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
-            }
-        });
-    }
-
-    if (purchasesState.dom.resetRemainingBtn) {
-        purchasesState.dom.resetRemainingBtn.addEventListener('click', () => {
-            purchasesState.isRemainingCustomized = false;
-            if (purchasesState.dom.resetRemainingBtn) {
-                purchasesState.dom.resetRemainingBtn.style.display = 'none';
-            }
-            calculateInvoiceTotal();
-        });
-    }
-
-    if (purchasesState.dom.invoiceRemainingSpan) {
-        purchasesState.dom.invoiceRemainingSpan.addEventListener('input', (event) => {
-            purchasesState.isRemainingCustomized = true;
-            event.target.value = formatMoneyInputValue(event.target.value);
+            formatInputWithCursor(event.target);
             if (purchasesState.dom.resetRemainingBtn) {
                 purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
             }
@@ -386,6 +366,7 @@ async function loadInvoiceForEdit(id) {
         }
 
         purchasesState.editingInvoiceId = id;
+        purchasesState.isRemainingCustomized = false;
         purchasesState.originalInvoiceItemTotalsByItemId = {};
         (invoice.items || []).forEach((item) => {
             const itemId = parseInt(item.item_id, 10);
@@ -422,26 +403,24 @@ async function loadInvoiceForEdit(id) {
 
         purchasesState.dom.invoiceItemsBody.innerHTML = '';
         invoice.items.forEach((item) => addInvoiceRow(item));
-        calculateInvoiceTotal();
 
         const savedRem = Number(invoice.remaining_amount);
-        if (Number.isFinite(savedRem)) {
-            const currentFinancials = calculateInvoiceFinancialsFromForm();
-            if (Math.abs(savedRem - currentFinancials.supplierRemaining) > 0.01) {
-                purchasesState.isRemainingCustomized = true;
-                if (purchasesState.dom.invoiceRemainingSpan) {
-                    purchasesState.dom.invoiceRemainingSpan.value = formatMoneyWithCommas(savedRem);
-                }
-                if (purchasesState.dom.resetRemainingBtn) {
-                    purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
-                }
-            } else {
-                purchasesState.isRemainingCustomized = false;
-                if (purchasesState.dom.resetRemainingBtn) {
-                    purchasesState.dom.resetRemainingBtn.style.display = 'none';
-                }
+        const currentFinancials = calculateInvoiceFinancialsFromForm();
+        if (Number.isFinite(savedRem) && Math.abs(savedRem - currentFinancials.supplierRemaining) > 0.01) {
+            purchasesState.isRemainingCustomized = true;
+            if (purchasesState.dom.invoiceRemainingSpan) {
+                purchasesState.dom.invoiceRemainingSpan.value = formatMoneyWithCommas(savedRem);
+            }
+            if (purchasesState.dom.resetRemainingBtn) {
+                purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
+            }
+        } else {
+            purchasesState.isRemainingCustomized = false;
+            if (purchasesState.dom.resetRemainingBtn) {
+                purchasesState.dom.resetRemainingBtn.style.display = 'none';
             }
         }
+        calculateInvoiceTotal();
         updateSelectedItemAvailability(purchasesState.dom.invoiceItemsBody.querySelector('tr'));
 
         purchasesRender.setEditModeUI(t);
@@ -1504,10 +1483,40 @@ function formatMoneyInputValue(value) {
     return formattedInteger;
 }
 
+function formatInputWithCursor(input) {
+    if (!input) return;
+    const val = input.value || '';
+    const oldCursor = input.selectionStart ?? val.length;
+
+    let digitCount = 0;
+    for (let i = 0; i < oldCursor && i < val.length; i++) {
+        if (/[0-9.]/.test(val[i])) digitCount++;
+    }
+
+    const formatted = formatMoneyInputValue(val);
+    input.value = formatted;
+
+    let newCursor = formatted.length;
+    let currentDigits = 0;
+    for (let i = 0; i < formatted.length; i++) {
+        if (/[0-9.]/.test(formatted[i])) {
+            currentDigits++;
+        }
+        if (currentDigits === digitCount) {
+            newCursor = i + 1;
+            break;
+        }
+    }
+
+    try {
+        input.setSelectionRange(newCursor, newCursor);
+    } catch (_) {}
+}
+
 function handlePaidAmountInput(event) {
     const input = event?.target;
     if (!input) return;
-    input.value = formatMoneyInputValue(input.value);
+    formatInputWithCursor(input);
     calculateInvoiceTotal();
 }
 
