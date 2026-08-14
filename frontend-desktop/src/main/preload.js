@@ -197,6 +197,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Reports API
     getAllReports: (filters) => invokeChannel('get-all-reports', filters),
+    getDailyFinanceReport: (filters) => invokeChannel('get-daily-finance-report', filters),
+    saveDailyFinanceReportPdf: (options) => invokeChannel('save-daily-report-pdf', options),
     getCustomerFullReport: (customerId) => invokeChannel('get-customer-full-report', customerId),
     getCustomerDetailedStatement: (params) => invokeChannel('get-customer-detailed-statement', params),
     getStatementItemDetails: (params) => invokeChannel('get-statement-item-details', params),

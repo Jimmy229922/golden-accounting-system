@@ -103,7 +103,7 @@ ensureSharedConfirmDialogBridge();
 
 function resolveViewsPrefix(pathname = window.location.pathname) {
     const normalized = normalizePath(pathname);
-    if (normalized.includes('/views/reports/debtor-creditor/')) {
+    if (normalized.includes('/views/reports/debtor-creditor/') || normalized.includes('/views/reports/daily-report/')) {
         return '../../';
     }
     return '../';
@@ -157,6 +157,7 @@ function buildTopNavItems(prefix) {
             fallback: 'Reports',
             children: [
                 { key: 'common.nav.generalReports', fallback: 'General Reports', href: withPrefix('reports/index.html') },
+                { key: 'common.nav.dailyReport', fallback: 'التقرير اليومي الشامل', href: withPrefix('reports/daily-report/index.html') },
                 { key: 'common.nav.customerReports', fallback: 'Customer Reports', href: withPrefix('customer-reports/index.html') },
                 { key: 'common.nav.debtorCreditor', fallback: 'Debtor & Creditor', href: withPrefix('reports/debtor-creditor/index.html') },
                 { key: 'common.nav.workersManagement', fallback: 'Workers Management', href: withPrefix('workers-management/index.html') },

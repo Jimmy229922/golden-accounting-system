@@ -510,8 +510,10 @@ function register() {
             // --- جلب أصناف المشتريات ---
             let purchaseItemsQuery = `
                 SELECT i.name as item_name, u.name as unit_name,
+                       SUM(COALESCE(NULLIF(pid.raw_quantity, 0), pid.quantity)) as total_raw_qty,
+                       ROUND(SUM(COALESCE(NULLIF(pid.raw_quantity, 0), pid.quantity) * 0.99), 2) as total_net1_qty,
                        SUM(pid.quantity) as total_qty,
-                       ROUND(SUM(pid.total_price) * 1.0 / SUM(pid.quantity), 2) as avg_price,
+                       ROUND(SUM(pid.total_price) * 1.0 / NULLIF(SUM(pid.quantity), 0), 2) as avg_price,
                        SUM(pid.total_price) as total_amount
                 FROM purchase_invoice_details pid
                 JOIN purchase_invoices pi ON pid.invoice_id = pi.id
@@ -786,6 +788,215 @@ function register() {
             return { success: true, filePath };
         } catch (error) {
             console.error('[save-customer-summary-pdf] error:', error);
+            return { success: false, error: error.message };
+        } finally {
+            await restoreShellFrameAfterPdfCapture(sourceWebContents);
+        }
+    });
+
+    ipcMain.handle('get-daily-finance-report', (event, filters = {}) => {
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            const startDate = String(filters.startDate || filters.date || today).trim();
+            const endDate = String(filters.endDate || filters.date || startDate).trim();
+
+            const salesInvoices = db.prepare(`
+                SELECT si.id, si.invoice_number, si.invoice_date, si.total_amount,
+                       si.paid_amount, si.remaining_amount, si.notes, si.created_at,
+                       c.name AS customer_name
+                FROM sales_invoices si
+                LEFT JOIN parties c ON si.customer_id = c.id
+                WHERE si.invoice_date >= @startDate AND si.invoice_date <= @endDate AND si.paid_amount > 0
+                ORDER BY si.invoice_date DESC, si.id DESC
+            `).all({ startDate, endDate });
+
+            const localSales = db.prepare(`
+                SELECT ls.id, ls.document_number, ls.record_date, ls.quantity, ls.price,
+                       ls.total, ls.statement, ls.created_at, c.name AS customer_name
+                FROM local_sales ls
+                LEFT JOIN parties c ON ls.customer_id = c.id
+                WHERE ls.record_date >= @startDate AND ls.record_date <= @endDate
+                ORDER BY ls.record_date DESC, ls.id DESC
+            `).all({ startDate, endDate });
+
+            const exportRevenues = db.prepare(`
+                SELECT er.id, er.document_number, er.record_date, er.amount, er.currency,
+                       er.exchange_rate, er.amount_egp, er.statement, er.created_at
+                FROM export_revenues er
+                WHERE er.record_date >= @startDate AND er.record_date <= @endDate
+                ORDER BY er.record_date DESC, er.id DESC
+            `).all({ startDate, endDate });
+
+            const treasuryIncome = db.prepare(`
+                SELECT t.id, t.voucher_number, t.amount, t.transaction_date, t.description,
+                       t.created_at, c.name AS customer_name
+                FROM treasury_transactions t
+                LEFT JOIN parties c ON t.customer_id = c.id
+                WHERE t.type = 'income'
+                  AND t.transaction_date >= @startDate
+                  AND t.transaction_date <= @endDate
+                  AND COALESCE(t.related_type, '') NOT IN ('sales_shift_close', 'customer_collection_shift_close')
+                ORDER BY t.transaction_date DESC, t.id DESC
+            `).all({ startDate, endDate });
+
+            const purchaseInvoices = db.prepare(`
+                SELECT pi.id, pi.invoice_number, pi.invoice_date, pi.total_amount,
+                       pi.paid_amount, pi.remaining_amount, pi.notes, pi.created_at,
+                       c.name AS supplier_name
+                FROM purchase_invoices pi
+                LEFT JOIN parties c ON pi.supplier_id = c.id
+                WHERE pi.invoice_date >= @startDate AND pi.invoice_date <= @endDate AND pi.paid_amount > 0
+                ORDER BY pi.invoice_date DESC, pi.id DESC
+            `).all({ startDate, endDate });
+
+            const pettyExpenses = db.prepare(`
+                SELECT pe.id, pe.document_number, pe.expense_date, pe.category,
+                       pe.amount, pe.statement, pe.notes, pe.created_at
+                FROM petty_expenses pe
+                WHERE pe.expense_date >= @startDate AND pe.expense_date <= @endDate
+                ORDER BY pe.expense_date DESC, pe.id DESC
+            `).all({ startDate, endDate });
+
+            const factoryPettyExpenses = db.prepare(`
+                SELECT fpe.id, fpe.document_number, fpe.expense_date, fpe.category,
+                       fpe.amount, fpe.statement, fpe.notes, fpe.created_at
+                FROM factory_petty_expenses fpe
+                WHERE fpe.expense_date >= @startDate AND fpe.expense_date <= @endDate
+                ORDER BY fpe.expense_date DESC, fpe.id DESC
+            `).all({ startDate, endDate });
+
+            const treasuryExpense = db.prepare(`
+                SELECT t.id, t.voucher_number, t.amount, t.transaction_date, t.description,
+                       t.created_at, c.name AS party_name
+                FROM treasury_transactions t
+                LEFT JOIN parties c ON t.customer_id = c.id
+                WHERE t.type = 'expense'
+                  AND t.transaction_date >= @startDate
+                  AND t.transaction_date <= @endDate
+                  AND t.id NOT IN (
+                      SELECT COALESCE(treasury_transaction_id, 0) FROM petty_expenses WHERE treasury_transaction_id IS NOT NULL
+                      UNION
+                      SELECT COALESCE(treasury_transaction_id, 0) FROM factory_petty_expenses WHERE treasury_transaction_id IS NOT NULL
+                  )
+                ORDER BY t.transaction_date DESC, t.id DESC
+            `).all({ startDate, endDate });
+
+            const totalSalesPaid = salesInvoices.reduce((sum, r) => sum + (Number(r.paid_amount) || 0), 0);
+            const totalLocalSales = localSales.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+            const totalExportRevenues = exportRevenues.reduce((sum, r) => sum + (Number(r.amount_egp) || 0), 0);
+            const totalTreasuryIncome = treasuryIncome.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+            const totalPurchasesPaid = purchaseInvoices.reduce((sum, r) => sum + (Number(r.paid_amount) || 0), 0);
+            const totalPetty = pettyExpenses.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+            const totalFactoryPetty = factoryPettyExpenses.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+            const totalTreasuryExpense = treasuryExpense.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+            const totalIncome = Math.round((totalSalesPaid + totalLocalSales + totalExportRevenues + totalTreasuryIncome) * 100) / 100;
+            const totalExpense = Math.round((totalPurchasesPaid + totalPetty + totalFactoryPetty + totalTreasuryExpense) * 100) / 100;
+            const netFlow = Math.round((totalIncome - totalExpense) * 100) / 100;
+
+            return {
+                success: true,
+                period: { startDate, endDate },
+                income: {
+                    salesInvoices,
+                    localSales,
+                    exportRevenues,
+                    treasuryIncome,
+                    subtotals: {
+                        salesPaid: totalSalesPaid,
+                        localSales: totalLocalSales,
+                        exportRevenues: totalExportRevenues,
+                        treasuryIncome: totalTreasuryIncome
+                    }
+                },
+                expense: {
+                    purchaseInvoices,
+                    pettyExpenses,
+                    factoryPettyExpenses,
+                    treasuryExpense,
+                    subtotals: {
+                        purchasesPaid: totalPurchasesPaid,
+                        pettyExpenses: totalPetty,
+                        factoryPettyExpenses: totalFactoryPetty,
+                        treasuryExpense: totalTreasuryExpense
+                    }
+                },
+                totals: {
+                    totalIncome,
+                    totalExpense,
+                    netFlow
+                }
+            };
+        } catch (error) {
+            console.error('[get-daily-finance-report] error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-daily-report-pdf', async (event, payload) => {
+        const sourceWebContents = event.sender;
+        try {
+            const win = BrowserWindow.fromWebContents(sourceWebContents);
+            if (!win) {
+                return { success: false, error: 'No active window found' };
+            }
+
+            const date = new Date().toISOString().split('T')[0];
+            const requestedDefault = payload?.defaultName;
+            const defaultName = sanitizeSuggestedFileName(requestedDefault || `Daily_Finance_Report_${date}.pdf`);
+            const defaultPath = path.join(app.getPath('downloads'), defaultName);
+
+            const { canceled, filePath } = await dialog.showSaveDialog(win, {
+                title: 'حفظ التقرير اليومي PDF',
+                defaultPath,
+                filters: [{ name: 'PDF', extensions: ['pdf'] }]
+            });
+
+            if (canceled || !filePath) {
+                return { success: false, canceled: true };
+            }
+
+            await prepareShellFrameForPdfCapture(sourceWebContents);
+
+            const pdfBuffer = await sourceWebContents.printToPDF({
+                printBackground: true,
+                pageSize: 'A4',
+                landscape: false,
+                marginsType: 0,
+                preferCSSPageSize: true
+            });
+
+            const title = path.basename(filePath, path.extname(filePath));
+            const pdfDoc = await PDFDocument.load(pdfBuffer);
+            pdfDoc.setTitle(title);
+            pdfDoc.setCreator('Accounting System');
+            pdfDoc.setProducer('Accounting System');
+
+            const pages = pdfDoc.getPages();
+            const totalPages = pages.length;
+            if (totalPages > 0) {
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                pages.forEach((page, i) => {
+                    const { width } = page.getSize();
+                    const text = `${i + 1} / ${totalPages}`;
+                    const textWidth = font.widthOfTextAtSize(text, 9);
+                    page.drawText(text, {
+                        x: (width - textWidth) / 2,
+                        y: 6,
+                        size: 9,
+                        font,
+                        color: rgb(0.45, 0.45, 0.45)
+                    });
+                });
+            }
+
+            const finalPdf = await pdfDoc.save();
+            fs.writeFileSync(filePath, finalPdf);
+
+            return { success: true, filePath };
+        } catch (error) {
+            console.error('[save-daily-report-pdf] error:', error);
             return { success: false, error: error.message };
         } finally {
             await restoreShellFrameAfterPdfCapture(sourceWebContents);

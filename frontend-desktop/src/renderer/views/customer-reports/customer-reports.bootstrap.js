@@ -635,10 +635,10 @@ window.saveSummaryPDF = async () => {
         idx++;
         const typeLabel = typeLabels[trans.type] || trans.type;
         const invoiceTotal = (trans.type === 'sales' || trans.type === 'local_sale' || trans.type === 'payment_out')
-            ? formatCurrency(trans.total_amount)
+            ? formatCurrency(trans.type === 'payment_out' ? trans.paid_amount : trans.total_amount)
             : '';
         const paymentAmount = (trans.type === 'purchase' || trans.type === 'payment_in')
-            ? formatCurrency(trans.total_amount)
+            ? formatCurrency(trans.type === 'payment_in' ? trans.paid_amount : trans.total_amount)
             : '';
 
         const rb = trans.running_balance;
@@ -752,7 +752,6 @@ window.saveSummaryPDF = async () => {
     overlay.className = 'summary-pdf-overlay';
     overlay.innerHTML = summaryHtml;
     document.body.appendChild(overlay);
-
     // Activate PDF capture mode — hides #app, shows only the overlay
     document.body.classList.add('summary-pdf-mode');
 
@@ -797,6 +796,19 @@ function buildSummaryItemsSection(result, t) {
             'padding-top:0'
         ].filter(Boolean).join(';');
 
+        const isPurchaseSection = section.key === 'purchaseItems';
+        const colCount = isPurchaseSection ? 8 : 6;
+
+        const qtyHeadersHtml = isPurchaseSection
+            ? `
+                            <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">الكمية الخام</th>
+                            <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">صافي 1%</th>
+                            <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">الكمية النهائية</th>`
+            : `
+                            <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">
+                                ${t('customerReports.summaryItemQty', 'إجمالي الكمية')}
+                            </th>`;
+
         html += `
             <div class="summary-items-section" data-summary-section="${sectionIndex}" data-has-items="${hasItems ? '1' : '0'}" style="${sectionContainerStyle}">
                 <div style="background:${section.color};color:#fff;padding:8px 14px;border-radius:6px 6px 0 0;font-size:13px;font-weight:700;page-break-after:avoid;break-after:avoid-page;">
@@ -812,9 +824,7 @@ function buildSummaryItemsSection(result, t) {
                             <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">
                                 ${t('customerReports.itemHeaders.unit', 'الوحدة')}
                             </th>
-                            <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">
-                                ${t('customerReports.summaryItemQty', 'إجمالي الكمية')}
-                            </th>
+                            ${qtyHeadersHtml}
                             <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">
                                 ${t('customerReports.summaryItemAvgPrice', 'متوسط السعر')}
                             </th>
@@ -827,12 +837,20 @@ function buildSummaryItemsSection(result, t) {
 
         if (hasItems) {
             items.forEach((item, i) => {
+                const qtyCellsHtml = isPurchaseSection
+                    ? `
+                            <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${item.total_raw_qty ?? item.total_qty}</td>
+                            <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${item.total_net1_qty ?? item.total_qty}</td>
+                            <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;font-weight:700;">${item.total_qty}</td>`
+                    : `
+                            <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;font-weight:700;">${item.total_qty}</td>`;
+
                 html += `
                         <tr style="page-break-inside:avoid;">
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${i + 1}</td>
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;font-weight:600;">${escapeHtml(item.item_name)}</td>
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${escapeHtml(item.unit_name || '—')}</td>
-                            <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;font-weight:700;">${item.total_qty}</td>
+                            ${qtyCellsHtml}
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${formatCurrency(item.avg_price || 0)}</td>
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;font-weight:700;">${formatCurrency(item.total_amount)}</td>
                         </tr>`;
@@ -842,7 +860,7 @@ function buildSummaryItemsSection(result, t) {
                     </tbody>
                     <tfoot>
                         <tr style="background:#f8f8f8;page-break-inside:avoid;">
-                            <td colspan="5" style="font-size:12px;padding:8px;border:1px solid #ccc;text-align:center;font-weight:800;">
+                            <td colspan="${colCount - 1}" style="font-size:12px;padding:8px;border:1px solid #ccc;text-align:center;font-weight:800;">
                                 ${t('customerReports.summaryTotals', 'الإجماليات')}
                             </td>
                             <td style="font-size:12px;padding:8px;border:1px solid #ccc;text-align:center;font-weight:800;color:${section.color};">
@@ -855,7 +873,7 @@ function buildSummaryItemsSection(result, t) {
         } else {
             html += `
                         <tr style="page-break-inside:avoid;">
-                            <td colspan="6" style="font-size:12px;padding:14px;border:1px solid #ddd;text-align:center;font-weight:700;color:#555;">
+                            <td colspan="${colCount}" style="font-size:12px;padding:14px;border:1px solid #ddd;text-align:center;font-weight:700;color:#555;">
                                 ${t('customerReports.noDataMessage', 'لا توجد بيانات')}
                             </td>
                         </tr>
