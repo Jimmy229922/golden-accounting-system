@@ -1,27 +1,26 @@
 let arDictionaryCache = null;
 
 function resolvePathCandidates() {
-    const path = window.location.pathname;
+    const path = window.location.pathname.replace(/\\/g, '/');
     let depth = 0;
     
-    // Count how many directories we are deep inside "renderer"
-    // e.g. /D:/JS/accounting-system/frontend-desktop/src/renderer/views/reports/debtor-creditor/index.html
-    const match = path.match(/renderer\/(.*\/)index\.html$/i);
+    const match = path.match(/renderer\/(.*\/)[^/]+$/i);
     if (match && match[1]) {
         depth = match[1].split('/').filter(Boolean).length;
     } else {
-        // Fallback generic depth calculation
-        depth = path.split('/').length - path.indexOf('renderer/') - 2;
+        const segments = path.split('/').filter(Boolean);
+        const rendererIndex = segments.map(s => s.toLowerCase()).lastIndexOf('renderer');
+        if (rendererIndex !== -1 && segments.length > rendererIndex + 1) {
+            depth = (segments.length - 1) - (rendererIndex + 1);
+        }
     }
     
-    // Safety bound
     if (depth < 0) depth = 0;
     if (depth > 5) depth = 5;
 
     const prefix = depth > 0 ? '../'.repeat(depth) : './';
     const computedPath = prefix + 'assets/i18n/ar.json';
 
-    // Return the computed path first, then the fallbacks just in case
     return Array.from(new Set([
         computedPath,
         '../../assets/i18n/ar.json',

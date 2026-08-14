@@ -405,7 +405,8 @@ async function loadReport() {
     }
 
     try {
-        const response = await window.api.getDailyFinanceReport({ startDate, endDate });
+        const electronApi = window.electronAPI || window.api;
+        const response = await electronApi.getDailyFinanceReport({ startDate, endDate });
         if (!response || !response.success) {
             showDailyReportToast(response?.error || 'فشل جلب التقرير المالي', 'error');
             return;
@@ -536,7 +537,8 @@ async function exportPdf() {
     const defaultName = `تقرير_مالي_${startDate}_إلى_${endDate}.pdf`;
 
     try {
-        const result = await window.api.saveDailyFinanceReportPdf({ defaultName });
+        const electronApi = window.electronAPI || window.api;
+        const result = await electronApi.saveDailyFinanceReportPdf({ defaultName });
         if (result && result.success) {
             showDailyReportToast('تم حفظ ملف PDF بنجاح', 'success');
         } else if (result && !result.canceled) {
