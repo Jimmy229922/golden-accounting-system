@@ -76,6 +76,19 @@ function register() {
                     args.endDate = params.endDate;
                 }
 
+                if (params.statement && String(params.statement).trim()) {
+                    where.push('(statement LIKE @statement OR notes LIKE @statement OR document_number LIKE @statement)');
+                    args.statement = `%${String(params.statement).trim()}%`;
+                }
+
+                if (params.amount !== undefined && params.amount !== null && String(params.amount).trim() !== '') {
+                    const parsedAmount = Number(params.amount);
+                    if (!Number.isNaN(parsedAmount)) {
+                        where.push('amount = @amount');
+                        args.amount = parsedAmount;
+                    }
+                }
+
                 const whereSql = `WHERE ${where.join(' AND ')}`;
                 const total = db.prepare(`SELECT COUNT(*) as count FROM petty_expenses ${whereSql}`).get(args).count || 0;
                 const totalAmount = db.prepare(`SELECT COALESCE(SUM(amount), 0) as totalAmount FROM petty_expenses ${whereSql}`).get(args).totalAmount || 0;

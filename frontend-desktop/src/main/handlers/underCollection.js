@@ -112,6 +112,16 @@ function register() {
                 args.endDate = params.endDate;
             }
 
+            if (params.invoiceNumber && String(params.invoiceNumber).trim()) {
+                where.push('invoice_number LIKE @invoiceNumber');
+                args.invoiceNumber = `%${String(params.invoiceNumber).trim()}%`;
+            }
+
+            if (params.statement && String(params.statement).trim()) {
+                where.push('statement LIKE @statement');
+                args.statement = `%${String(params.statement).trim()}%`;
+            }
+
             const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
             const total = db.prepare(`SELECT COUNT(*) as count FROM under_collection_records ${whereSql}`).get(args).count || 0;
             const totalAmount = db.prepare(`SELECT COALESCE(SUM(total_usd), 0) as totalAmount FROM under_collection_records ${whereSql}`).get(args).totalAmount || 0;

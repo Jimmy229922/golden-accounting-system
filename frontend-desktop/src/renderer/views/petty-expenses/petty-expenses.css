@@ -278,7 +278,7 @@
 }
 
 .invoice-top-grid.filter-grid {
-    grid-template-columns: 200px 200px auto;
+    grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) minmax(160px, 1.4fr) minmax(120px, 0.9fr) auto;
     align-items: flex-end;
 }
 

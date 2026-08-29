@@ -170,6 +170,14 @@ function renderPage() {
                             <label>التاريخ إلى</label>
                             <input type="date" id="endDate" class="form-control">
                         </div>
+                        <div class="form-group">
+                            <label>رقم الفاتورة</label>
+                            <input type="text" id="invoiceNumberFilter" class="form-control" placeholder="بحث برقم الفاتورة...">
+                        </div>
+                        <div class="form-group">
+                            <label>البيان</label>
+                            <input type="text" id="statementFilter" class="form-control" placeholder="بحث بالبيان...">
+                        </div>
                         <div class="petty-filter-actions">
                             <button type="button" class="btn btn-primary" id="filterBtn" style="border-radius: 8px; flex: 1;">
                                 <i class="fas fa-search" style="margin-inline-end: 5px;"></i> بحث
@@ -301,16 +309,37 @@ function renderPage() {
 
 function bindEvents() {
     document.getElementById('underCollectionForm').addEventListener('submit', saveRecord);
-    document.getElementById('filterBtn').addEventListener('click', () => {
+
+    const triggerSearch = () => {
         state.page = 1;
         loadRecords();
+    };
+
+    document.getElementById('filterBtn').addEventListener('click', triggerSearch);
+    document.getElementById('invoiceNumberFilter')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerSearch();
+        }
     });
+    document.getElementById('statementFilter')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerSearch();
+        }
+    });
+
     document.getElementById('resetFilterBtn').addEventListener('click', () => {
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
+        const inv = document.getElementById('invoiceNumberFilter');
+        if (inv) inv.value = '';
+        const st = document.getElementById('statementFilter');
+        if (st) st.value = '';
         state.page = 1;
         loadRecords();
     });
+
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
     document.getElementById('tonsCount').addEventListener('input', updateTotalPreview);
     document.getElementById('tonPrice').addEventListener('input', updateTotalPreview);
@@ -360,8 +389,10 @@ function getFilters() {
     return {
         page: state.page,
         pageSize: state.pageSize,
-        startDate: document.getElementById('startDate').value,
-        endDate: document.getElementById('endDate').value
+        startDate: document.getElementById('startDate')?.value || '',
+        endDate: document.getElementById('endDate')?.value || '',
+        invoiceNumber: document.getElementById('invoiceNumberFilter')?.value?.trim() || '',
+        statement: document.getElementById('statementFilter')?.value?.trim() || ''
     };
 }
 
@@ -514,9 +545,8 @@ async function toggleCollected(id, isCollected) {
 async function saveRecord(event) {
     event.preventDefault();
     if (state.isSaving) return;
-    const selectedRecordDate = document.getElementById('recordDate').value || today();
     const payload = {
-        record_date: selectedRecordDate,
+        record_date: document.getElementById('recordDate').value || today(),
         container_count: document.getElementById('containerCount').value,
         container_20: document.getElementById('container20').checked ? 1 : 0,
         container_40: document.getElementById('container40').checked ? 1 : 0,
@@ -554,8 +584,9 @@ async function saveRecord(event) {
         }
 
         showMessage('تم حفظ السجل بنجاح', 'success');
+        document.getElementById('addRecordModal').classList.add('hidden');
         document.getElementById('underCollectionForm').reset();
-        document.getElementById('recordDate').value = selectedRecordDate;
+        document.getElementById('recordDate').value = today();
         document.getElementById('remainingType').value = 'percent';
         updateTotalPreview();
         await refreshDocumentNumber();
@@ -569,18 +600,18 @@ async function saveRecord(event) {
 }
 
 async function exportPdf() {
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
+    const filters = getFilters();
+    const startDate = filters.startDate;
+    const endDate = filters.endDate;
     const currentRows = state.rows.slice();
     document.getElementById('printRange').textContent = startDate || endDate
         ? `الفترة: ${startDate || 'البداية'} إلى ${endDate || 'اليوم'}`
         : '';
 
     const exportResult = await window.electronAPI.getUnderCollectionRecords({
+        ...filters,
         page: 1,
-        pageSize: 100000,
-        startDate,
-        endDate
+        pageSize: 100000
     });
 
     if (exportResult && exportResult.success) {

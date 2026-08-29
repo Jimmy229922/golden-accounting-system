@@ -125,6 +125,14 @@ function renderPage() {
                             <label>التاريخ إلى</label>
                             <input type="date" id="endDate" class="form-control">
                         </div>
+                        <div class="form-group">
+                            <label>البيان</label>
+                            <input type="text" id="statementFilter" class="form-control" placeholder="بحث بالبيان أو الملاحظة...">
+                        </div>
+                        <div class="form-group">
+                            <label>المبلغ</label>
+                            <input type="number" id="amountFilter" class="form-control" step="any" placeholder="المبلغ...">
+                        </div>
                         <div class="petty-filter-actions">
                             <button type="button" class="btn btn-primary" id="filterBtn" style="border-radius: 8px; flex: 1;">
                                 <i class="fas fa-search" style="margin-inline-end: 5px;"></i> بحث
@@ -168,7 +176,6 @@ function renderPage() {
             </section>
         </main>
 
-        <!-- مودال إضافة الشكاير -->
         <div id="addExpenseModal" class="petty-modal-overlay hidden">
             <div class="petty-modal-card" role="dialog" aria-modal="true" aria-labelledby="pettyModalTitle">
                 <div class="petty-modal-header">
@@ -228,19 +235,39 @@ function renderPage() {
 
 function bindEvents() {
     document.getElementById('pettyForm').addEventListener('submit', saveExpense);
-    document.getElementById('filterBtn').addEventListener('click', () => {
+
+    const triggerSearch = () => {
         state.page = 1;
         loadExpenses();
+    };
+
+    document.getElementById('filterBtn').addEventListener('click', triggerSearch);
+    document.getElementById('statementFilter')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerSearch();
+        }
     });
+    document.getElementById('amountFilter')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerSearch();
+        }
+    });
+
     document.getElementById('resetFilterBtn').addEventListener('click', () => {
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
+        const st = document.getElementById('statementFilter');
+        if (st) st.value = '';
+        const am = document.getElementById('amountFilter');
+        if (am) am.value = '';
         state.page = 1;
         loadExpenses();
     });
+
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
 
-    // ربط أحداث النافذة المنبثقة (Modal)
     const modal = document.getElementById('addExpenseModal');
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
         state.editingId = null;
@@ -284,8 +311,10 @@ function getFilters() {
     return {
         page: state.page,
         pageSize: state.pageSize,
-        startDate: document.getElementById('startDate').value,
-        endDate: document.getElementById('endDate').value
+        startDate: document.getElementById('startDate')?.value || '',
+        endDate: document.getElementById('endDate')?.value || '',
+        statement: document.getElementById('statementFilter')?.value?.trim() || '',
+        amount: document.getElementById('amountFilter')?.value?.trim() || ''
     };
 }
 
@@ -323,7 +352,7 @@ function renderSummary() {
 function renderRows() {
     const body = document.getElementById('expensesBody');
     if (!state.rows.length) {
-        body.innerHTML = `<tr><td colspan="6" class="petty-empty">لا توجد الشكاير مسجلة</td></tr>`;
+        body.innerHTML = `<tr><td colspan="6" class="petty-empty">لا توجد سجلات مسجلة</td></tr>`;
         return;
     }
 
@@ -450,18 +479,18 @@ async function saveExpense(event) {
 }
 
 async function exportPdf() {
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
+    const filters = getFilters();
+    const startDate = filters.startDate;
+    const endDate = filters.endDate;
     const currentRows = state.rows.slice();
     document.getElementById('printRange').textContent = startDate || endDate
         ? `الفترة: ${startDate || 'البداية'} إلى ${endDate || 'اليوم'}`
         : '';
 
     const exportResult = await window.electronAPI.getBagsExpenses({
+        ...filters,
         page: 1,
-        pageSize: 100000,
-        startDate,
-        endDate
+        pageSize: 100000
     });
 
     if (exportResult && exportResult.success) {

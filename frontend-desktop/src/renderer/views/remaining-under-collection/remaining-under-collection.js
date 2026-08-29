@@ -125,7 +125,6 @@ function renderPage() {
 
             <section class="invoice-form-container petty-filters-card">
                 <div class="invoice-shell">
-                    <div class="form-title-row" style="padding-bottom: 0; border-bottom: none;"></div>
                     <div class="invoice-top-grid filter-grid">
                         <div class="form-group">
                             <label>التاريخ من</label>
@@ -134,6 +133,10 @@ function renderPage() {
                         <div class="form-group">
                             <label>التاريخ إلى</label>
                             <input type="date" id="endDate" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>البيان</label>
+                            <input type="text" id="statementFilter" class="form-control" placeholder="بحث بالبيان...">
                         </div>
                         <div class="petty-filter-actions">
                             <button type="button" class="btn btn-primary" id="filterBtn" style="border-radius: 8px; flex: 1;">
@@ -247,16 +250,29 @@ function renderPage() {
 
 function bindEvents() {
     document.getElementById('remainingUnderCollectionForm').addEventListener('submit', saveRecord);
-    document.getElementById('filterBtn').addEventListener('click', () => {
+
+    const triggerSearch = () => {
         state.page = 1;
         loadRecords();
+    };
+
+    document.getElementById('filterBtn').addEventListener('click', triggerSearch);
+    document.getElementById('statementFilter')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerSearch();
+        }
     });
+
     document.getElementById('resetFilterBtn').addEventListener('click', () => {
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
+        const st = document.getElementById('statementFilter');
+        if (st) st.value = '';
         state.page = 1;
         loadRecords();
     });
+
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
 
     const modal = document.getElementById('addRecordModal');
@@ -303,8 +319,9 @@ function getFilters() {
     return {
         page: state.page,
         pageSize: state.pageSize,
-        startDate: document.getElementById('startDate').value,
-        endDate: document.getElementById('endDate').value
+        startDate: document.getElementById('startDate')?.value || '',
+        endDate: document.getElementById('endDate')?.value || '',
+        statement: document.getElementById('statementFilter')?.value?.trim() || ''
     };
 }
 
@@ -487,6 +504,7 @@ async function saveRecord(event) {
         document.getElementById('recordDate').value = today();
         document.getElementById('arrivalDate').value = today();
         await refreshDocumentNumber();
+        document.getElementById('statement').focus();
         state.page = 1;
         await loadRecords();
     } finally {
@@ -496,18 +514,18 @@ async function saveRecord(event) {
 }
 
 async function exportPdf() {
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
+    const filters = getFilters();
+    const startDate = filters.startDate;
+    const endDate = filters.endDate;
     const currentRows = state.rows.slice();
     document.getElementById('printRange').textContent = startDate || endDate
         ? `الفترة: ${startDate || 'البداية'} إلى ${endDate || 'اليوم'}`
         : '';
 
     const exportResult = await window.electronAPI.getRemainingUnderCollectionRecords({
+        ...filters,
         page: 1,
-        pageSize: 100000,
-        startDate,
-        endDate
+        pageSize: 100000
     });
 
     if (exportResult && exportResult.success) {

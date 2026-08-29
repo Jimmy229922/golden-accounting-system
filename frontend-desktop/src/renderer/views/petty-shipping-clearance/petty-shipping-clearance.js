@@ -80,13 +80,13 @@ function renderPage() {
                 </div>
                 <div class="hero-content">
                     <h1>الشحن و التخليص</h1>
-                    <p>مصروفات الشحن والتخليص حتى وصول البضاعة بأمان</p>
+                    <p>متابعة مصروفات الشحن والتخليص الجمركي بكفاءة</p>
                 </div>
                 <div class="hero-bottom">
                     <div class="petty-hero-actions">
                         <button type="button" class="btn btn-primary" id="openAddModalBtn" style="padding: 10px 24px; font-weight: bold; border-radius: 8px;">
                             <i class="fas fa-plus"></i>
-                            تسجيل الشحن و التخليص
+                            تسجيل شحن وتخليص
                         </button>
                         <button type="button" class="btn btn-outline" id="exportPdfBtn">
                             <i class="fas fa-file-pdf"></i>
@@ -100,7 +100,7 @@ function renderPage() {
                 <div class="stat-card stat-expense">
                     <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
                     <div class="stat-info">
-                        <div class="stat-title">إجمالي الشحن و التخليص</div>
+                        <div class="stat-title">إجمالي الشحن والتخليص</div>
                         <div class="stat-value" id="pettyTotalAmount">0.00</div>
                     </div>
                 </div>
@@ -124,6 +124,14 @@ function renderPage() {
                         <div class="form-group">
                             <label>التاريخ إلى</label>
                             <input type="date" id="endDate" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>البيان</label>
+                            <input type="text" id="statementFilter" class="form-control" placeholder="بحث بالبيان أو الملاحظة...">
+                        </div>
+                        <div class="form-group">
+                            <label>المبلغ</label>
+                            <input type="number" id="amountFilter" class="form-control" step="any" placeholder="المبلغ...">
                         </div>
                         <div class="petty-filter-actions">
                             <button type="button" class="btn btn-primary" id="filterBtn" style="border-radius: 8px; flex: 1;">
@@ -168,13 +176,12 @@ function renderPage() {
             </section>
         </main>
 
-        <!-- مودال إضافة الشحن و التخليص -->
         <div id="addExpenseModal" class="petty-modal-overlay hidden">
             <div class="petty-modal-card" role="dialog" aria-modal="true" aria-labelledby="pettyModalTitle">
                 <div class="petty-modal-header">
                     <div class="petty-modal-title">
                         <i class="fas fa-file-invoice-dollar"></i>
-                        <h2 id="pettyModalTitle">إضافة مستند الشحن و التخليص</h2>
+                        <h2 id="pettyModalTitle">إضافة مستند شحن وتخليص</h2>
                     </div>
                     <button type="button" class="petty-modal-close" id="closeModalBtn" aria-label="إغلاق">
                         <i class="fas fa-times"></i>
@@ -228,19 +235,39 @@ function renderPage() {
 
 function bindEvents() {
     document.getElementById('pettyForm').addEventListener('submit', saveExpense);
-    document.getElementById('filterBtn').addEventListener('click', () => {
+
+    const triggerSearch = () => {
         state.page = 1;
         loadExpenses();
+    };
+
+    document.getElementById('filterBtn').addEventListener('click', triggerSearch);
+    document.getElementById('statementFilter')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerSearch();
+        }
     });
+    document.getElementById('amountFilter')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerSearch();
+        }
+    });
+
     document.getElementById('resetFilterBtn').addEventListener('click', () => {
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
+        const st = document.getElementById('statementFilter');
+        if (st) st.value = '';
+        const am = document.getElementById('amountFilter');
+        if (am) am.value = '';
         state.page = 1;
         loadExpenses();
     });
+
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
 
-    // ربط أحداث النافذة المنبثقة (Modal)
     const modal = document.getElementById('addExpenseModal');
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
         state.editingId = null;
@@ -284,15 +311,17 @@ function getFilters() {
     return {
         page: state.page,
         pageSize: state.pageSize,
-        startDate: document.getElementById('startDate').value,
-        endDate: document.getElementById('endDate').value
+        startDate: document.getElementById('startDate')?.value || '',
+        endDate: document.getElementById('endDate')?.value || '',
+        statement: document.getElementById('statementFilter')?.value?.trim() || '',
+        amount: document.getElementById('amountFilter')?.value?.trim() || ''
     };
 }
 
 async function loadExpenses() {
     const result = await window.electronAPI.getShippingClearanceExpenses(getFilters());
     if (!result || !result.success) {
-        showMessage((result && result.error) || 'تعذر تحميل الشحن و التخليص', 'error');
+        showMessage((result && result.error) || 'تعذر تحميل الشحن والتخليص', 'error');
         return;
     }
 
@@ -323,7 +352,7 @@ function renderSummary() {
 function renderRows() {
     const body = document.getElementById('expensesBody');
     if (!state.rows.length) {
-        body.innerHTML = `<tr><td colspan="6" class="petty-empty">لا توجد الشحن و التخليص مسجلة</td></tr>`;
+        body.innerHTML = `<tr><td colspan="6" class="petty-empty">لا توجد سجلات مسجلة</td></tr>`;
         return;
     }
 
@@ -367,7 +396,7 @@ function renderPagination() {
 async function openEditModal(id) {
     const row = getRowById(id);
     if (!row) {
-        showMessage('تعذر العثور على مستند الشحن و التخليص', 'error');
+        showMessage('تعذر العثور على مستند الشحن والتخليص', 'error');
         return;
     }
 
@@ -386,18 +415,18 @@ async function deleteExpense(id) {
         return;
     }
 
-    const confirmed = await window.showConfirmDialog('هل تريد حذف مستند الشحن و التخليص؟');
+    const confirmed = await window.showConfirmDialog('هل تريد حذف مستند الشحن والتخليص؟');
     if (!confirmed) {
         return;
     }
 
     const result = await window.electronAPI.deleteShippingClearanceExpense(Number(id));
     if (!result || !result.success) {
-        showMessage((result && result.error) || 'تعذر حذف مستند الشحن و التخليص', 'error');
+        showMessage((result && result.error) || 'تعذر حذف مستند الشحن والتخليص', 'error');
         return;
     }
 
-    showMessage('تم حذف مستند الشحن و التخليص بنجاح', 'success');
+    showMessage('تم حذف مستند الشحن والتخليص بنجاح', 'success');
     await loadExpenses();
 }
 
@@ -418,11 +447,11 @@ async function saveExpense(event) {
             payload.id = state.editingId;
             const result = await window.electronAPI.updateShippingClearanceExpense(payload);
             if (!result || !result.success) {
-                showMessage((result && result.error) || 'تعذر تعديل الشحن و التخليص', 'error');
+                showMessage((result && result.error) || 'تعذر تعديل الشحن والتخليص', 'error');
                 return;
             }
 
-            showMessage('تم تعديل الشحن و التخليص بنجاح', 'success');
+            showMessage('تم تعديل الشحن والتخليص بنجاح', 'success');
             state.editingId = null;
             document.getElementById('addExpenseModal').classList.add('hidden');
             document.getElementById('pettyForm').reset();
@@ -432,11 +461,11 @@ async function saveExpense(event) {
 
         const result = await window.electronAPI.saveShippingClearanceExpense(payload);
         if (!result || !result.success) {
-            showMessage((result && result.error) || 'تعذر حفظ الشحن و التخليص', 'error');
+            showMessage((result && result.error) || 'تعذر حفظ الشحن والتخليص', 'error');
             return;
         }
 
-        showMessage('تم حفظ الشحن و التخليص بنجاح', 'success');
+        showMessage('تم حفظ الشحن والتخليص بنجاح', 'success');
         document.getElementById('addExpenseModal').classList.add('hidden');
         document.getElementById('pettyForm').reset();
         document.getElementById('expenseDate').value = today();
@@ -450,18 +479,18 @@ async function saveExpense(event) {
 }
 
 async function exportPdf() {
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
+    const filters = getFilters();
+    const startDate = filters.startDate;
+    const endDate = filters.endDate;
     const currentRows = state.rows.slice();
     document.getElementById('printRange').textContent = startDate || endDate
         ? `الفترة: ${startDate || 'البداية'} إلى ${endDate || 'اليوم'}`
         : '';
 
     const exportResult = await window.electronAPI.getShippingClearanceExpenses({
+        ...filters,
         page: 1,
-        pageSize: 100000,
-        startDate,
-        endDate
+        pageSize: 100000
     });
 
     if (exportResult && exportResult.success) {
