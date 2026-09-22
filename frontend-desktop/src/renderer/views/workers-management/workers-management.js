@@ -279,6 +279,10 @@ function renderPage() {
                                 <label for="workerNotesInput">ملاحظات</label>
                                 <textarea class="workers-textarea" id="workerNotesInput"></textarea>
                             </div>
+                            <div class="workers-field workers-field-full" style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                <input type="checkbox" id="workerAutoTransferInput" style="width: 18px; height: 18px; cursor: pointer;">
+                                <label for="workerAutoTransferInput" style="margin: 0; cursor: pointer; font-weight: 600;">ترحيل إجمالي الأجر تلقائياً إلى النثريات أسبوعياً</label>
+                            </div>
                         </div>
                     </div>
                     <div class="workers-modal-footer">
@@ -445,7 +449,7 @@ function renderRows() {
             <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${row.advances_total}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'}">
                 <td>${index + 1}</td>
                 <td class="worker-name-cell"${notesTitle}>
-                    <strong>${escapeHtml(row.name)}</strong>
+                    <strong>${escapeHtml(row.name)}${row.auto_transfer_to_petty ? ' <span class="badge-petty" style="display:inline-block; font-size:10px; background:rgba(59,130,246,0.12); color:#2563eb; padding:1px 6px; border-radius:4px; font-weight:normal;" title="مُرحّل للنثريات أسبوعياً"><i class="fas fa-coins"></i> نثريات</span>' : ''}</strong>
                     <span>${escapeHtml(row.job_title)} ${archivedLabel}</span>
                 </td>
                 <td class="worker-money">${formatMoney(row.daily_wage)} ج.م</td>
@@ -787,7 +791,11 @@ async function saveWeekAttendance() {
             return;
         }
 
-        showMessage('تم حفظ حضور الأسبوع بنجاح', 'success');
+        let successMsg = 'تم حفظ حضور الأسبوع بنجاح';
+        if (result.transferred_workers && result.transferred_workers.length > 0) {
+            successMsg += ` (تم ترحيل أجر ${result.transferred_workers.join('، ')} إلى النثريات)`;
+        }
+        showMessage(successMsg, 'success');
         state.hasUnsavedAttendance = false;
         await Promise.all([loadWeek(), loadWeeksHistory()]);
     } catch (error) {
@@ -806,6 +814,7 @@ function openWorkerModal(worker = null) {
     document.getElementById('workerJobInput').value = worker?.job_title || 'عامل';
     document.getElementById('workerWageInput').value = worker?.current_daily_wage || worker?.daily_wage || '1';
     document.getElementById('workerNotesInput').value = worker?.notes || '';
+    document.getElementById('workerAutoTransferInput').checked = Boolean(worker?.auto_transfer_to_petty);
     document.getElementById('workerModal').classList.remove('hidden');
     document.getElementById('workerNameInput').focus();
 }
@@ -835,7 +844,8 @@ async function saveWorker(event) {
         name: document.getElementById('workerNameInput').value,
         job_title: document.getElementById('workerJobInput').value,
         daily_wage: document.getElementById('workerWageInput').value,
-        notes: document.getElementById('workerNotesInput').value
+        notes: document.getElementById('workerNotesInput').value,
+        auto_transfer_to_petty: document.getElementById('workerAutoTransferInput').checked ? 1 : 0
     };
 
     state.isSavingWorker = true;
@@ -859,6 +869,7 @@ async function saveWorker(event) {
             document.getElementById('workerForm').reset();
             document.getElementById('workerJobInput').value = 'عامل';
             document.getElementById('workerWageInput').value = '1';
+            document.getElementById('workerAutoTransferInput').checked = false;
             document.getElementById('workerNameInput').focus();
         }
         await loadWeek({ preserveAttendance: true });

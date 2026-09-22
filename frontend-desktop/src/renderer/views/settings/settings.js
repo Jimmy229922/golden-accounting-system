@@ -302,6 +302,13 @@ function renderPage() {
                         <li>
                             <i class="fas fa-check-circle"></i>
                             <div>
+                                <strong>تحديث صفحة تحت التحصيل:</strong>
+                                <p>إضافة بطاقتي إجمالي المحصل بالدولار وإجمالي الفواتير بالدولار بعد التحصيل مع التحديث الفوري لحالة الفواتير.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
                                 <strong>إضافة نثريات المصنع:</strong>
                                 <p>تمت إضافة صفحة مستقلة لتسجيل ومتابعة نثريات المصنع، مع جدول منفصل وأرقام مستندات تبدأ من <strong>FNTH-0001</strong>.</p>
                             </div>
@@ -323,15 +330,8 @@ function renderPage() {
                         <li>
                             <i class="fas fa-check-circle"></i>
                             <div>
-                                <strong>تحديث شاشة ما الجديد:</strong>
-                                <p>أصبحت شاشة ما الجديد تعتمد على رقم إصدار البرنامج الحالي تلقائياً بدلاً من رقم ثابت قديم.</p>
-                            </div>
-                        </li>
-                        <li>
-                            <i class="fas fa-check-circle"></i>
-                            <div>
                                 <strong>تحديث رقم الإصدار:</strong>
-                                <p>تم تجهيز هذا الإصدار برقم <strong>9.0.5</strong> استعداداً للرفع على GitHub Releases.</p>
+                                <p>تم تجهيز هذا الإصدار برقم <strong>9.0.7</strong> استعداداً للرفع على GitHub Releases.</p>
                             </div>
                         </li>
                     </ul>

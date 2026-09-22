@@ -99,6 +99,14 @@
                             <div class="sc-value" id="totalPaymentsOut">0.00</div>
                         </div>
                     </div>
+                    <div class="summary-card card-closing-balance" id="closingBalanceCard">
+                        <div class="sc-icon balance"><i class="fas fa-coins"></i></div>
+                        <div>
+                            <div class="sc-label">${t('customerReports.closingBalance', 'الرصيد الختامي')}</div>
+                            <div class="sc-value" id="totalClosingBalance">0.00</div>
+                            <div class="sc-badge" id="closingBalanceBadge" style="display: none;"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="table-card">

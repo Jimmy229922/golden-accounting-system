@@ -685,6 +685,22 @@ function initDB() {
         )
     `);
 
+    runAddColumnMigration(
+        "ALTER TABLE workers ADD COLUMN auto_transfer_to_petty INTEGER NOT NULL DEFAULT 0 CHECK (auto_transfer_to_petty IN (0, 1))",
+        'workers',
+        'auto_transfer_to_petty'
+    );
+
+    runAddColumnMigration(
+        "ALTER TABLE worker_weekly_attendance ADD COLUMN petty_expense_id INTEGER",
+        'worker_weekly_attendance',
+        'petty_expense_id'
+    );
+
+    try {
+        db.prepare("UPDATE workers SET auto_transfer_to_petty = 1 WHERE name LIKE '%محمد منصور%'").run();
+    } catch (_) {}
+
     db.exec(`
         CREATE TABLE IF NOT EXISTS worker_advances (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

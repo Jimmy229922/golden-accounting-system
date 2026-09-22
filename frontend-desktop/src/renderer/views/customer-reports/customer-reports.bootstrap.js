@@ -8,6 +8,9 @@ let totalSalesReturnsEl;
 let totalPurchaseReturnsEl;
 let customerReportTableBody;
 let balanceFooterEl;
+let totalClosingBalanceEl;
+let closingBalanceBadgeEl;
+let closingBalanceCardEl;
 let customerAutocomplete = null;
 let ar = {};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
@@ -116,6 +119,9 @@ function initializeElements() {
     totalPurchaseReturnsEl = document.getElementById('totalPurchaseReturns');
     customerReportTableBody = document.getElementById('customerReportTableBody');
     balanceFooterEl = document.getElementById('balanceFooter');
+    totalClosingBalanceEl = document.getElementById('totalClosingBalance');
+    closingBalanceBadgeEl = document.getElementById('closingBalanceBadge');
+    closingBalanceCardEl = document.getElementById('closingBalanceCard');
 
     const now = new Date();
     const yearStart = `${now.getFullYear()}-01-01`;
@@ -138,6 +144,25 @@ function initializeElements() {
     };
 
     document.getElementById('showReportBtn').addEventListener('click', triggerLoad);
+
+    customerSelect.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerLoad();
+        }
+    });
+
+    ['dateFrom', 'dateTo'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    triggerLoad();
+                }
+            });
+        }
+    });
 
     reportContainer.addEventListener('click', (event) => {
         const actionEl = event.target.closest('[data-action]');
@@ -188,6 +213,22 @@ async function loadCustomers() {
         customerAutocomplete.refresh();
     } else {
         customerAutocomplete = new Autocomplete(customerSelect);
+        if (customerAutocomplete.input) {
+            customerAutocomplete.input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (customerAutocomplete.selectedIndex === -1 && customerAutocomplete.list && customerAutocomplete.list.classList.contains('visible')) {
+                        const firstItem = customerAutocomplete.list.querySelector('.autocomplete-item');
+                        if (firstItem) {
+                            firstItem.click();
+                        }
+                    }
+                    setTimeout(() => {
+                        document.getElementById('showReportBtn').click();
+                    }, 50);
+                }
+            });
+        }
     }
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -208,6 +249,9 @@ async function loadCustomerReport(customerId) {
     const result = await window.electronAPI.getCustomerDetailedStatement({ customerId, startDate, endDate });
 
     if (!result || !result.success) {
+        if (totalClosingBalanceEl) totalClosingBalanceEl.textContent = '0.00 ' + CUR;
+        if (closingBalanceBadgeEl) closingBalanceBadgeEl.style.display = 'none';
+        if (closingBalanceCardEl) closingBalanceCardEl.className = 'summary-card card-closing-balance';
         customerReportTableBody.innerHTML = `
             <tr class="no-data-row">
                 <td colspan="8">
@@ -381,6 +425,24 @@ async function loadCustomerReport(customerId) {
         <span class="bf-label"><i class="fas fa-coins"></i> ${t('customerReports.closingBalance', 'الرصيد الختامي')}</span>
         <span class="bf-value ${balClass}">${balText} ${balLabel}</span>
     `;
+
+    if (totalClosingBalanceEl) {
+        totalClosingBalanceEl.textContent = balText;
+        totalClosingBalanceEl.className = `sc-value ${balClass}`;
+    }
+    if (closingBalanceBadgeEl) {
+        if (balLabel) {
+            closingBalanceBadgeEl.textContent = balLabel;
+            closingBalanceBadgeEl.className = `sc-badge ${balClass}`;
+            closingBalanceBadgeEl.style.display = 'inline-block';
+        } else {
+            closingBalanceBadgeEl.textContent = '';
+            closingBalanceBadgeEl.style.display = 'none';
+        }
+    }
+    if (closingBalanceCardEl) {
+        closingBalanceCardEl.className = `summary-card card-closing-balance ${balClass}`;
+    }
 
     const totalDebit = totals.totalSales + totals.totalPaymentsOut;
     const totalCredit = totals.totalPurchases + totals.totalPaymentsIn;

@@ -9,6 +9,8 @@ const state = {
     editingId: null,
     isSaving: false,
     totalAmount: 0,
+    totalCollected: 0,
+    totalRemaining: 0,
     totalCount: 0
 };
 
@@ -147,6 +149,20 @@ function renderPage() {
                     <div class="stat-info">
                         <div class="stat-title">إجمالي الفواتير بالدولار</div>
                         <div class="stat-value" id="underCollectionTotalAmount">0.00</div>
+                    </div>
+                </div>
+                <div class="stat-card stat-collected">
+                    <div class="stat-icon"><i class="fas fa-check-double"></i></div>
+                    <div class="stat-info">
+                        <div class="stat-title">إجمالي المحصل بالدولار</div>
+                        <div class="stat-value" id="underCollectionTotalCollected">0.00</div>
+                    </div>
+                </div>
+                <div class="stat-card stat-remaining">
+                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                    <div class="stat-info">
+                        <div class="stat-title">إجمالي الفواتير بالدولار بعد التحصيل</div>
+                        <div class="stat-value" id="underCollectionTotalRemaining">0.00</div>
                     </div>
                 </div>
                 <div class="stat-card stat-count">
@@ -408,6 +424,8 @@ async function loadRecords() {
     state.pageSize = Number(result.pageSize) || state.pageSize;
     state.totalPages = Number(result.totalPages) || 1;
     state.totalAmount = Number(result.totalAmount) || 0;
+    state.totalCollected = Number(result.totalCollected) || 0;
+    state.totalRemaining = Number(result.totalRemaining) || 0;
     state.totalCount = Number(result.total) || 0;
     renderRows();
     renderPagination();
@@ -416,10 +434,20 @@ async function loadRecords() {
 
 function renderSummary() {
     const totalAmountEl = document.getElementById('underCollectionTotalAmount');
+    const totalCollectedEl = document.getElementById('underCollectionTotalCollected');
+    const totalRemainingEl = document.getElementById('underCollectionTotalRemaining');
     const totalCountEl = document.getElementById('underCollectionTotalCount');
 
     if (totalAmountEl) {
         totalAmountEl.textContent = formatMoney(state.totalAmount);
+    }
+
+    if (totalCollectedEl) {
+        totalCollectedEl.textContent = formatMoney(state.totalCollected);
+    }
+
+    if (totalRemainingEl) {
+        totalRemainingEl.textContent = formatMoney(state.totalRemaining);
     }
 
     if (totalCountEl) {
@@ -538,8 +566,8 @@ async function toggleCollected(id, isCollected) {
 
     if (!result || !result.success) {
         showMessage((result && result.error) || 'تعذر تحديث حالة التحصيل', 'error');
-        await loadRecords();
     }
+    await loadRecords();
 }
 
 async function saveRecord(event) {

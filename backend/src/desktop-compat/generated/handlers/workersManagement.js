@@ -50,11 +50,25 @@ function getWeekEnd(weekStart) {
     return date.toISOString().slice(0, 10);
 }
 
+function getNextDocumentNumber() {
+    const row = db.prepare(`
+        SELECT document_number
+        FROM petty_expenses
+        WHERE document_number GLOB 'NTH-[0-9]*'
+        ORDER BY CAST(SUBSTR(document_number, 5) AS INTEGER) DESC
+        LIMIT 1
+    `).get();
+
+    const lastNumber = row ? Number(String(row.document_number).slice(4)) : 0;
+    return `NTH-${String((Number.isFinite(lastNumber) ? lastNumber : 0) + 1).padStart(4, '0')}`;
+}
+
 function normalizeWorkerPayload(data = {}) {
     const name = String(data.name || '').trim();
     const dailyWage = roundMoney(data.daily_wage);
     const jobTitle = String(data.job_title || '').trim();
     const notes = String(data.notes || '').trim();
+    const autoTransferToPetty = data.auto_transfer_to_petty ? 1 : 0;
 
     if (!name) {
         throw new Error('اسم العامل مطلوب');
@@ -72,7 +86,8 @@ function normalizeWorkerPayload(data = {}) {
         name,
         daily_wage: dailyWage,
         job_title: jobTitle,
-        notes
+        notes,
+        auto_transfer_to_petty: autoTransferToPetty
     };
 }
 
@@ -146,9 +161,11 @@ function getWeekData(weekStart, includeArchived = false) {
             w.job_title,
             w.notes,
             w.is_active,
+            w.auto_transfer_to_petty,
             (SELECT COALESCE(SUM(amount), 0) FROM worker_advances WHERE worker_id = w.id) AS historical_advances_total,
             a.id AS attendance_id,
             a.daily_wage AS week_daily_wage,
+            a.petty_expense_id,
             a.saturday_present,
             a.saturday_base_duration,
             a.saturday_duration,
@@ -233,7 +250,9 @@ function getWeekData(weekStart, includeArchived = false) {
             job_title: worker.job_title,
             notes: worker.notes || '',
             is_active: Boolean(worker.is_active),
+            auto_transfer_to_petty: Boolean(worker.auto_transfer_to_petty),
             has_attendance_record: Boolean(worker.attendance_id),
+            petty_expense_id: worker.petty_expense_id || null,
             attendance,
             attendance_units: attendanceUnits,
             gross_pay: grossPay,
@@ -303,8 +322,8 @@ function register() {
         try {
             const payload = normalizeWorkerPayload(data);
             const info = db.prepare(`
-                INSERT INTO workers (name, daily_wage, job_title, notes)
-                VALUES (@name, @daily_wage, @job_title, @notes)
+                INSERT INTO workers (name, daily_wage, job_title, notes, auto_transfer_to_petty)
+                VALUES (@name, @daily_wage, @job_title, @notes, @auto_transfer_to_petty)
             `).run(payload);
 
             return { success: true, id: info.lastInsertRowid };
@@ -333,6 +352,7 @@ function register() {
                         daily_wage = @daily_wage,
                         job_title = @job_title,
                         notes = @notes,
+                        auto_transfer_to_petty = @auto_transfer_to_petty,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = @id
                 `).run({ ...payload, id });
@@ -407,15 +427,15 @@ function register() {
             const weekStart = normalizeWeekStart(data.week_start_date);
             const entries = Array.isArray(data.entries) ? data.entries : [];
             const normalizedEntries = entries.map((entry) => normalizeAttendanceEntry(entry, weekStart));
-            const getWorker = db.prepare('SELECT id, daily_wage FROM workers WHERE id = ?');
+            const getWorker = db.prepare('SELECT id, name, daily_wage, auto_transfer_to_petty FROM workers WHERE id = ?');
             const getExisting = db.prepare(`
-                SELECT daily_wage
+                SELECT daily_wage, petty_expense_id
                 FROM worker_weekly_attendance
                 WHERE worker_id = ? AND week_start_date = ?
             `);
             const upsertAttendance = db.prepare(`
                 INSERT INTO worker_weekly_attendance (
-                    worker_id, week_start_date, daily_wage,
+                    worker_id, week_start_date, daily_wage, petty_expense_id,
                     saturday_present, saturday_base_duration, saturday_duration,
                     sunday_present, sunday_base_duration, sunday_duration,
                     monday_present, monday_base_duration, monday_duration,
@@ -424,7 +444,7 @@ function register() {
                     thursday_present, thursday_base_duration, thursday_duration,
                     friday_present, friday_base_duration, friday_duration
                 ) VALUES (
-                    @worker_id, @week_start_date, @daily_wage,
+                    @worker_id, @week_start_date, @daily_wage, @petty_expense_id,
                     @saturday_present, @saturday_base_duration, @saturday_duration,
                     @sunday_present, @sunday_base_duration, @sunday_duration,
                     @monday_present, @monday_base_duration, @monday_duration,
@@ -434,6 +454,7 @@ function register() {
                     @friday_present, @friday_base_duration, @friday_duration
                 )
                 ON CONFLICT(worker_id, week_start_date) DO UPDATE SET
+                    petty_expense_id = excluded.petty_expense_id,
                     saturday_present = excluded.saturday_present,
                     saturday_base_duration = excluded.saturday_base_duration,
                     saturday_duration = excluded.saturday_duration,
@@ -458,6 +479,7 @@ function register() {
                     updated_at = CURRENT_TIMESTAMP
             `);
 
+            const transferredWorkers = [];
             const saveTransaction = db.transaction(() => {
                 for (const entry of normalizedEntries) {
                     const worker = getWorker.get(entry.worker_id);
@@ -466,16 +488,112 @@ function register() {
                     }
 
                     const existing = getExisting.get(entry.worker_id, weekStart);
+                    const effectiveWage = existing ? roundMoney(existing.daily_wage) : roundMoney(worker.daily_wage);
+
+                    let attendanceUnits = 0;
+                    const isNewLogic = weekStart >= '2026-07-11';
+                    for (const day of ATTENDANCE_DAYS) {
+                        const present = entry[`${day}_present`];
+                        const duration = present ? Number(entry[`${day}_duration`] || 0) : 0;
+                        const baseDuration = present && isNewLogic ? Number(entry[`${day}_base_duration`] || 0) : (present ? 1 : 0);
+                        attendanceUnits += present ? (isNewLogic ? (baseDuration + duration) : duration) : 0;
+                    }
+                    const grossPay = roundMoney(effectiveWage * attendanceUnits);
+
+                    let pettyExpenseId = existing ? existing.petty_expense_id : null;
+                    const shouldTransfer = Boolean(worker.auto_transfer_to_petty) || (worker.name && worker.name.includes('محمد منصور'));
+
+                    if (shouldTransfer) {
+                        const weekEnd = getWeekEnd(weekStart);
+                        if (grossPay > 0) {
+                            if (pettyExpenseId) {
+                                const existingExpense = db.prepare('SELECT id, document_number, treasury_transaction_id FROM petty_expenses WHERE id = ?').get(pettyExpenseId);
+                                if (existingExpense) {
+                                    db.prepare(`
+                                        UPDATE petty_expenses
+                                        SET amount = @amount,
+                                            expense_date = @expense_date,
+                                            statement = @statement,
+                                            notes = @notes
+                                        WHERE id = @id
+                                    `).run({
+                                        id: existingExpense.id,
+                                        amount: grossPay,
+                                        expense_date: weekEnd,
+                                        statement: `أجر أسبوعي - ${worker.name}`,
+                                        notes: `إدارة العمال: أسبوع من ${weekStart} إلى ${weekEnd}`
+                                    });
+
+                                    if (existingExpense.treasury_transaction_id) {
+                                        db.prepare(`
+                                            UPDATE treasury_transactions
+                                            SET amount = @amount,
+                                                transaction_date = @transaction_date,
+                                                description = @description
+                                            WHERE id = @id
+                                        `).run({
+                                            id: existingExpense.treasury_transaction_id,
+                                            amount: grossPay,
+                                            transaction_date: weekEnd,
+                                            description: `مصروفات نثريات ${existingExpense.document_number} - أجر أسبوعي - ${worker.name}`
+                                        });
+                                    }
+                                } else {
+                                    pettyExpenseId = null;
+                                }
+                            }
+
+                            if (!pettyExpenseId) {
+                                const docNumber = getNextDocumentNumber();
+                                const expInfo = db.prepare(`
+                                    INSERT INTO petty_expenses (category, document_number, expense_date, amount, statement, notes)
+                                    VALUES ('general', @document_number, @expense_date, @amount, @statement, @notes)
+                                `).run({
+                                    document_number: docNumber,
+                                    expense_date: weekEnd,
+                                    amount: grossPay,
+                                    statement: `أجر أسبوعي - ${worker.name}`,
+                                    notes: `إدارة العمال: أسبوع من ${weekStart} إلى ${weekEnd}`
+                                });
+                                pettyExpenseId = expInfo.lastInsertRowid;
+
+                                const trInfo = db.prepare(`
+                                    INSERT INTO treasury_transactions (type, amount, transaction_date, description, related_invoice_id, related_type)
+                                    VALUES ('expense', @amount, @transaction_date, @description, @related_invoice_id, NULL)
+                                `).run({
+                                    amount: grossPay,
+                                    transaction_date: weekEnd,
+                                    description: `مصروفات نثريات ${docNumber} - أجر أسبوعي - ${worker.name}`,
+                                    related_invoice_id: pettyExpenseId
+                                });
+
+                                db.prepare('UPDATE petty_expenses SET treasury_transaction_id = ? WHERE id = ?').run(trInfo.lastInsertRowid, pettyExpenseId);
+                            }
+
+                            transferredWorkers.push(worker.name);
+                        } else if (pettyExpenseId) {
+                            const existingExpense = db.prepare('SELECT id, treasury_transaction_id FROM petty_expenses WHERE id = ?').get(pettyExpenseId);
+                            if (existingExpense) {
+                                if (existingExpense.treasury_transaction_id) {
+                                    db.prepare('DELETE FROM treasury_transactions WHERE id = ?').run(existingExpense.treasury_transaction_id);
+                                }
+                                db.prepare('DELETE FROM petty_expenses WHERE id = ?').run(existingExpense.id);
+                            }
+                            pettyExpenseId = null;
+                        }
+                    }
+
                     upsertAttendance.run({
                         ...entry,
                         week_start_date: weekStart,
-                        daily_wage: existing ? roundMoney(existing.daily_wage) : roundMoney(worker.daily_wage)
+                        daily_wage: effectiveWage,
+                        petty_expense_id: pettyExpenseId
                     });
                 }
             });
 
             saveTransaction();
-            return { success: true };
+            return { success: true, transferred_workers: transferredWorkers };
         } catch (error) {
             return { success: false, error: error.message };
         }

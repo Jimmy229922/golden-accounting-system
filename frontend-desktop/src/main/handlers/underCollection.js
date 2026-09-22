@@ -123,8 +123,36 @@ function register() {
             }
 
             const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-            const total = db.prepare(`SELECT COUNT(*) as count FROM under_collection_records ${whereSql}`).get(args).count || 0;
-            const totalAmount = db.prepare(`SELECT COALESCE(SUM(total_usd), 0) as totalAmount FROM under_collection_records ${whereSql}`).get(args).totalAmount || 0;
+            const summary = db.prepare(`
+                SELECT 
+                    COUNT(*) as totalCount,
+                    COALESCE(SUM(total_usd), 0) as totalAmount,
+                    COALESCE(SUM(
+                        CASE 
+                            WHEN is_collected = 1 THEN 
+                                CASE 
+                                    WHEN remaining_usd > 0 THEN MAX(0, total_usd - remaining_usd)
+                                    ELSE total_usd
+                                END
+                            ELSE 0
+                        END
+                    ), 0) as totalCollected,
+                    COALESCE(SUM(
+                        CASE 
+                            WHEN is_collected = 1 THEN 
+                                CASE 
+                                    WHEN remaining_usd > 0 THEN MIN(remaining_usd, total_usd)
+                                    ELSE 0
+                                END
+                            ELSE total_usd
+                        END
+                    ), 0) as totalRemaining
+                FROM under_collection_records ${whereSql}
+            `).get(args) || {};
+            const total = summary.totalCount || 0;
+            const totalAmount = summary.totalAmount || 0;
+            const totalCollected = summary.totalCollected || 0;
+            const totalRemaining = summary.totalRemaining || 0;
             const rows = db.prepare(`
                 SELECT id, document_number, record_date, container_count, container_20, container_40,
                        statement, invoice_number, tons_count, ton_price, total_usd,
@@ -140,6 +168,8 @@ function register() {
                 rows,
                 total,
                 totalAmount: roundMoney(totalAmount),
+                totalCollected: roundMoney(totalCollected),
+                totalRemaining: roundMoney(totalRemaining),
                 page,
                 pageSize,
                 totalPages: Math.max(1, Math.ceil(total / pageSize))
