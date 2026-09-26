@@ -35,10 +35,12 @@ function normalizePayload(data = {}) {
     const tonsCount = Number(data.tons_count) || 0;
     const tonPrice = Number(data.ton_price) || 0;
     const totalUsd = roundMoney(tonsCount * tonPrice);
+    const discountUsd = roundMoney(Math.max(0, Number(data.discount_usd) || 0));
+    const netUsd = roundMoney(Math.max(0, totalUsd - discountUsd));
     const remainingType = String(data.remaining_type || 'percent') === 'usd' ? 'usd' : 'percent';
     const remainingValue = Math.max(0, Number(data.remaining_value) || 0);
     const remainingUsd = remainingType === 'percent'
-        ? roundMoney(totalUsd * remainingValue / 100)
+        ? roundMoney(netUsd * remainingValue / 100)
         : roundMoney(remainingValue);
 
     return {
@@ -51,6 +53,8 @@ function normalizePayload(data = {}) {
         tons_count: tonsCount,
         ton_price: roundMoney(tonPrice),
         total_usd: totalUsd,
+        discount_usd: discountUsd,
+        net_usd: netUsd,
         remaining_type: remainingType,
         remaining_value: roundMoney(remainingValue),
         remaining_usd: remainingUsd
@@ -80,6 +84,14 @@ function validatePayload(payload) {
 
     if (payload.ton_price <= 0) {
         return 'السعر غير صحيح';
+    }
+
+    if (payload.discount_usd < 0) {
+        return 'قيمة الخصم غير صحيحة';
+    }
+
+    if (payload.discount_usd > payload.total_usd) {
+        return 'قيمة الخصم لا يمكن أن تتجاوز إجمالي الفاتورة';
     }
 
     return '';
@@ -126,13 +138,13 @@ function register() {
             const summary = db.prepare(`
                 SELECT 
                     COUNT(*) as totalCount,
-                    COALESCE(SUM(total_usd), 0) as totalAmount,
+                    COALESCE(SUM(CASE WHEN net_usd > 0 OR discount_usd > 0 THEN net_usd ELSE total_usd END), 0) as totalAmount,
                     COALESCE(SUM(
                         CASE 
                             WHEN is_collected = 1 THEN 
                                 CASE 
-                                    WHEN remaining_usd > 0 THEN MAX(0, total_usd - remaining_usd)
-                                    ELSE total_usd
+                                    WHEN remaining_usd > 0 THEN MAX(0, (CASE WHEN net_usd > 0 OR discount_usd > 0 THEN net_usd ELSE total_usd END) - remaining_usd)
+                                    ELSE (CASE WHEN net_usd > 0 OR discount_usd > 0 THEN net_usd ELSE total_usd END)
                                 END
                             ELSE 0
                         END
@@ -141,10 +153,10 @@ function register() {
                         CASE 
                             WHEN is_collected = 1 THEN 
                                 CASE 
-                                    WHEN remaining_usd > 0 THEN MIN(remaining_usd, total_usd)
+                                    WHEN remaining_usd > 0 THEN MIN(remaining_usd, (CASE WHEN net_usd > 0 OR discount_usd > 0 THEN net_usd ELSE total_usd END))
                                     ELSE 0
                                 END
-                            ELSE total_usd
+                            ELSE (CASE WHEN net_usd > 0 OR discount_usd > 0 THEN net_usd ELSE total_usd END)
                         END
                     ), 0) as totalRemaining
                 FROM under_collection_records ${whereSql}
@@ -156,6 +168,7 @@ function register() {
             const rows = db.prepare(`
                 SELECT id, document_number, record_date, container_count, container_20, container_40,
                        statement, invoice_number, tons_count, ton_price, total_usd,
+                       discount_usd, net_usd,
                        remaining_type, remaining_value, remaining_usd, is_collected, created_at
                 FROM under_collection_records
                 ${whereSql}
@@ -192,11 +205,13 @@ function register() {
                 INSERT INTO under_collection_records (
                     document_number, record_date, container_count, container_20, container_40,
                     statement, invoice_number, tons_count, ton_price, total_usd,
+                    discount_usd, net_usd,
                     remaining_type, remaining_value, remaining_usd
                 )
                 VALUES (
                     @document_number, @record_date, @container_count, @container_20, @container_40,
                     @statement, @invoice_number, @tons_count, @ton_price, @total_usd,
+                    @discount_usd, @net_usd,
                     @remaining_type, @remaining_value, @remaining_usd
                 )
             `).run({ ...payload, document_number: documentNumber });
@@ -236,6 +251,8 @@ function register() {
                     tons_count = @tons_count,
                     ton_price = @ton_price,
                     total_usd = @total_usd,
+                    discount_usd = @discount_usd,
+                    net_usd = @net_usd,
                     remaining_type = @remaining_type,
                     remaining_value = @remaining_value,
                     remaining_usd = @remaining_usd

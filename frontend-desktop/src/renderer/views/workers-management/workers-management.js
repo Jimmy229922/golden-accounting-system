@@ -503,6 +503,28 @@ function updateJobFilterOptions() {
     select.innerHTML = html;
 }
 
+function applyAttendanceCellState(cell, isPresent) {
+    if (!cell) return;
+    const checkbox = cell.querySelector('.attendance-check');
+    if (checkbox) {
+        checkbox.checked = isPresent;
+    }
+    const baseSelect = cell.querySelector('.attendance-base-duration');
+    const select = cell.querySelector('.attendance-duration');
+    if (baseSelect) {
+        baseSelect.disabled = !isPresent;
+    }
+    if (select) {
+        select.disabled = !isPresent;
+        const isNewLogic = state.weekStart >= '2026-07-11';
+        if (isPresent && !isNewLogic && !Number(select.value)) {
+            select.value = '1';
+        }
+    }
+    cell.classList.toggle('is-present', isPresent);
+    cell.classList.toggle('is-absent', !isPresent);
+}
+
 function updateAttendancePrintText(cell) {
     if (!cell) return;
     const checkbox = cell.querySelector('.attendance-check');
@@ -1156,24 +1178,121 @@ function bindEvents() {
         if (!row || !cell) return;
 
         if (event.target.classList.contains('attendance-check')) {
-            const baseSelect = cell.querySelector('.attendance-base-duration');
-            const select = cell.querySelector('.attendance-duration');
-            if (baseSelect) {
-                baseSelect.disabled = !event.target.checked;
-            }
-            if (select) {
-                select.disabled = !event.target.checked;
-                const isNewLogic = state.weekStart >= '2026-07-11';
-                if (event.target.checked && !isNewLogic && !Number(select.value)) {
-                    select.value = '1';
-                }
-            }
-            cell.classList.toggle('is-present', event.target.checked);
-            cell.classList.toggle('is-absent', !event.target.checked);
+            applyAttendanceCellState(cell, event.target.checked);
         }
 
         updateRowCalculations(row);
         syncAttendanceStateFromRow(row);
+    });
+
+    const attendanceDrag = {
+        isMouseDown: false,
+        hasDragged: false,
+        targetState: false,
+        row: null,
+        lastCell: null
+    };
+
+    document.getElementById('workersTableBody').addEventListener('mousedown', (event) => {
+        if (event.button !== 0) return;
+        if (event.target.closest('select') || event.target.closest('button')) return;
+
+        const cell = event.target.closest('.attendance-day-cell');
+        if (!cell) return;
+
+        const row = cell.closest('tr[data-worker-id]');
+        if (!row) return;
+
+        const checkbox = cell.querySelector('.attendance-check');
+        if (!checkbox) return;
+
+        attendanceDrag.isMouseDown = true;
+        attendanceDrag.hasDragged = false;
+        attendanceDrag.targetState = !checkbox.checked;
+        attendanceDrag.row = row;
+        attendanceDrag.lastCell = cell;
+    });
+
+    document.getElementById('workersTableBody').addEventListener('mouseover', (event) => {
+        if (!attendanceDrag.isMouseDown || !attendanceDrag.row || event.buttons !== 1) {
+            if (attendanceDrag.isMouseDown && event.buttons !== 1) {
+                attendanceDrag.isMouseDown = false;
+                attendanceDrag.hasDragged = false;
+                attendanceDrag.row = null;
+                attendanceDrag.lastCell = null;
+                document.body.classList.remove('attendance-is-dragging');
+            }
+            return;
+        }
+
+        const cell = event.target.closest('.attendance-day-cell');
+        if (!cell || cell === attendanceDrag.lastCell) return;
+        if (!attendanceDrag.row.contains(cell)) return;
+
+        if (!attendanceDrag.hasDragged) {
+            attendanceDrag.hasDragged = true;
+            document.body.classList.add('attendance-is-dragging');
+            applyAttendanceCellState(attendanceDrag.lastCell, attendanceDrag.targetState);
+        }
+
+        const cellsInRow = Array.from(attendanceDrag.row.querySelectorAll('.attendance-day-cell'));
+        const fromIndex = cellsInRow.indexOf(attendanceDrag.lastCell);
+        const toIndex = cellsInRow.indexOf(cell);
+
+        if (fromIndex !== -1 && toIndex !== -1) {
+            const step = fromIndex < toIndex ? 1 : -1;
+            for (let i = fromIndex; i !== toIndex + step; i += step) {
+                const targetCell = cellsInRow[i];
+                applyAttendanceCellState(targetCell, attendanceDrag.targetState);
+            }
+        } else {
+            applyAttendanceCellState(cell, attendanceDrag.targetState);
+        }
+
+        updateRowCalculations(attendanceDrag.row);
+        syncAttendanceStateFromRow(attendanceDrag.row);
+        attendanceDrag.lastCell = cell;
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (attendanceDrag.isMouseDown) {
+            if (attendanceDrag.hasDragged && attendanceDrag.row) {
+                updateRowCalculations(attendanceDrag.row);
+                syncAttendanceStateFromRow(attendanceDrag.row);
+            }
+            attendanceDrag.isMouseDown = false;
+            attendanceDrag.row = null;
+            attendanceDrag.lastCell = null;
+            document.body.classList.remove('attendance-is-dragging');
+            setTimeout(() => {
+                attendanceDrag.hasDragged = false;
+            }, 50);
+        }
+    });
+
+    document.getElementById('workersTableBody').addEventListener('click', (event) => {
+        if (attendanceDrag.hasDragged) {
+            event.preventDefault();
+            return;
+        }
+
+        if (event.target.closest('select') || event.target.closest('button')) return;
+
+        const cell = event.target.closest('.attendance-day-cell');
+        if (!cell) return;
+
+        if (!event.target.classList.contains('attendance-check')) {
+            const checkbox = cell.querySelector('.attendance-check');
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                applyAttendanceCellState(cell, checkbox.checked);
+                const row = cell.closest('tr[data-worker-id]');
+                if (row) {
+                    updateRowCalculations(row);
+                    syncAttendanceStateFromRow(row);
+                }
+            }
+        }
     });
 
     document.getElementById('workersTableBody').addEventListener('click', async (event) => {

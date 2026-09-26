@@ -470,6 +470,8 @@ function initDB() {
             tons_count REAL NOT NULL DEFAULT 0,
             ton_price REAL NOT NULL DEFAULT 0,
             total_usd REAL NOT NULL DEFAULT 0,
+            discount_usd REAL NOT NULL DEFAULT 0,
+            net_usd REAL NOT NULL DEFAULT 0,
             remaining_type TEXT DEFAULT 'percent',
             remaining_value REAL NOT NULL DEFAULT 0,
             remaining_usd REAL NOT NULL DEFAULT 0,
@@ -480,6 +482,9 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN remaining_type TEXT DEFAULT 'percent'", 'under_collection_records', 'remaining_type');
     runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN remaining_value REAL NOT NULL DEFAULT 0", 'under_collection_records', 'remaining_value');
     runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN remaining_usd REAL NOT NULL DEFAULT 0", 'under_collection_records', 'remaining_usd');
+    runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN discount_usd REAL NOT NULL DEFAULT 0", 'under_collection_records', 'discount_usd');
+    runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN net_usd REAL NOT NULL DEFAULT 0", 'under_collection_records', 'net_usd');
+    db.exec("UPDATE under_collection_records SET net_usd = ROUND(total_usd - discount_usd, 2) WHERE (net_usd IS NULL OR net_usd = 0) AND total_usd > 0");
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS remaining_under_collection_records (

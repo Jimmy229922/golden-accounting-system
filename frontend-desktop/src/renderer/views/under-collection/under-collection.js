@@ -89,6 +89,18 @@ function updateTotalPreview() {
     if (totalInput) {
         totalInput.value = Number.isFinite(total) ? total.toFixed(2) : '0.00';
     }
+
+    const discountInput = document.getElementById('discountUsd');
+    let discount = Number(discountInput?.value) || 0;
+    if (discount < 0) {
+        discount = 0;
+        if (discountInput) discountInput.value = '';
+    }
+    const net = Math.max(0, total - discount);
+    const netInput = document.getElementById('netUsd');
+    if (netInput) {
+        netInput.value = Number.isFinite(net) ? net.toFixed(2) : '0.00';
+    }
 }
 
 function formatRemainingText(row) {
@@ -300,6 +312,23 @@ function renderPage() {
                                 <div class="form-group">
                                     <label><i class="fas fa-dollar-sign text-icon"></i> إجمالي الفاتورة بالدولار</label>
                                     <input type="text" id="totalUsd" class="form-control uneditable" value="0.00" readonly>
+                                </div>
+                            </div>
+
+                            <div class="petty-modal-row three-cols">
+                                <div class="form-group">
+                                    <label><i class="fas fa-tag text-icon"></i> خصم الفاتورة بالدولار</label>
+                                    <div class="input-with-unit">
+                                        <input type="number" id="discountUsd" class="form-control" min="0" step="any" placeholder="0.00">
+                                        <span class="unit-badge">$</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-receipt text-icon"></i> الصافي بعد الخصم</label>
+                                    <input type="text" id="netUsd" class="form-control uneditable" value="0.00" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-hand-holding-usd text-icon"></i> المتبقي</label>
                                     <div class="remaining-alert-box">
                                         <select id="remainingType" class="form-control">
                                             <option value="percent" selected>%</option>
@@ -359,12 +388,14 @@ function bindEvents() {
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
     document.getElementById('tonsCount').addEventListener('input', updateTotalPreview);
     document.getElementById('tonPrice').addEventListener('input', updateTotalPreview);
+    document.getElementById('discountUsd')?.addEventListener('input', updateTotalPreview);
 
     const modal = document.getElementById('addRecordModal');
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
         state.editingId = null;
         document.getElementById('underCollectionForm').reset();
         document.getElementById('recordDate').value = today();
+        document.getElementById('discountUsd').value = '';
         document.getElementById('remainingType').value = 'percent';
         updateTotalPreview();
         await refreshDocumentNumber();
@@ -473,7 +504,8 @@ function renderRows() {
             <td>${formatQuantity(row.tons_count)} طن × ${formatMoney(row.ton_price)}</td>
             <td>
                 <div class="invoice-total-cell">
-                    <strong>${formatMoney(row.total_usd)}</strong>
+                    <strong>${formatMoney(row.net_usd !== undefined && row.net_usd !== null && (Number(row.net_usd) > 0 || Number(row.discount_usd) > 0) ? row.net_usd : row.total_usd)} $</strong>
+                    ${Number(row.discount_usd) > 0 ? `<span class="discount-badge"><i class="fas fa-tag"></i> خصم: ${formatMoney(row.discount_usd)} $</span>` : ''}
                     ${formatRemainingText(row) ? `<span>${escapeHtml(formatRemainingText(row))}</span>` : ''}
                 </div>
             </td>
@@ -531,6 +563,7 @@ async function openEditModal(id) {
     document.getElementById('invoiceNumber').value = row.invoice_number || '';
     document.getElementById('tonsCount').value = row.tons_count ?? '';
     document.getElementById('tonPrice').value = row.ton_price ?? '';
+    document.getElementById('discountUsd').value = row.discount_usd ? Number(row.discount_usd) : '';
     document.getElementById('remainingType').value = row.remaining_type || 'percent';
     document.getElementById('remainingValue').value = row.remaining_value ?? '';
     updateTotalPreview();
@@ -582,6 +615,7 @@ async function saveRecord(event) {
         invoice_number: document.getElementById('invoiceNumber').value,
         tons_count: document.getElementById('tonsCount').value,
         ton_price: document.getElementById('tonPrice').value,
+        discount_usd: document.getElementById('discountUsd').value || 0,
         remaining_type: document.getElementById('remainingType').value,
         remaining_value: document.getElementById('remainingValue').value
     };
@@ -615,6 +649,7 @@ async function saveRecord(event) {
         document.getElementById('addRecordModal').classList.add('hidden');
         document.getElementById('underCollectionForm').reset();
         document.getElementById('recordDate').value = today();
+        document.getElementById('discountUsd').value = '';
         document.getElementById('remainingType').value = 'percent';
         updateTotalPreview();
         await refreshDocumentNumber();

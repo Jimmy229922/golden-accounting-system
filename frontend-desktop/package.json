@@ -1,6 +1,6 @@
 {
   "name": "accounting-system-desktop",
-  "version": "9.0.7",
+  "version": "9.0.8",
   "description": "Professional Accounting System",
   "main": "src/main/main.js",
   "scripts": {

@@ -630,6 +630,19 @@
 /* تلوين تفاعلي لخلايا الحضور والغياب */
 .attendance-day-cell {
     transition: background-color 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
+}
+
+body.attendance-is-dragging,
+body.attendance-is-dragging * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+body.attendance-is-dragging .attendance-day-cell {
+    cursor: pointer;
 }
 
 .attendance-day-cell.is-present {
