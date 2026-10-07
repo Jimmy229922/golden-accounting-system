@@ -162,6 +162,7 @@ function renderPage() {
                                 <tr>
                                     <th>رقم المستند</th>
                                     <th>التاريخ</th>
+                                    <th>رقم الفاتورة</th>
                                     <th>المبلغ</th>
                                     <th>البيان</th>
                                     <th>الملاحظة</th>
@@ -189,8 +190,12 @@ function renderPage() {
                 </div>
                 <form id="pettyForm">
                     <div class="petty-modal-body">
+                        <div id="operationLinkedAlert" style="display: none; align-items: center; gap: 8px; background: rgba(59, 130, 246, 0.12); color: #2563eb; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.25); font-weight: 600; font-size: 0.9rem; margin-bottom: 14px;">
+                            <i class="fas fa-link"></i>
+                            <span id="operationLinkedAlertText"></span>
+                        </div>
                         <div class="petty-modal-grid">
-                            <div class="petty-modal-row">
+                            <div class="petty-modal-row three-cols">
                                 <div class="form-group">
                                     <label><i class="fas fa-hashtag text-icon"></i> رقم المستند</label>
                                     <input type="text" id="documentNumber" class="form-control uneditable" readonly>
@@ -198,6 +203,10 @@ function renderPage() {
                                 <div class="form-group">
                                     <label><i class="fas fa-calendar-alt text-icon"></i> التاريخ</label>
                                     <input type="date" id="expenseDate" class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-file-invoice text-icon"></i> رقم الفاتورة</label>
+                                    <input type="text" id="invoiceNumber" class="form-control" placeholder="رقم الفاتورة (اختياري)">
                                 </div>
                             </div>
 
@@ -273,6 +282,8 @@ function bindEvents() {
         state.editingId = null;
         document.getElementById('pettyForm').reset();
         document.getElementById('expenseDate').value = today();
+        const alertEl = document.getElementById('operationLinkedAlert');
+        if (alertEl) alertEl.style.display = 'none';
         await refreshDocumentNumber();
         modal.classList.remove('hidden');
     });
@@ -352,7 +363,7 @@ function renderSummary() {
 function renderRows() {
     const body = document.getElementById('expensesBody');
     if (!state.rows.length) {
-        body.innerHTML = `<tr><td colspan="6" class="petty-empty">لا توجد سجلات مسجلة</td></tr>`;
+        body.innerHTML = `<tr><td colspan="7" class="petty-empty">لا توجد سجلات مسجلة</td></tr>`;
         return;
     }
 
@@ -360,6 +371,7 @@ function renderRows() {
         <tr>
             <td>${row.document_number || ''}</td>
             <td>${row.expense_date || ''}</td>
+            <td style="font-weight: 600;">${row.invoice_number || '-'}</td>
             <td style="font-weight: 700; color: var(--primary-color);">${formatMoney(row.amount)}</td>
             <td class="statement-cell">${row.statement || ''}</td>
             <td class="notes-cell">${row.notes || ''}</td>
@@ -403,9 +415,22 @@ async function openEditModal(id) {
     state.editingId = row.id;
     document.getElementById('documentNumber').value = row.document_number || '';
     document.getElementById('expenseDate').value = row.expense_date || today();
+    document.getElementById('invoiceNumber').value = row.invoice_number || '';
     document.getElementById('amount').value = row.amount ?? '';
     document.getElementById('statement').value = row.statement || '';
     document.getElementById('notes').value = row.notes || '';
+
+    const alertEl = document.getElementById('operationLinkedAlert');
+    const alertText = document.getElementById('operationLinkedAlertText');
+    if (alertEl && alertText) {
+        if (row.under_collection_id) {
+            alertText.textContent = `تنبيه: هذا المستند مرتبط بسجل تحت التحصيل برقم فاتورة (${row.invoice_number || ''})`;
+            alertEl.style.display = 'flex';
+        } else {
+            alertEl.style.display = 'none';
+        }
+    }
+
     document.getElementById('addExpenseModal').classList.remove('hidden');
 }
 
@@ -415,7 +440,11 @@ async function deleteExpense(id) {
         return;
     }
 
-    const confirmed = await window.showConfirmDialog('هل تريد حذف مستند التشغيل؟');
+    const row = getRowById(id);
+    const confirmMsg = (row && row.under_collection_id)
+        ? 'هل تريد حذف مستند التشغيل؟\n\nتنبيه: هذا المستند مرتبط بسجل في شاشة تحت التحصيل.'
+        : 'هل تريد حذف مستند التشغيل؟';
+    const confirmed = await window.showConfirmDialog(confirmMsg);
     if (!confirmed) {
         return;
     }
@@ -435,6 +464,7 @@ async function saveExpense(event) {
     if (state.isSaving) return;
     const payload = {
         expense_date: document.getElementById('expenseDate').value || today(),
+        invoice_number: document.getElementById('invoiceNumber').value.trim(),
         amount: document.getElementById('amount').value,
         statement: document.getElementById('statement').value,
         notes: document.getElementById('notes').value

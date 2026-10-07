@@ -81,13 +81,124 @@ function getContainerText(row) {
     return `${row.container_count || 0} × ${sizes.join(' / ')}`;
 }
 
+let modalItems = [];
+
+function roundMoney(value) {
+    const n = Number(value) || 0;
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function initModalItems(initialItems) {
+    if (Array.isArray(initialItems) && initialItems.length) {
+        modalItems = initialItems.map((item) => {
+            const tons = item.tons !== undefined && item.tons !== null ? item.tons : '';
+            const price = item.price !== undefined && item.price !== null ? item.price : '';
+            const total = roundMoney((Number(tons) || 0) * (Number(price) || 0));
+            return { tons, price, total };
+        });
+    } else {
+        modalItems = [{ tons: '', price: '', total: 0 }];
+    }
+    renderModalItems();
+}
+
+function renderModalItems() {
+    const container = document.getElementById('itemsContainer');
+    if (!container) return;
+
+    const canDelete = modalItems.length > 1;
+    container.innerHTML = modalItems.map((item, index) => `
+        <div class="item-row" data-index="${index}">
+            <div class="input-with-unit">
+                <input type="number" class="form-control item-tons" data-index="${index}" min="0" step="any" placeholder="عدد الأطنان" value="${item.tons}" required>
+                <span class="unit-badge">طن</span>
+            </div>
+            <div class="input-with-unit">
+                <input type="number" class="form-control item-price" data-index="${index}" min="0" step="any" placeholder="سعر الطن" value="${item.price}" required>
+                <span class="unit-badge">$</span>
+            </div>
+            <div class="input-with-unit">
+                <input type="text" class="form-control item-total uneditable" value="${formatMoney(item.total)}" readonly>
+                <span class="unit-badge">$</span>
+            </div>
+            <button type="button" class="btn btn-outline remove-item-btn" data-index="${index}" style="${canDelete ? '' : 'visibility: hidden;'}" title="حذف هذا البند">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `).join('');
+
+    container.querySelectorAll('.item-tons').forEach((input) => {
+        input.addEventListener('input', (e) => {
+            const idx = Number(e.target.dataset.index);
+            if (modalItems[idx]) {
+                modalItems[idx].tons = e.target.value;
+                const tons = Number(e.target.value) || 0;
+                const price = Number(modalItems[idx].price) || 0;
+                modalItems[idx].total = roundMoney(tons * price);
+                const totalEl = container.querySelector(`.item-row[data-index="${idx}"] .item-total`);
+                if (totalEl) totalEl.value = formatMoney(modalItems[idx].total);
+                updateTotalPreview();
+            }
+        });
+    });
+
+    container.querySelectorAll('.item-price').forEach((input) => {
+        input.addEventListener('input', (e) => {
+            const idx = Number(e.target.dataset.index);
+            if (modalItems[idx]) {
+                modalItems[idx].price = e.target.value;
+                const tons = Number(modalItems[idx].tons) || 0;
+                const price = Number(e.target.value) || 0;
+                modalItems[idx].total = roundMoney(tons * price);
+                const totalEl = container.querySelector(`.item-row[data-index="${idx}"] .item-total`);
+                if (totalEl) totalEl.value = formatMoney(modalItems[idx].total);
+                updateTotalPreview();
+            }
+        });
+    });
+
+    container.querySelectorAll('.remove-item-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const idx = Number(btn.dataset.index);
+            if (modalItems.length > 1) {
+                modalItems.splice(idx, 1);
+                renderModalItems();
+                updateTotalPreview();
+            }
+        });
+    });
+
+    updateTotalPreview();
+}
+
 function updateTotalPreview() {
-    const tons = Number(document.getElementById('tonsCount')?.value) || 0;
-    const price = Number(document.getElementById('tonPrice')?.value) || 0;
-    const total = tons * price;
+    let totalTons = 0;
+    let totalUsd = 0;
+
+    modalItems.forEach((item) => {
+        const tons = Number(item.tons) || 0;
+        const price = Number(item.price) || 0;
+        totalTons += tons;
+        totalUsd += roundMoney(tons * price);
+    });
+
+    totalTons = Math.round((totalTons + Number.EPSILON) * 1000) / 1000;
+    totalUsd = roundMoney(totalUsd);
+    const avgPrice = totalTons > 0 ? roundMoney(totalUsd / totalTons) : 0;
+
+    const tonsInput = document.getElementById('tonsCount');
+    if (tonsInput) {
+        tonsInput.value = totalTons > 0 ? totalTons : '0.00';
+    }
+
+    const priceInput = document.getElementById('tonPrice');
+    if (priceInput) {
+        priceInput.value = avgPrice > 0 ? avgPrice.toFixed(2) : '0.00';
+    }
+
     const totalInput = document.getElementById('totalUsd');
     if (totalInput) {
-        totalInput.value = Number.isFinite(total) ? total.toFixed(2) : '0.00';
+        totalInput.value = totalUsd.toFixed(2);
     }
 
     const discountInput = document.getElementById('discountUsd');
@@ -96,11 +207,24 @@ function updateTotalPreview() {
         discount = 0;
         if (discountInput) discountInput.value = '';
     }
-    const net = Math.max(0, total - discount);
+    const net = Math.max(0, totalUsd - discount);
     const netInput = document.getElementById('netUsd');
     if (netInput) {
-        netInput.value = Number.isFinite(net) ? net.toFixed(2) : '0.00';
+        netInput.value = net.toFixed(2);
     }
+}
+
+function getTonsPriceDisplay(row) {
+    let items = null;
+    if (row.items_json) {
+        try {
+            items = JSON.parse(row.items_json);
+        } catch (_) {}
+    }
+    if (Array.isArray(items) && items.length > 1) {
+        return `<div><strong>${formatQuantity(row.tons_count)} طن</strong> <span class="discount-badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; margin-inline-start: 4px;">(${items.length} أصناف)</span></div>`;
+    }
+    return `${formatQuantity(row.tons_count)} طن × ${formatMoney(row.ton_price)} $`;
 }
 
 function formatRemainingText(row) {
@@ -265,8 +389,12 @@ function renderPage() {
                 </div>
                 <form id="underCollectionForm">
                     <div class="petty-modal-body">
+                        <div id="underCollectionLinkedAlert" style="display: none; align-items: center; gap: 8px; background: rgba(59, 130, 246, 0.12); color: #2563eb; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.25); font-weight: 600; font-size: 0.9rem; margin-bottom: 14px;">
+                            <i class="fas fa-link"></i>
+                            <span>تنبيه: هذا السجل مرتبط بمستند تشغيل وحركة خزينة، وسيتم تحديثهما تلقائياً عند حفظ التعديلات.</span>
+                        </div>
                         <div class="petty-modal-grid">
-                            <div class="petty-modal-row">
+                            <div class="petty-modal-row three-cols">
                                 <div class="form-group">
                                     <label><i class="fas fa-hashtag text-icon"></i> التسلسل</label>
                                     <input type="text" id="documentNumber" class="form-control uneditable" readonly>
@@ -274,6 +402,10 @@ function renderPage() {
                                 <div class="form-group">
                                     <label><i class="fas fa-calendar-alt text-icon"></i> التاريخ</label>
                                     <input type="date" id="recordDate" class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-file-invoice text-icon"></i> رقم الفاتورة <span class="required-asterisk">*</span></label>
+                                    <input type="text" id="invoiceNumber" class="form-control" placeholder="رقم الفاتورة" required>
                                 </div>
                             </div>
 
@@ -294,45 +426,66 @@ function renderPage() {
                                 </div>
                             </div>
 
-                            <div class="petty-modal-row three-cols">
-                                <div class="form-group">
-                                    <label><i class="fas fa-file-invoice text-icon"></i> رقم الفاتورة <span class="required-asterisk">*</span></label>
-                                    <input type="text" id="invoiceNumber" class="form-control" placeholder="رقم الفاتورة" required>
+                            <div class="items-breakdown-card" style="grid-column: 1 / -1;">
+                                <div class="items-breakdown-header">
+                                    <label style="margin: 0; font-weight: 800; display: inline-flex; align-items: center; gap: 6px;">
+                                        <i class="fas fa-cubes text-icon"></i> بنود الفاتورة (الأوزان والأسعار) <span class="required-asterisk">*</span>
+                                    </label>
+                                    <button type="button" class="btn btn-outline add-item-btn" id="addItemRowBtn">
+                                        <i class="fas fa-plus"></i> إضافة بند آخر
+                                    </button>
                                 </div>
+                                <div class="item-row-header">
+                                    <div>عدد الأطنان</div>
+                                    <div>سعر الطن ($)</div>
+                                    <div>الإجمالي ($)</div>
+                                    <div></div>
+                                </div>
+                                <div id="itemsContainer" class="items-table-wrapper"></div>
+                            </div>
+
+                            <div class="petty-modal-row six-cols">
                                 <div class="form-group">
-                                    <label><i class="fas fa-weight-hanging text-icon"></i> عدد الأطنان * السعر <span class="required-asterisk">*</span></label>
-                                    <div class="tons-price-box">
-                                        <div class="input-with-unit">
-                                            <input type="number" id="tonsCount" class="form-control" min="0" step="any" placeholder="0.00" required>
-                                            <span class="unit-badge">طن</span>
-                                        </div>
-                                        <input type="number" id="tonPrice" class="form-control" min="0" step="any" placeholder="السعر" required>
+                                    <label><i class="fas fa-weight-hanging text-icon"></i> إجمالي الأطنان</label>
+                                    <div class="input-with-unit">
+                                        <input type="text" id="tonsCount" class="form-control uneditable" value="0.00" readonly>
+                                        <span class="unit-badge">طن</span>
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label><i class="fas fa-dollar-sign text-icon"></i> إجمالي الفاتورة بالدولار</label>
-                                    <input type="text" id="totalUsd" class="form-control uneditable" value="0.00" readonly>
+                                    <label><i class="fas fa-tag text-icon"></i> متوسط السعر</label>
+                                    <div class="input-with-unit">
+                                        <input type="text" id="tonPrice" class="form-control uneditable" value="0.00" readonly>
+                                        <span class="unit-badge">$</span>
+                                    </div>
                                 </div>
-                            </div>
-
-                            <div class="petty-modal-row three-cols">
                                 <div class="form-group">
-                                    <label><i class="fas fa-tag text-icon"></i> خصم الفاتورة بالدولار</label>
+                                    <label><i class="fas fa-dollar-sign text-icon"></i> إجمالي الفاتورة</label>
+                                    <div class="input-with-unit">
+                                        <input type="text" id="totalUsd" class="form-control uneditable" value="0.00" readonly>
+                                        <span class="unit-badge">$</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-percent text-icon"></i> الخصم</label>
                                     <div class="input-with-unit">
                                         <input type="number" id="discountUsd" class="form-control" min="0" step="any" placeholder="0.00">
                                         <span class="unit-badge">$</span>
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label><i class="fas fa-receipt text-icon"></i> الصافي بعد الخصم</label>
-                                    <input type="text" id="netUsd" class="form-control uneditable" value="0.00" readonly>
+                                    <label><i class="fas fa-receipt text-icon"></i> الصافي</label>
+                                    <div class="input-with-unit">
+                                        <input type="text" id="netUsd" class="form-control uneditable" value="0.00" readonly>
+                                        <span class="unit-badge">$</span>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-hand-holding-usd text-icon"></i> المتبقي</label>
                                     <div class="remaining-alert-box">
                                         <select id="remainingType" class="form-control">
                                             <option value="percent" selected>%</option>
-                                            <option value="usd">دولار</option>
+                                            <option value="usd">$</option>
                                         </select>
                                         <input type="number" id="remainingValue" class="form-control" min="0" step="any" placeholder="المتبقي">
                                     </div>
@@ -341,12 +494,35 @@ function renderPage() {
                         </div>
                     </div>
                     <div class="petty-modal-footer">
+                        <button type="button" class="btn btn-outline" id="previewOperationBtn" style="margin-inline-end: auto; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: #0284c7; border-color: rgba(2, 132, 199, 0.4);">
+                            <i class="fas fa-eye"></i> معاينة مستند التشغيل المتوقع
+                        </button>
                         <button type="button" class="btn btn-outline" id="cancelModalBtn">إلغاء</button>
                         <button type="submit" class="btn btn-primary submit-btn">
                             <i class="fas fa-check-circle"></i> حفظ واعتماد
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div id="operationPreviewModal" class="petty-modal-overlay hidden" style="z-index: 100001;">
+            <div class="petty-modal-card" style="width: min(92vw, 660px); max-width: 660px;" role="dialog" aria-modal="true" aria-labelledby="opPreviewTitle">
+                <div class="petty-modal-header" style="padding: 14px 22px;">
+                    <div class="petty-modal-title">
+                        <i class="fas fa-cogs" style="color: #0284c7;"></i>
+                        <h2 id="opPreviewTitle">معاينة مستند التشغيل وحركة الخزينة</h2>
+                    </div>
+                    <button type="button" class="petty-modal-close" id="closeOpPreviewBtn" aria-label="إغلاق">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="petty-modal-body" id="opPreviewContent" style="padding: 18px 22px; max-height: 80vh;"></div>
+                <div class="petty-modal-footer" style="padding: 12px 22px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-primary" id="confirmOpPreviewBtn" style="border-radius: 8px; padding: 8px 24px;">
+                        إغلاق المعاينة
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -386,9 +562,12 @@ function bindEvents() {
     });
 
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
-    document.getElementById('tonsCount').addEventListener('input', updateTotalPreview);
-    document.getElementById('tonPrice').addEventListener('input', updateTotalPreview);
     document.getElementById('discountUsd')?.addEventListener('input', updateTotalPreview);
+
+    document.getElementById('addItemRowBtn')?.addEventListener('click', () => {
+        modalItems.push({ tons: '', price: '', total: 0 });
+        renderModalItems();
+    });
 
     const modal = document.getElementById('addRecordModal');
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
@@ -397,7 +576,9 @@ function bindEvents() {
         document.getElementById('recordDate').value = today();
         document.getElementById('discountUsd').value = '';
         document.getElementById('remainingType').value = 'percent';
-        updateTotalPreview();
+        const alertEl = document.getElementById('underCollectionLinkedAlert');
+        if (alertEl) alertEl.style.display = 'none';
+        initModalItems([{ tons: '', price: '', total: 0 }]);
         await refreshDocumentNumber();
         modal.classList.remove('hidden');
     });
@@ -412,6 +593,14 @@ function bindEvents() {
         if (e.target === modal) closeModal();
     });
 
+    document.getElementById('previewOperationBtn')?.addEventListener('click', openOperationPreview);
+    document.getElementById('closeOpPreviewBtn')?.addEventListener('click', closeOperationPreview);
+    document.getElementById('confirmOpPreviewBtn')?.addEventListener('click', closeOperationPreview);
+    const opPreviewModal = document.getElementById('operationPreviewModal');
+    opPreviewModal?.addEventListener('click', (e) => {
+        if (e.target === opPreviewModal) closeOperationPreview();
+    });
+
     window.financialPagination?.bind(document.getElementById('pagination'), {
         onPageChange: (page) => {
             state.page = page;
@@ -423,6 +612,99 @@ function bindEvents() {
             loadRecords();
         }
     });
+}
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function openOperationPreview() {
+    let totalTons = 0;
+    modalItems.forEach((item) => {
+        totalTons += Number(item.tons) || 0;
+    });
+    totalTons = Math.round((totalTons + Number.EPSILON) * 1000) / 1000;
+
+    const invoiceNumber = document.getElementById('invoiceNumber')?.value?.trim() || '---';
+    const recordDate = document.getElementById('recordDate')?.value || today();
+    const statement = document.getElementById('statement')?.value?.trim() || '---';
+    const operationAmount = roundMoney(totalTons * 2000);
+
+    const containerCount = document.getElementById('containerCount')?.value || '0';
+    const is20 = document.getElementById('container20')?.checked;
+    const is40 = document.getElementById('container40')?.checked;
+    const containerSizes = [];
+    if (is20) containerSizes.push('20');
+    if (is40) containerSizes.push('40');
+    const containerText = `${containerCount} حاوية ${containerSizes.length ? `(${containerSizes.join(' + ')})` : ''}`;
+
+    const contentEl = document.getElementById('opPreviewContent');
+    if (!contentEl) return;
+
+    contentEl.innerHTML = `
+        <div class="op-preview-banner">
+            <i class="fas fa-info-circle"></i>
+            <span>سيتم إنشاء هذا القيد آلياً في شاشة (التشغيل) وحركة الخزينة فور الضغط على "حفظ واعتماد":</span>
+        </div>
+
+        <div class="op-preview-highlight">
+            <div>
+                <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">قيمة مصروف التشغيل (2,000 ج.م / طن)</div>
+                <div style="font-size: 1.4rem; font-weight: 900; color: #10b981; margin-top: 2px;">
+                    ${formatMoney(operationAmount)} <span style="font-size: 0.9rem; font-weight: 700;">ج.م</span>
+                </div>
+            </div>
+            <div style="text-align: left;">
+                <span class="discount-badge" style="background: rgba(2, 132, 199, 0.12); color: #0284c7; padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 0.9rem;">
+                    ${formatQuantity(totalTons)} طن × 2,000 ج.م
+                </span>
+            </div>
+        </div>
+
+        <div class="op-preview-grid">
+            <div class="op-preview-item">
+                <span class="op-preview-label"><i class="fas fa-file-invoice text-icon"></i> رقم الفاتورة في التشغيل</span>
+                <span class="op-preview-val">${escapeHtml(invoiceNumber)}</span>
+            </div>
+            <div class="op-preview-item">
+                <span class="op-preview-label"><i class="fas fa-calendar-alt text-icon"></i> تاريخ القيد</span>
+                <span class="op-preview-val">${escapeHtml(recordDate)}</span>
+            </div>
+            <div class="op-preview-item">
+                <span class="op-preview-label"><i class="fas fa-layer-group text-icon"></i> التصنيف</span>
+                <span class="op-preview-val">مصاريف تشغيل (operation)</span>
+            </div>
+            <div class="op-preview-item">
+                <span class="op-preview-label"><i class="fas fa-box text-icon"></i> الحاويات</span>
+                <span class="op-preview-val">${escapeHtml(containerText)}</span>
+            </div>
+            <div class="op-preview-item full-width">
+                <span class="op-preview-label"><i class="fas fa-pen text-icon"></i> البيان المسجل في التشغيل</span>
+                <span class="op-preview-val">${escapeHtml(statement)}</span>
+            </div>
+            <div class="op-preview-item full-width">
+                <span class="op-preview-label"><i class="fas fa-university text-icon"></i> التأثير المالي على الخزينة</span>
+                <span class="op-preview-val" style="color: #dc2626;">خصم مبلغ (${formatMoney(operationAmount)} ج.م) من رصيد الخزينة الرئيسية</span>
+            </div>
+        </div>
+
+        <div class="op-preview-note">
+            <i class="fas fa-shield-alt text-icon"></i>
+            <span>تنبيه: هذا عرض توضيحي للمعاينة فقط، ولن يتم إجراء أي خصم أو تسجيل قيود في النظام إلا بعد النقر على "حفظ واعتماد".</span>
+        </div>
+    `;
+
+    document.getElementById('operationPreviewModal')?.classList.remove('hidden');
+}
+
+function closeOperationPreview() {
+    document.getElementById('operationPreviewModal')?.classList.add('hidden');
 }
 
 async function refreshDocumentNumber() {
@@ -501,7 +783,7 @@ function renderRows() {
             <td>${escapeHtml(getContainerText(row))}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
             <td>${escapeHtml(row.invoice_number || '')}</td>
-            <td>${formatQuantity(row.tons_count)} طن × ${formatMoney(row.ton_price)}</td>
+            <td>${getTonsPriceDisplay(row)}</td>
             <td>
                 <div class="invoice-total-cell">
                     <strong>${formatMoney(row.net_usd !== undefined && row.net_usd !== null && (Number(row.net_usd) > 0 || Number(row.discount_usd) > 0) ? row.net_usd : row.total_usd)} $</strong>
@@ -561,12 +843,32 @@ async function openEditModal(id) {
     document.getElementById('container40').checked = Boolean(Number(row.container_40));
     document.getElementById('statement').value = row.statement || '';
     document.getElementById('invoiceNumber').value = row.invoice_number || '';
-    document.getElementById('tonsCount').value = row.tons_count ?? '';
-    document.getElementById('tonPrice').value = row.ton_price ?? '';
     document.getElementById('discountUsd').value = row.discount_usd ? Number(row.discount_usd) : '';
     document.getElementById('remainingType').value = row.remaining_type || 'percent';
     document.getElementById('remainingValue').value = row.remaining_value ?? '';
-    updateTotalPreview();
+    const alertEl = document.getElementById('underCollectionLinkedAlert');
+    if (alertEl) {
+        if (row.operation_expense_id) {
+            alertEl.style.display = 'flex';
+        } else {
+            alertEl.style.display = 'none';
+        }
+    }
+
+    let items = null;
+    if (row.items_json) {
+        try {
+            items = JSON.parse(row.items_json);
+        } catch (_) {}
+    }
+    if (!Array.isArray(items) || !items.length) {
+        items = [{
+            tons: row.tons_count ?? '',
+            price: row.ton_price ?? '',
+            total: row.total_usd ?? 0
+        }];
+    }
+    initModalItems(items);
     document.getElementById('addRecordModal').classList.remove('hidden');
 }
 
@@ -576,7 +878,11 @@ async function deleteRecord(id) {
         return;
     }
 
-    const confirmed = await window.showConfirmDialog('هل تريد حذف سجل تحت التحصيل؟');
+    const row = getRowById(id);
+    const confirmMsg = (row && row.operation_expense_id)
+        ? 'هل تريد حذف سجل تحت التحصيل؟\n\nتنبيه: هذا السجل مرتبط بمستند تشغيل وحركة في الخزينة، وسيتم حذفهما تلقائياً.'
+        : 'هل تريد حذف سجل تحت التحصيل؟';
+    const confirmed = await window.showConfirmDialog(confirmMsg);
     if (!confirmed) {
         return;
     }
@@ -606,6 +912,35 @@ async function toggleCollected(id, isCollected) {
 async function saveRecord(event) {
     event.preventDefault();
     if (state.isSaving) return;
+
+    let totalTons = 0;
+    let totalUsd = 0;
+    const cleanItems = [];
+
+    modalItems.forEach((item) => {
+        const tons = Number(item.tons) || 0;
+        const price = Number(item.price) || 0;
+        if (tons > 0 && price > 0) {
+            const itemTotal = roundMoney(tons * price);
+            totalTons += tons;
+            totalUsd += itemTotal;
+            cleanItems.push({
+                tons,
+                price: roundMoney(price),
+                total: itemTotal
+            });
+        }
+    });
+
+    if (!cleanItems.length || totalTons <= 0) {
+        showMessage('يرجى إدخال عدد أطنان وسعر صحيح للبند', 'error');
+        return;
+    }
+
+    totalTons = Math.round((totalTons + Number.EPSILON) * 1000) / 1000;
+    totalUsd = roundMoney(totalUsd);
+    const tonPrice = totalTons > 0 ? roundMoney(totalUsd / totalTons) : (cleanItems[0]?.price || 0);
+
     const payload = {
         record_date: document.getElementById('recordDate').value || today(),
         container_count: document.getElementById('containerCount').value,
@@ -613,11 +948,13 @@ async function saveRecord(event) {
         container_40: document.getElementById('container40').checked ? 1 : 0,
         statement: document.getElementById('statement').value,
         invoice_number: document.getElementById('invoiceNumber').value,
-        tons_count: document.getElementById('tonsCount').value,
-        ton_price: document.getElementById('tonPrice').value,
+        tons_count: totalTons,
+        ton_price: tonPrice,
+        total_usd: totalUsd,
         discount_usd: document.getElementById('discountUsd').value || 0,
         remaining_type: document.getElementById('remainingType').value,
-        remaining_value: document.getElementById('remainingValue').value
+        remaining_value: document.getElementById('remainingValue').value,
+        items_json: JSON.stringify(cleanItems)
     };
 
     state.isSaving = true;

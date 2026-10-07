@@ -317,7 +317,7 @@ function renderPage() {
                             <i class="fas fa-check-circle"></i>
                             <div>
                                 <strong>تحديث رقم الإصدار:</strong>
-                                <p>تم تجهيز هذا الإصدار برقم <strong>9.0.8</strong> استعداداً للرفع على GitHub Releases.</p>
+                                <p>تم تجهيز هذا الإصدار برقم <strong>9.0.9</strong> استعداداً للرفع على GitHub Releases.</p>
                             </div>
                         </li>
                     </ul>

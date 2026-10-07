@@ -162,6 +162,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateExportRevenue: (data) => invokeChannel('update-export-revenue', data),
     deleteExportRevenue: (id) => invokeChannel('delete-export-revenue', id),
     saveExportRevenuesPdf: (options) => invokeChannel('save-export-revenues-pdf', options),
+    getUnderCollectionInvoiceDetails: (params = {}) => invokeChannel('get-under-collection-invoice-details', params),
+    getUnderCollectionInvoicesForExport: () => invokeChannel('get-under-collection-invoices-for-export'),
     getNextLocalSaleNumber: () => invokeChannel('get-next-local-sale-number'),
     getLocalSales: (params = {}) => invokeChannel('get-local-sales', params),
     saveLocalSale: (data) => invokeChannel('save-local-sale', data),

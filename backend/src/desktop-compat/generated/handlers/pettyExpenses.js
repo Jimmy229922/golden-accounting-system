@@ -77,7 +77,7 @@ function register() {
                 }
 
                 if (params.statement && String(params.statement).trim()) {
-                    where.push('(statement LIKE @statement OR notes LIKE @statement OR document_number LIKE @statement)');
+                    where.push('(statement LIKE @statement OR notes LIKE @statement OR document_number LIKE @statement OR invoice_number LIKE @statement)');
                     args.statement = `%${String(params.statement).trim()}%`;
                 }
 
@@ -93,7 +93,7 @@ function register() {
                 const total = db.prepare(`SELECT COUNT(*) as count FROM petty_expenses ${whereSql}`).get(args).count || 0;
                 const totalAmount = db.prepare(`SELECT COALESCE(SUM(amount), 0) as totalAmount FROM petty_expenses ${whereSql}`).get(args).totalAmount || 0;
                 const rows = db.prepare(`
-                    SELECT id, document_number, expense_date, amount, statement, notes, created_at
+                    SELECT id, document_number, expense_date, amount, statement, notes, invoice_number, under_collection_id, created_at
                     FROM petty_expenses
                     ${whereSql}
                     ORDER BY expense_date DESC, id DESC
@@ -136,16 +136,19 @@ function register() {
 
                 const tx = db.transaction(() => {
                     const documentNumber = getNextDocumentNumber();
+                    const invoiceNumber = String(data.invoice_number || '').trim();
                     const expenseInfo = db.prepare(`
-                        INSERT INTO petty_expenses (category, document_number, expense_date, amount, statement, notes)
-                        VALUES (@category, @document_number, @expense_date, @amount, @statement, @notes)
+                        INSERT INTO petty_expenses (category, document_number, expense_date, amount, statement, notes, invoice_number, under_collection_id)
+                        VALUES (@category, @document_number, @expense_date, @amount, @statement, @notes, @invoice_number, @under_collection_id)
                     `).run({
                         category: categoryId,
                         document_number: documentNumber,
                         expense_date: expenseDate,
                         amount,
                         statement,
-                        notes
+                        notes,
+                        invoice_number: invoiceNumber || null,
+                        under_collection_id: data.under_collection_id ? Number(data.under_collection_id) : null
                     });
 
                     const expenseId = expenseInfo.lastInsertRowid;
@@ -207,12 +210,14 @@ function register() {
                 }
 
                 const tx = db.transaction(() => {
+                    const invoiceNumber = String(data.invoice_number || '').trim();
                     db.prepare(`
                         UPDATE petty_expenses
                         SET expense_date = @expense_date,
                             amount = @amount,
                             statement = @statement,
-                            notes = @notes
+                            notes = @notes,
+                            invoice_number = @invoice_number
                         WHERE id = @id AND category = @category
                     `).run({
                         id: expenseId,
@@ -220,7 +225,8 @@ function register() {
                         expense_date: expenseDate,
                         amount,
                         statement,
-                        notes
+                        notes,
+                        invoice_number: invoiceNumber || null
                     });
 
                     const description = `مصروفات ${title} ${existing.document_number} - ${statement}`;
@@ -269,7 +275,7 @@ function register() {
                 }
 
                 const existing = db.prepare(`
-                    SELECT id, treasury_transaction_id
+                    SELECT id, treasury_transaction_id, under_collection_id
                     FROM petty_expenses
                     WHERE id = ? AND category = ?
                 `).get(id, categoryId);
@@ -282,6 +288,9 @@ function register() {
                     db.prepare('DELETE FROM petty_expenses WHERE id = ?').run(id);
                     if (existing.treasury_transaction_id) {
                         db.prepare('DELETE FROM treasury_transactions WHERE id = ?').run(existing.treasury_transaction_id);
+                    }
+                    if (existing.under_collection_id) {
+                        db.prepare('UPDATE under_collection_records SET operation_expense_id = NULL WHERE id = ?').run(existing.under_collection_id);
                     }
                     return { id };
                 });

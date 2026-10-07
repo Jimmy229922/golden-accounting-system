@@ -88,6 +88,8 @@
   "get-statement-item-details",
   "get-treasury-balance",
   "get-treasury-transactions",
+  "get-under-collection-invoice-details",
+  "get-under-collection-invoices-for-export",
   "get-under-collection-records",
   "get-units",
   "get-user-permissions",

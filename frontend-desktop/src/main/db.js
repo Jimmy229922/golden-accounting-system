@@ -433,6 +433,8 @@ function initDB() {
     `);
 
     runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN category TEXT DEFAULT 'general'", 'petty_expenses', 'category');
+    runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN invoice_number TEXT", 'petty_expenses', 'invoice_number');
+    runAddColumnMigration("ALTER TABLE petty_expenses ADD COLUMN under_collection_id INTEGER", 'petty_expenses', 'under_collection_id');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS factory_petty_expenses (
@@ -478,6 +480,8 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN remaining_usd REAL NOT NULL DEFAULT 0", 'under_collection_records', 'remaining_usd');
     runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN discount_usd REAL NOT NULL DEFAULT 0", 'under_collection_records', 'discount_usd');
     runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN net_usd REAL NOT NULL DEFAULT 0", 'under_collection_records', 'net_usd');
+    runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN operation_expense_id INTEGER", 'under_collection_records', 'operation_expense_id');
+    runAddColumnMigration("ALTER TABLE under_collection_records ADD COLUMN items_json TEXT", 'under_collection_records', 'items_json');
     db.exec("UPDATE under_collection_records SET net_usd = ROUND(total_usd - discount_usd, 2) WHERE (net_usd IS NULL OR net_usd = 0) AND total_usd > 0");
 
     db.exec(`
@@ -505,9 +509,13 @@ function initDB() {
             exchange_rate REAL NOT NULL DEFAULT 0,
             amount_egp REAL NOT NULL DEFAULT 0,
             statement TEXT,
+            invoice_number TEXT,
+            under_collection_id INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
+    runAddColumnMigration('ALTER TABLE export_revenues ADD COLUMN invoice_number TEXT', 'export_revenues', 'invoice_number');
+    runAddColumnMigration('ALTER TABLE export_revenues ADD COLUMN under_collection_id INTEGER', 'export_revenues', 'under_collection_id');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS local_sales (
@@ -735,12 +743,17 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_date ON treasury_transactions(transaction_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_type ON treasury_transactions(type)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_transactions_customer_id ON treasury_transactions(customer_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_petty_expenses_invoice_number ON petty_expenses(invoice_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_petty_expenses_under_collection_id ON petty_expenses(under_collection_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_date ON under_collection_records(record_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_invoice_number ON under_collection_records(invoice_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_under_collection_records_operation_expense_id ON under_collection_records(operation_expense_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_remaining_under_collection_records_date ON remaining_under_collection_records(record_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_remaining_under_collection_records_document_number ON remaining_under_collection_records(document_number)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_export_revenues_date ON export_revenues(record_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_export_revenues_document_number ON export_revenues(document_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_export_revenues_invoice_number ON export_revenues(invoice_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_export_revenues_under_collection_id ON export_revenues(under_collection_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_date ON local_sales(record_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_document_number ON local_sales(document_number)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_local_sales_customer_id ON local_sales(customer_id)`);

@@ -578,6 +578,10 @@ body.petty-pdf-mode .petty-table th {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.petty-modal-row.three-cols {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .petty-modal-row.wide-right {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
 }
@@ -720,6 +724,7 @@ body.petty-pdf-mode .petty-table th {
     }
 
     .petty-modal-row,
+    .petty-modal-row.three-cols,
     .petty-modal-row.wide-right {
         grid-template-columns: minmax(0, 1fr);
     }
