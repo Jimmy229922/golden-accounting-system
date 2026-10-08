@@ -79,9 +79,9 @@
                                         </div>
 
                                         <div class="quick-actions receipt-quick-actions">
-                                            <button type="button" class="quick-btn" data-action="quick-amount" data-amount="100"><i class="fas fa-plus"></i> 100</button>
-                                            <button type="button" class="quick-btn" data-action="quick-amount" data-amount="500"><i class="fas fa-plus"></i> 500</button>
-                                            <button type="button" class="quick-btn" data-action="quick-amount" data-amount="1000"><i class="fas fa-plus"></i> 1000</button>
+                                            <button type="button" class="quick-btn" data-action="quick-amount" data-amount="50000"><i class="fas fa-plus"></i> 50,000</button>
+                                            <button type="button" class="quick-btn" data-action="quick-amount" data-amount="100000"><i class="fas fa-plus"></i> 100,000</button>
+                                            <button type="button" class="quick-btn" data-action="quick-amount" data-amount="200000"><i class="fas fa-plus"></i> 200,000</button>
                                             <button type="button" class="quick-btn" data-action="pay-full-balance"><i class="fas fa-check-double"></i> ${text('fullBalanceBtn')}</button>
                                         </div>
 

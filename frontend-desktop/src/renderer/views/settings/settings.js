@@ -18,6 +18,25 @@ const SETTINGS_TRACKING_FIELDS = [
     { key: 'invoiceFooter', label: 'ملاحظة الفاتورة' },
     { key: 'profileImage', label: 'الشعار' }
 ];
+const CURRENT_CHANGELOG = {
+    version: '9.1.0',
+    title: 'ما الجديد في التحديث الجديد',
+    intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار الأحدث بنجاح. إليك أهم الميزات والتعديلات المضافة في هذا الإصدار:',
+    items: [
+        {
+            title: 'اختصارات مبالغ السداد والتحصيل السريعة',
+            desc: 'تحديث أزرار المبالغ السريعة في سداد نقدية لمورد وتحصيل نقدية من عميل إلى 50,000 و 100,000 و 200,000 جنيه مع الحفاظ على خيار كامل الرصيد.'
+        },
+        {
+            title: 'كشف حساب المورد في فواتير المشتريات',
+            desc: 'تفعيل أيقونة كشف حساب المورد مباشرة عند استعراض الفواتير المحفوظة والمقفولة دون الحاجة لفتح وضع التعديل أولاً.'
+        },
+        {
+            title: 'تحسينات الحضور السريع للعمال',
+            desc: 'تطوير شاشة تسجيل الحضور اليومي السريع بالأسماء والعدادات الذكية وإشعارات اكتمال الحضور.'
+        }
+    ]
+};
 let ar = {};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
 
@@ -35,6 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         renderPage();
         initializeElements();
+        renderChangelogModal();
         await loadSettings();
         await loadSystemStatusSummary();
 
@@ -294,34 +314,7 @@ function renderPage() {
                     <h2 id="changelogModalTitle"><i class="fas fa-sparkles"></i> ما الجديد في التحديث الجديد ✨</h2>
                     <button type="button" class="workers-modal-close" data-close-modal="changelogModal"><i class="fas fa-times"></i></button>
                 </div>
-                <div class="workers-modal-body">
-                    <div class="changelog-welcome">
-                        <p>مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار الأحدث بنجاح. إليك أهم الميزات والتعديلات المضافة في هذا الإصدار:</p>
-                    </div>
-                    <ul class="changelog-list">
-                        <li>
-                            <i class="fas fa-check-circle"></i>
-                            <div>
-                                <strong>خصم فواتير تحت التحصيل:</strong>
-                                <p>إضافة حقل خصم الفاتورة بالدولار واحتساب الصافي بعد الخصم وربطهما تلقائياً بحسابات المتبقي والمحصل في الواجهة وقاعدة البيانات والتقارير.</p>
-                            </div>
-                        </li>
-                        <li>
-                            <i class="fas fa-check-circle"></i>
-                            <div>
-                                <strong>تحديد حضور العمال بالسحب أو الضغط:</strong>
-                                <p>إتاحة تحديد أيام الحضور والغياب للعمال بالسحب بالفأرة أفقياً عبر أيام الأسبوع مع استمرار خيار الضغط الفردي العادي على كل يوم.</p>
-                            </div>
-                        </li>
-                        <li>
-                            <i class="fas fa-check-circle"></i>
-                            <div>
-                                <strong>تحديث رقم الإصدار:</strong>
-                                <p>تم تجهيز هذا الإصدار برقم <strong>9.0.9</strong> استعداداً للرفع على GitHub Releases.</p>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
+                <div class="workers-modal-body" id="changelogModalBody"></div>
                 <div class="workers-modal-footer">
                     <button type="button" class="workers-btn workers-btn-primary" data-close-modal="changelogModal">فهمت، إغلاق</button>
                 </div>
@@ -376,6 +369,7 @@ function initializeElements() {
     const showChangelogBtn = document.getElementById('showChangelogBtn');
     if (showChangelogBtn) {
         showChangelogBtn.addEventListener('click', () => {
+            renderChangelogModal();
             document.getElementById('changelogModal').classList.remove('hidden');
         });
     }
@@ -426,20 +420,44 @@ async function loadSettings() {
 }
 
 function getCurrentChangelogVersion() {
-    return currentAppVersion || 'unknown';
+    return currentAppVersion || CURRENT_CHANGELOG.version || 'unknown';
 }
 
-function renderChangelogTitle() {
+function renderChangelogModal() {
     const titleEl = document.getElementById('changelogModalTitle');
-    if (!titleEl) return;
+    const bodyEl = document.getElementById('changelogModalBody');
+    const displayVersion = currentAppVersion || CURRENT_CHANGELOG.version || '';
 
-    const versionText = currentAppVersion ? ` (إصدار ${currentAppVersion})` : '';
-    titleEl.innerHTML = `<i class="fas fa-sparkles"></i> ما الجديد في التحديث الجديد${versionText} ✨`;
+    if (titleEl) {
+        const versionText = displayVersion ? ` (إصدار ${displayVersion})` : '';
+        titleEl.innerHTML = `<i class="fas fa-sparkles"></i> ${CURRENT_CHANGELOG.title}${versionText} ✨`;
+    }
+
+    if (bodyEl) {
+        const itemsHtml = (CURRENT_CHANGELOG.items || []).map((item) => `
+            <li>
+                <i class="fas fa-check-circle"></i>
+                <div>
+                    <strong>${item.title}:</strong>
+                    <p>${item.desc}</p>
+                </div>
+            </li>
+        `).join('');
+
+        bodyEl.innerHTML = `
+            <div class="changelog-welcome">
+                <p>${CURRENT_CHANGELOG.intro}</p>
+            </div>
+            <ul class="changelog-list">
+                ${itemsHtml}
+            </ul>
+        `;
+    }
 }
 
 async function loadAppVersion() {
     if (!appVersionValueEl || !window.electronAPI || typeof window.electronAPI.getAppVersion !== 'function') {
-        renderChangelogTitle();
+        renderChangelogModal();
         return;
     }
 
@@ -452,7 +470,7 @@ async function loadAppVersion() {
     } catch (_) {
     }
 
-    renderChangelogTitle();
+    renderChangelogModal();
 }
 
 function setInfoText(element, value) {

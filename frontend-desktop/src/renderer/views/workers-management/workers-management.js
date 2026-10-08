@@ -11,6 +11,16 @@ const ATTENDANCE_DAYS = [
     { key: 'thursday', label: 'الخميس' }
 ];
 
+const ORDERED_WEEK_DAYS = [
+    { key: 'saturday', label: 'السبت', offset: 0 },
+    { key: 'sunday', label: 'الأحد', offset: 1 },
+    { key: 'monday', label: 'الاثنين', offset: 2 },
+    { key: 'tuesday', label: 'الثلاثاء', offset: 3 },
+    { key: 'wednesday', label: 'الأربعاء', offset: 4 },
+    { key: 'thursday', label: 'الخميس', offset: 5 },
+    { key: 'friday', label: 'الجمعة', offset: 6 }
+];
+
 const state = {
     weekStart: '',
     weekEnd: '',
@@ -142,6 +152,9 @@ function renderPage() {
                 <div class="workers-hero-actions">
                     <button type="button" class="workers-btn workers-btn-primary" id="saveWeekBtnTop">
                         <i class="fas fa-floppy-disk"></i> حفظ حضور الأسبوع
+                    </button>
+                    <button type="button" class="workers-btn workers-btn-light" id="smartAttendanceBtn">
+                        <i class="fas fa-clipboard-check"></i> تحضير يومي بالأسماء
                     </button>
                     <button type="button" class="workers-btn workers-btn-light" id="addWorkerBtn">
                         <i class="fas fa-user-plus"></i> إضافة عامل
@@ -328,6 +341,123 @@ function renderPage() {
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div class="workers-modal-overlay hidden" id="smartAttendanceModal">
+            <div class="workers-modal workers-smart-modal" role="dialog" aria-modal="true" aria-labelledby="smartAttendanceModalTitle">
+                <div class="workers-modal-header">
+                    <div>
+                        <h2 id="smartAttendanceModalTitle"><i class="fas fa-clipboard-check"></i> تسجيل الحضور اليومي السريع بالأسماء</h2>
+                        <span class="smart-modal-subtitle">الصق أسماء العمال الحاضرين والسهرات ليتم تحضيرهم فوراً</span>
+                    </div>
+                    <button type="button" class="workers-modal-close" data-close-modal="smartAttendanceModal"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="workers-modal-body">
+                    <div class="smart-modal-grid">
+                        <div class="workers-field smart-inline-field">
+                            <label for="smartAttendanceDaySelect">اليوم المستهدف:</label>
+                            <select class="workers-select" id="smartAttendanceDaySelect"></select>
+                        </div>
+                        <div class="workers-field smart-inline-field">
+                            <label for="smartBaseDurationSelect">نوع الحضور الأساسي:</label>
+                            <select class="workers-select" id="smartBaseDurationSelect">
+                                <option value="1">يوم كامل (أساسي)</option>
+                                <option value="0.5">نصف يوم (أساسي)</option>
+                            </select>
+                        </div>
+                        <div id="smartExistingDayAlert" class="smart-existing-alert hidden"></div>
+                    </div>
+
+                    <div class="smart-sections-grid">
+                        <div class="smart-section-card">
+                            <div class="smart-section-header">
+                                <div class="smart-section-title-wrap">
+                                    <i class="fas fa-user-check"></i>
+                                    <div class="smart-title-row">
+                                        <strong>أسماء الحاضرين</strong>
+                                        <span class="smart-count-badge" id="smartPresentCountBadge">0 عامل</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="smart-clear-btn" data-clear-target="smartPresentNamesInput" title="تفريغ هذا المربع">
+                                    <i class="fas fa-eraser"></i> تفريغ
+                                </button>
+                            </div>
+                            <textarea class="workers-textarea smart-textarea" id="smartPresentNamesInput" placeholder="الصق أسماء الحاضرين هنا..."></textarea>
+                            <div class="smart-names-pills hidden" id="smartPresentNamesPills"></div>
+                        </div>
+
+                        <div class="smart-section-card">
+                            <div class="smart-section-header">
+                                <div class="smart-section-title-wrap">
+                                    <i class="fas fa-moon"></i>
+                                    <div class="smart-title-row">
+                                        <strong>سهرة كاملة (+1 يوم)</strong>
+                                        <span class="smart-count-badge" id="smartFullOvertimeCountBadge">0 عامل</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="smart-clear-btn" data-clear-target="smartFullOvertimeNamesInput" title="تفريغ هذا المربع">
+                                    <i class="fas fa-eraser"></i> تفريغ
+                                </button>
+                            </div>
+                            <textarea class="workers-textarea smart-textarea" id="smartFullOvertimeNamesInput" placeholder="الصق أسماء سهرة كاملة..."></textarea>
+                            <div class="smart-names-pills hidden" id="smartFullOvertimeNamesPills"></div>
+                        </div>
+
+                        <div class="smart-section-card">
+                            <div class="smart-section-header">
+                                <div class="smart-section-title-wrap">
+                                    <i class="fas fa-cloud-moon"></i>
+                                    <div class="smart-title-row">
+                                        <strong>نصف سهرة (+0.5 يوم)</strong>
+                                        <span class="smart-count-badge" id="smartHalfOvertimeCountBadge">0 عامل</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="smart-clear-btn" data-clear-target="smartHalfOvertimeNamesInput" title="تفريغ هذا المربع">
+                                    <i class="fas fa-eraser"></i> تفريغ
+                                </button>
+                            </div>
+                            <textarea class="workers-textarea smart-textarea" id="smartHalfOvertimeNamesInput" placeholder="الصق أسماء نصف سهرة..."></textarea>
+                            <div class="smart-names-pills hidden" id="smartHalfOvertimeNamesPills"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="smartAttendancePreview" class="smart-attendance-preview hidden"></div>
+                <div class="workers-modal-footer">
+                    <button type="button" class="workers-btn workers-btn-danger" id="smartClearAllBtn" style="margin-left: auto;">
+                        <i class="fas fa-trash-can"></i> مسح جميع الحقول
+                    </button>
+                    <button type="button" class="workers-btn workers-btn-outline" data-close-modal="smartAttendanceModal">إلغاء</button>
+                    <button type="button" class="workers-btn workers-btn-primary" id="applySmartAttendanceBtn">
+                        <i class="fas fa-check-double"></i> تطبيق على جدول الأسبوع
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="workers-modal-overlay absent-modal-overlay hidden" id="absentWorkersModal">
+            <div class="workers-modal workers-absent-modal" role="dialog" aria-modal="true" aria-labelledby="absentWorkersModalTitle">
+                <div class="workers-modal-header">
+                    <div>
+                        <h2 id="absentWorkersModalTitle"><i class="fas fa-user-xmark" style="color: #ef4444;"></i> قائمة العمال الغائبين</h2>
+                        <span class="smart-modal-subtitle" id="absentWorkersModalSubtitle">العمال غير المذكورين في كشف الحضور</span>
+                    </div>
+                    <button type="button" class="workers-modal-close" data-close-modal="absentWorkersModal"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="workers-modal-body">
+                    <div class="absent-modal-toolbar">
+                        <div class="workers-field absent-search-field">
+                            <input type="text" class="workers-input" id="absentWorkersSearchInput" placeholder="بحث بالاسم أو المهنة...">
+                        </div>
+                        <button type="button" class="workers-btn workers-btn-outline workers-btn-small" id="copyAbsentWorkersBtn" title="نسخ أسماء جميع الغائبين">
+                            <i class="fas fa-copy"></i> نسخ الأسماء
+                        </button>
+                    </div>
+                    <div class="absent-workers-list-wrap" id="absentWorkersListContainer"></div>
+                </div>
+                <div class="workers-modal-footer">
+                    <button type="button" class="workers-btn workers-btn-outline" data-close-modal="absentWorkersModal">إغلاق</button>
+                </div>
             </div>
         </div>
     `;
@@ -829,6 +959,20 @@ async function saveWeekAttendance() {
     }
 }
 
+function updateModalBodyLock() {
+    const hasOpenModal = Boolean(document.querySelector('.workers-modal-overlay:not(.hidden)'));
+    document.documentElement.classList.toggle('workers-modal-open', hasOpenModal);
+    document.body.classList.toggle('workers-modal-open', hasOpenModal);
+}
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) {
+        modal.classList.remove('hidden');
+        updateModalBodyLock();
+    }
+}
+
 function openWorkerModal(worker = null) {
     state.editingWorkerId = worker ? Number(worker.id) : null;
     document.getElementById('workerModalTitle').textContent = worker ? 'تعديل بيانات العامل' : 'إضافة عامل';
@@ -837,7 +981,7 @@ function openWorkerModal(worker = null) {
     document.getElementById('workerWageInput').value = worker?.current_daily_wage || worker?.daily_wage || '1';
     document.getElementById('workerNotesInput').value = worker?.notes || '';
     document.getElementById('workerAutoTransferInput').checked = Boolean(worker?.auto_transfer_to_petty);
-    document.getElementById('workerModal').classList.remove('hidden');
+    openModal('workerModal');
     document.getElementById('workerNameInput').focus();
 }
 
@@ -854,6 +998,18 @@ function closeModal(id) {
         state.advanceWorkerId = null;
         resetAdvanceForm();
     }
+
+    if (id === 'smartAttendanceModal') {
+        resetSmartAttendanceForm();
+        closeModal('absentWorkersModal');
+    }
+
+    if (id === 'absentWorkersModal') {
+        const search = document.getElementById('absentWorkersSearchInput');
+        if (search) search.value = '';
+    }
+
+    updateModalBodyLock();
 }
 
 async function saveWorker(event) {
@@ -1010,7 +1166,7 @@ function openAdvanceModal(workerId) {
     updateAdvanceModalHeader();
     resetAdvanceForm();
     renderWorkerAdvances();
-    document.getElementById('advanceModal').classList.remove('hidden');
+    openModal('advanceModal');
 }
 
 function editAdvance(id) {
@@ -1143,6 +1299,811 @@ async function handleUnsavedAttendanceNavigation(event) {
     window.location.href = targetUrl.href;
 }
 
+function normalizeArabicText(text) {
+    if (!text) return '';
+    return String(text)
+        .trim()
+        .toLowerCase()
+        .replace(/[أإآا]/g, 'ا')
+        .replace(/[يى]/g, 'ي')
+        .replace(/ة/g, 'ه')
+        .replace(/[ًٌٍَُِّْـ]/g, '')
+        .replace(/\s+/g, ' ');
+}
+
+function extractNamesList(rawText) {
+    if (!rawText) return [];
+    const rawList = String(rawText)
+        .split(/[\r\n,،;؛]+/)
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0);
+
+    const seen = new Set();
+    const unique = [];
+    rawList.forEach((name) => {
+        const key = normalizeArabicText(name);
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            unique.push(name);
+        }
+    });
+    return unique;
+}
+
+function findWorkerByName(queryName, candidateRows) {
+    const cleanQuery = normalizeArabicText(queryName);
+    if (!cleanQuery) return null;
+
+    return candidateRows.find((row) => normalizeArabicText(row.name) === cleanQuery) || null;
+}
+
+function getLevenshteinDistance(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+
+    const row = [];
+    for (let i = 0; i <= b.length; i++) row[i] = i;
+
+    for (let i = 1; i <= a.length; i++) {
+        let prev = i;
+        for (let j = 1; j <= b.length; j++) {
+            let val;
+            if (a[i - 1] === b[j - 1]) {
+                val = row[j - 1];
+            } else {
+                val = Math.min(row[j - 1] + 1, prev + 1, row[j] + 1);
+            }
+            row[j - 1] = prev;
+            prev = val;
+        }
+        row[b.length] = prev;
+    }
+    return row[b.length];
+}
+
+function findClosestWorkerMatch(queryName, candidateRows) {
+    const cleanQuery = normalizeArabicText(queryName);
+    if (!cleanQuery || cleanQuery.length < 3) return null;
+
+    const queryTokens = cleanQuery.split(' ').filter(Boolean);
+    if (!queryTokens.length) return null;
+
+    let bestMatch = null;
+    let highestScore = 0;
+
+    for (const worker of candidateRows) {
+        const cleanCandidate = normalizeArabicText(worker.name);
+        if (!cleanCandidate || cleanCandidate === cleanQuery) continue;
+
+        const candidateTokens = cleanCandidate.split(' ').filter(Boolean);
+        if (!candidateTokens.length) continue;
+
+        let score = 0;
+
+        if (queryTokens.length >= 2 && candidateTokens.length >= 2) {
+            let matchedTokens = 0;
+            for (const qTok of queryTokens) {
+                if (candidateTokens.some((cTok) => cTok === qTok || (qTok.length >= 4 && getLevenshteinDistance(qTok, cTok) <= 1))) {
+                    matchedTokens++;
+                }
+            }
+            const tokenOverlap = matchedTokens / Math.max(queryTokens.length, candidateTokens.length);
+            const queryCoverage = matchedTokens / queryTokens.length;
+            if (queryCoverage >= 0.75 && matchedTokens >= 2) {
+                score = 0.75 + (tokenOverlap * 0.25);
+            }
+        }
+
+        const maxLen = Math.max(cleanQuery.length, cleanCandidate.length);
+        const levDist = getLevenshteinDistance(cleanQuery, cleanCandidate);
+        const levScore = 1 - (levDist / maxLen);
+
+        if (queryTokens[0] === candidateTokens[0] || (queryTokens[0].length >= 4 && getLevenshteinDistance(queryTokens[0], candidateTokens[0]) <= 1)) {
+            if (levScore > score) {
+                score = levScore;
+            }
+        } else {
+            if (levScore < 0.85) {
+                score = 0;
+            }
+        }
+
+        if (score >= 0.75 && score > highestScore) {
+            highestScore = score;
+            bestMatch = worker;
+        }
+    }
+
+    return bestMatch;
+}
+
+function replaceNameInTextarea(textareaId, oldName, newName) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+    const val = textarea.value;
+    const lines = val.split(/[\r\n]+/);
+    const oldNorm = normalizeArabicText(oldName);
+    let replaced = false;
+    const newLines = lines.map((line) => {
+        if (!replaced && normalizeArabicText(line.trim()) === oldNorm) {
+            replaced = true;
+            return newName;
+        }
+        return line;
+    });
+    if (replaced) {
+        textarea.value = newLines.join('\n');
+        updateSmartAttendancePreview();
+        showMessage(`تم تصحيح الاسم بنجاح إلى: ${newName}`, 'success');
+    }
+}
+
+function checkExistingDayAttendance() {
+    const daySelect = document.getElementById('smartAttendanceDaySelect');
+    const alertEl = document.getElementById('smartExistingDayAlert');
+    if (!daySelect) return 0;
+
+    const selectedDayKey = daySelect.value;
+    const dayObj = ORDERED_WEEK_DAYS.find((d) => d.key === selectedDayKey);
+    const dayLabel = dayObj ? dayObj.label : selectedDayKey;
+
+    const existingPresentRows = state.rows.filter((r) => r.attendance?.[selectedDayKey]?.present);
+    const count = existingPresentRows.length;
+
+    if (alertEl) {
+        if (count > 0) {
+            alertEl.classList.remove('hidden');
+            alertEl.innerHTML = `
+                <i class="fas fa-triangle-exclamation"></i>
+                <div>
+                    <strong>تنبيه: يوم ${escapeHtml(dayLabel)} يحتوي بالفعل على (${count}) عامل مسجلين كحضور.</strong>
+                    <span>تطبيق الحضور سيقوم بتحديث واستبدال حضور هذا اليوم بالبيانات الجديدة.</span>
+                </div>
+            `;
+        } else {
+            alertEl.classList.add('hidden');
+            alertEl.innerHTML = '';
+        }
+    }
+    return count;
+}
+
+function populateSmartAttendanceDays() {
+    const select = document.getElementById('smartAttendanceDaySelect');
+    if (!select || !state.weekStart) return;
+
+    select.innerHTML = ORDERED_WEEK_DAYS.map((day) => {
+        const dateStr = addDays(state.weekStart, day.offset);
+        return `<option value="${day.key}">${day.label} (${formatArabicDate(dateStr)})</option>`;
+    }).join('');
+}
+
+function selectNameInTextarea(textareaId, targetName) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+
+    const text = textarea.value;
+    const index = text.indexOf(targetName);
+    if (index === -1) return;
+
+    textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    textarea.focus();
+    textarea.setSelectionRange(index, index + targetName.length);
+
+    const textBefore = text.slice(0, index);
+    const lineNumber = textBefore.split('\n').length - 1;
+    const style = window.getComputedStyle(textarea);
+    const lineHeight = parseFloat(style.lineHeight) || 24;
+    const targetScrollTop = Math.max(0, lineNumber * lineHeight - (textarea.clientHeight / 2) + (lineHeight / 2));
+    textarea.scrollTop = targetScrollTop;
+
+    setTimeout(() => {
+        textarea.scrollTop = targetScrollTop;
+    }, 15);
+}
+
+function getSectionNamesAnalysis(rawText) {
+    if (!rawText) return { uniqueNames: [], counts: new Map(), duplicates: new Map() };
+    const rawList = String(rawText)
+        .split(/[\r\n,،;؛]+/)
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0);
+
+    const counts = new Map();
+    const nameByNormalized = new Map();
+    const uniqueNames = [];
+
+    rawList.forEach((name) => {
+        const key = normalizeArabicText(name);
+        if (!key) return;
+        const currentCount = counts.get(key) || 0;
+        counts.set(key, currentCount + 1);
+        if (currentCount === 0) {
+            nameByNormalized.set(key, name);
+            uniqueNames.push(name);
+        }
+    });
+
+    const duplicates = new Map();
+    counts.forEach((count, key) => {
+        if (count > 1) {
+            duplicates.set(key, { name: nameByNormalized.get(key), count });
+        }
+    });
+
+    return { uniqueNames, counts, duplicates };
+}
+
+function deduplicateTextarea(textareaId, silent = false) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return 0;
+    const rawText = textarea.value;
+    if (!rawText.trim()) return 0;
+
+    const hasNewlines = rawText.includes('\n') || rawText.includes('\r');
+    const separator = hasNewlines ? '\n' : '، ';
+    const items = rawText.split(/[\r\n,،;؛]+/).map((s) => s.trim()).filter(Boolean);
+    const seen = new Set();
+    const cleanItems = [];
+    let removedCount = 0;
+
+    items.forEach((item) => {
+        const key = normalizeArabicText(item);
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            cleanItems.push(item);
+        } else if (key) {
+            removedCount++;
+        }
+    });
+
+    if (removedCount > 0) {
+        textarea.value = cleanItems.join(separator);
+        updateSmartAttendancePreview();
+        if (!silent) {
+            showMessage(`تمت إزالة (${removedCount}) اسم مكرر تلقائياً من البطاقة لمنع التكرار`, 'info');
+        }
+    }
+    return removedCount;
+}
+
+function renderPillsForSection(containerId, textareaId, rawText, activeRows) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const { uniqueNames, duplicates } = getSectionNamesAnalysis(rawText);
+    if (!uniqueNames.length) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    const seenWorkerIds = new Set();
+    const attentionPills = [];
+    const recognizedPills = [];
+
+    uniqueNames.forEach((name) => {
+        const key = normalizeArabicText(name);
+        const dupInfo = duplicates.get(key);
+        const isDuplicate = Boolean(dupInfo && dupInfo.count > 1);
+        const worker = findWorkerByName(name, activeRows);
+
+        if (worker) {
+            if (seenWorkerIds.has(worker.id)) return;
+            seenWorkerIds.add(worker.id);
+            if (isDuplicate) {
+                attentionPills.push(`<span class="name-pill is-duplicate" data-textarea-id="${textareaId}" data-target-name="${escapeHtml(name)}" data-action="dedupe" title="الاسم مكرر (${dupInfo.count}) مرات في هذه البطاقة - انقر لحذف التكرار فوراً"><i class="fas fa-clone"></i> ${escapeHtml(worker.name)} (مكرر ${dupInfo.count}x)</span>`);
+            } else {
+                recognizedPills.push(`<span class="name-pill is-recognized" data-textarea-id="${textareaId}" data-target-name="${escapeHtml(name)}" title="تم التعرف عليه - انقر للانتقال إليه في المربع"><i class="fas fa-check"></i> ${escapeHtml(worker.name)}</span>`);
+            }
+        } else {
+            const suggestedWorker = findClosestWorkerMatch(name, activeRows);
+            if (isDuplicate) {
+                attentionPills.push(`<span class="name-pill is-duplicate" data-textarea-id="${textareaId}" data-target-name="${escapeHtml(name)}" data-action="dedupe" title="الاسم مكرر (${dupInfo.count}) مرات وغير مسجل - انقر لحذف التكرار فوراً"><i class="fas fa-clone"></i> ${escapeHtml(name)} (مكرر ${dupInfo.count}x - غير مسجل)</span>`);
+            } else if (suggestedWorker) {
+                attentionPills.push(`<span class="name-pill is-unrecognized has-suggestion" data-textarea-id="${textareaId}" data-target-name="${escapeHtml(name)}" title="اسم غير مسجل - انقر للانتقال إليه"><i class="fas fa-times-circle"></i> ${escapeHtml(name)}<button type="button" class="pill-suggestion-btn" data-textarea-id="${textareaId}" data-replace-from="${escapeHtml(name)}" data-replace-to="${escapeHtml(suggestedWorker.name)}" title="انقر لاستبدال الاسم فوراً بالاسم المسجل"><i class="fas fa-wand-magic-sparkles"></i> هل تقصد: <strong>${escapeHtml(suggestedWorker.name)}</strong>؟</button></span>`);
+            } else {
+                attentionPills.push(`<span class="name-pill is-unrecognized" data-textarea-id="${textareaId}" data-target-name="${escapeHtml(name)}" title="اسم غير مسجل - انقر للانتقال إليه وتعديله"><i class="fas fa-times-circle"></i> ${escapeHtml(name)} (غير مسجل)</span>`);
+            }
+        }
+    });
+
+    if (!attentionPills.length && !recognizedPills.length) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    let renderedHtml = '';
+    if (attentionPills.length > 0 && recognizedPills.length > 0) {
+        renderedHtml = `
+            <div class="smart-pills-alert-label">
+                <span><i class="fas fa-triangle-exclamation"></i> بحاجة للمراجعة أو التعديل (${attentionPills.length})</span>
+            </div>
+            ${attentionPills.join('')}
+            <div class="smart-pills-separator">
+                <span><i class="fas fa-circle-check"></i> أسماء صحيحة ومطابقة (${recognizedPills.length})</span>
+            </div>
+            ${recognizedPills.join('')}
+        `;
+    } else if (attentionPills.length > 0) {
+        renderedHtml = `
+            <div class="smart-pills-alert-label">
+                <span><i class="fas fa-triangle-exclamation"></i> بحاجة للمراجعة أو التعديل (${attentionPills.length})</span>
+            </div>
+            ${attentionPills.join('')}
+        `;
+    } else {
+        renderedHtml = recognizedPills.join('');
+    }
+
+    container.classList.remove('hidden');
+    container.innerHTML = renderedHtml;
+}
+
+function resetSmartAttendanceForm() {
+    const presentInput = document.getElementById('smartPresentNamesInput');
+    const fullOvertimeInput = document.getElementById('smartFullOvertimeNamesInput');
+    const halfOvertimeInput = document.getElementById('smartHalfOvertimeNamesInput');
+    const baseDurationSelect = document.getElementById('smartBaseDurationSelect');
+    const previewEl = document.getElementById('smartAttendancePreview');
+
+    if (presentInput) presentInput.value = '';
+    if (fullOvertimeInput) fullOvertimeInput.value = '';
+    if (halfOvertimeInput) halfOvertimeInput.value = '';
+    if (baseDurationSelect) baseDurationSelect.value = '1';
+    if (previewEl) {
+        previewEl.classList.add('hidden');
+        previewEl.innerHTML = '';
+    }
+
+    ['smartPresentNamesPills', 'smartFullOvertimeNamesPills', 'smartHalfOvertimeNamesPills'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+        }
+    });
+
+    ['smartPresentCountBadge', 'smartFullOvertimeCountBadge', 'smartHalfOvertimeCountBadge'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '0 عامل';
+    });
+}
+
+function openSmartAttendanceModal() {
+    populateSmartAttendanceDays();
+    resetSmartAttendanceForm();
+    checkExistingDayAttendance();
+    openModal('smartAttendanceModal');
+    document.getElementById('smartPresentNamesInput')?.focus();
+}
+
+function getCurrentlyAbsentWorkers() {
+    const presentRaw = document.getElementById('smartPresentNamesInput')?.value || '';
+    const fullOvertimeRaw = document.getElementById('smartFullOvertimeNamesInput')?.value || '';
+    const halfOvertimeRaw = document.getElementById('smartHalfOvertimeNamesInput')?.value || '';
+
+    const activeRows = state.rows.filter((r) => state.includeArchived ? true : r.is_active);
+    const matchedPresent = new Map();
+
+    const allPresentNames = [
+        ...extractNamesList(presentRaw),
+        ...extractNamesList(fullOvertimeRaw),
+        ...extractNamesList(halfOvertimeRaw)
+    ];
+
+    allPresentNames.forEach((name) => {
+        const worker = findWorkerByName(name, activeRows);
+        if (worker) matchedPresent.set(worker.id, worker);
+    });
+
+    return activeRows.filter((worker) => !matchedPresent.has(worker.id));
+}
+
+function renderAbsentWorkersList(filterQuery = '') {
+    const container = document.getElementById('absentWorkersListContainer');
+    if (!container) return;
+
+    const absentWorkers = getCurrentlyAbsentWorkers();
+    const query = String(filterQuery || '').toLowerCase().trim();
+
+    const filtered = query
+        ? absentWorkers.filter((w) => (w.name || '').toLowerCase().includes(query) || (w.job_title || '').toLowerCase().includes(query))
+        : absentWorkers;
+
+    const countTitle = document.getElementById('absentWorkersModalTitle');
+    if (countTitle) {
+        countTitle.innerHTML = `<i class="fas fa-user-xmark" style="color: #ef4444;"></i> قائمة العمال الغائبين (${absentWorkers.length} عامل)`;
+    }
+
+    if (!absentWorkers.length) {
+        container.innerHTML = `
+            <div class="absent-empty-state">
+                <i class="fas fa-circle-check"></i>
+                <strong>لا يوجد أي عامل غائب!</strong>
+                <p style="margin: 4px 0 0 0; font-size: 0.82rem;">جميع العمال مسجلون كحضور لهذا اليوم.</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (!filtered.length) {
+        container.innerHTML = `
+            <div class="absent-empty-state">
+                <i class="fas fa-magnifying-glass" style="color: #94a3b8;"></i>
+                <strong>لا توجد نتائج بحث مطابقة</strong>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map((w, idx) => `
+        <div class="absent-worker-item">
+            <div class="absent-worker-info">
+                <span class="absent-worker-num">${idx + 1}</span>
+                <div class="absent-worker-details">
+                    <strong>${escapeHtml(w.name)}</strong>
+                    <span>${escapeHtml(w.job_title || 'عامل')}</span>
+                </div>
+            </div>
+            <button type="button" class="absent-worker-add-btn" data-worker-name="${escapeHtml(w.name)}" title="تحضير هذا العامل وإضافته لقائمة الحاضرين فوراً">
+                <i class="fas fa-plus"></i> تحضير العامل
+            </button>
+        </div>
+    `).join('');
+}
+
+function addAbsentWorkerToPresent(workerName) {
+    const textarea = document.getElementById('smartPresentNamesInput');
+    if (!textarea || !workerName) return;
+
+    const currentVal = textarea.value.trim();
+    if (currentVal) {
+        textarea.value = currentVal + '\n' + workerName;
+    } else {
+        textarea.value = workerName;
+    }
+
+    updateSmartAttendancePreview();
+    showMessage(`تمت إضافة (${workerName}) إلى قائمة الحاضرين بنجاح`, 'success');
+}
+
+function copyAbsentWorkers() {
+    const absentWorkers = getCurrentlyAbsentWorkers();
+    if (!absentWorkers.length) {
+        showMessage('لا يوجد عمال غائبون لنسخهم', 'info');
+        return;
+    }
+    const daySelect = document.getElementById('smartAttendanceDaySelect');
+    const dayKey = daySelect?.value;
+    const dayObj = ORDERED_WEEK_DAYS.find((d) => d.key === dayKey);
+    const dayLabel = dayObj ? dayObj.label : 'اليوم';
+
+    const text = `📋 كشف غياب يوم (${dayLabel}) - (${absentWorkers.length} عامل):\n` +
+        absentWorkers.map((w, i) => `${i + 1}- ${w.name} (${w.job_title || 'عامل'})`).join('\n');
+
+    navigator.clipboard.writeText(text).then(() => {
+        showMessage(`تم نسخ كشف الغياب (${absentWorkers.length} عامل) بنجاح`, 'success');
+    }).catch(() => {
+        showMessage('تعذر نسخ الكشف، يرجى المحاولة يدوياً', 'warning');
+    });
+}
+
+function openAbsentWorkersModal() {
+    const searchInput = document.getElementById('absentWorkersSearchInput');
+    if (searchInput) searchInput.value = '';
+
+    const daySelect = document.getElementById('smartAttendanceDaySelect');
+    const dayKey = daySelect?.value;
+    const dayObj = ORDERED_WEEK_DAYS.find((d) => d.key === dayKey);
+    const dayLabel = dayObj ? dayObj.label : 'المحدد';
+
+    const subtitle = document.getElementById('absentWorkersModalSubtitle');
+    if (subtitle) {
+        subtitle.textContent = `العمال غير المذكورين في كشف الحضور ليوم (${dayLabel})`;
+    }
+
+    renderAbsentWorkersList('');
+    openModal('absentWorkersModal');
+    searchInput?.focus();
+}
+
+function updateSmartAttendancePreview() {
+    const previewEl = document.getElementById('smartAttendancePreview');
+    if (!previewEl) return;
+
+    const presentRaw = document.getElementById('smartPresentNamesInput')?.value || '';
+    const fullOvertimeRaw = document.getElementById('smartFullOvertimeNamesInput')?.value || '';
+    const halfOvertimeRaw = document.getElementById('smartHalfOvertimeNamesInput')?.value || '';
+
+    const activeRows = state.rows.filter((r) => state.includeArchived ? true : r.is_active);
+
+    renderPillsForSection('smartPresentNamesPills', 'smartPresentNamesInput', presentRaw, activeRows);
+    renderPillsForSection('smartFullOvertimeNamesPills', 'smartFullOvertimeNamesInput', fullOvertimeRaw, activeRows);
+    renderPillsForSection('smartHalfOvertimeNamesPills', 'smartHalfOvertimeNamesInput', halfOvertimeRaw, activeRows);
+
+    const presentNames = extractNamesList(presentRaw);
+    const fullOvertimeNames = extractNamesList(fullOvertimeRaw);
+    const halfOvertimeNames = extractNamesList(halfOvertimeRaw);
+
+    const presentBadge = document.getElementById('smartPresentCountBadge');
+    if (presentBadge) presentBadge.textContent = `${presentNames.length} عامل`;
+    const fullBadge = document.getElementById('smartFullOvertimeCountBadge');
+    if (fullBadge) fullBadge.textContent = `${fullOvertimeNames.length} عامل`;
+    const halfBadge = document.getElementById('smartHalfOvertimeCountBadge');
+    if (halfBadge) halfBadge.textContent = `${halfOvertimeNames.length} عامل`;
+
+    if (!presentNames.length && !fullOvertimeNames.length && !halfOvertimeNames.length) {
+        previewEl.classList.add('hidden');
+        previewEl.innerHTML = '';
+        return;
+    }
+
+    const matchedPresent = new Map();
+    const unrecognized = [];
+
+    presentNames.forEach((name) => {
+        const worker = findWorkerByName(name, activeRows);
+        if (worker) {
+            matchedPresent.set(worker.id, worker);
+        } else if (!unrecognized.includes(name)) {
+            unrecognized.push(name);
+        }
+    });
+
+    const matchedFull = new Map();
+    fullOvertimeNames.forEach((name) => {
+        const worker = findWorkerByName(name, activeRows);
+        if (worker) {
+            matchedFull.set(worker.id, worker);
+            matchedPresent.set(worker.id, worker);
+        } else if (!unrecognized.includes(name)) {
+            unrecognized.push(name);
+        }
+    });
+
+    const matchedHalf = new Map();
+    halfOvertimeNames.forEach((name) => {
+        const worker = findWorkerByName(name, activeRows);
+        if (worker) {
+            matchedHalf.set(worker.id, worker);
+            matchedPresent.set(worker.id, worker);
+        } else if (!unrecognized.includes(name)) {
+            unrecognized.push(name);
+        }
+    });
+
+    let combinedCount = 0;
+    matchedFull.forEach((_, id) => {
+        if (matchedHalf.has(id)) combinedCount++;
+    });
+
+    const absentCount = Math.max(0, activeRows.length - matchedPresent.size);
+
+    previewEl.classList.remove('hidden');
+    previewEl.innerHTML = `
+        <div class="smart-preview-summary">
+            <span class="preview-badge badge-present"><i class="fas fa-check-circle"></i> حاضرون: ${matchedPresent.size}</span>
+            <span class="preview-badge badge-overtime-full"><i class="fas fa-moon"></i> سهرة كاملة: ${matchedFull.size}</span>
+            <span class="preview-badge badge-overtime-half"><i class="fas fa-cloud-moon"></i> نصف سهرة: ${matchedHalf.size}</span>
+            ${combinedCount > 0 ? `<span class="preview-badge badge-overtime-combined" style="background: rgba(168, 85, 247, 0.12); color: #7e22ce;"><i class="fas fa-star"></i> يوم ونصف (سهرة + نصف): ${combinedCount}</span>` : ''}
+            ${absentCount === 0 ? `
+                <span class="preview-badge badge-absent-zero" id="smartAbsentPreviewBadge" role="button" tabindex="0" title="اكتمال الحضور - انقر لعرض التفاصيل"><i class="fas fa-circle-check"></i> اكتمال الحضور (0 غياب) 🎉</span>
+            ` : `
+                <span class="preview-badge badge-absent" id="smartAbsentPreviewBadge" role="button" tabindex="0" title="انقر لعرض قائمة العمال الغائبين بالتفصيل"><i class="fas fa-user-xmark"></i> غياب: ${absentCount} <i class="fas fa-up-right-from-square" style="font-size: 0.72rem; margin-right: 4px; opacity: 0.85;"></i></span>
+            `}
+        </div>
+        ${unrecognized.length ? `
+            <div class="smart-preview-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>
+                    <strong>أسماء لم يتم التعرف عليها (${unrecognized.length}):</strong>
+                    <span>${unrecognized.map(escapeHtml).join('، ')}</span>
+                </div>
+            </div>
+        ` : ''}
+    `;
+
+    const absentModal = document.getElementById('absentWorkersModal');
+    if (absentModal && !absentModal.classList.contains('hidden')) {
+        renderAbsentWorkersList(document.getElementById('absentWorkersSearchInput')?.value || '');
+    }
+}
+
+async function applySmartAttendance() {
+    deduplicateTextarea('smartPresentNamesInput', true);
+    deduplicateTextarea('smartFullOvertimeNamesInput', true);
+    deduplicateTextarea('smartHalfOvertimeNamesInput', true);
+
+    const daySelect = document.getElementById('smartAttendanceDaySelect');
+    const baseDurationSelect = document.getElementById('smartBaseDurationSelect');
+    if (!daySelect || !baseDurationSelect) return;
+
+    const selectedDayKey = daySelect.value;
+    const baseDuration = Number(baseDurationSelect.value) || 1;
+
+    const presentRaw = document.getElementById('smartPresentNamesInput')?.value || '';
+    const fullOvertimeRaw = document.getElementById('smartFullOvertimeNamesInput')?.value || '';
+    const halfOvertimeRaw = document.getElementById('smartHalfOvertimeNamesInput')?.value || '';
+
+    const presentNames = extractNamesList(presentRaw);
+    const fullOvertimeNames = extractNamesList(fullOvertimeRaw);
+    const halfOvertimeNames = extractNamesList(halfOvertimeRaw);
+
+    if (!presentNames.length && !fullOvertimeNames.length && !halfOvertimeNames.length) {
+        showMessage('يرجى إدخال أسماء العمال الحاضرين أو السهرات أولاً', 'warning');
+        return;
+    }
+
+    const activeRows = state.rows.filter((r) => state.includeArchived ? true : r.is_active);
+
+    const matchedPresentIds = new Set();
+    const unrecognized = [];
+
+    presentNames.forEach((name) => {
+        const worker = findWorkerByName(name, activeRows);
+        if (worker) {
+            matchedPresentIds.add(worker.id);
+        } else if (!unrecognized.includes(name)) {
+            unrecognized.push(name);
+        }
+    });
+
+    const matchedFullIds = new Set();
+    fullOvertimeNames.forEach((name) => {
+        const worker = findWorkerByName(name, activeRows);
+        if (worker) {
+            matchedFullIds.add(worker.id);
+            matchedPresentIds.add(worker.id);
+        } else if (!unrecognized.includes(name)) {
+            unrecognized.push(name);
+        }
+    });
+
+    const matchedHalfIds = new Set();
+    halfOvertimeNames.forEach((name) => {
+        const worker = findWorkerByName(name, activeRows);
+        if (worker) {
+            matchedHalfIds.add(worker.id);
+            matchedPresentIds.add(worker.id);
+        } else if (!unrecognized.includes(name)) {
+            unrecognized.push(name);
+        }
+    });
+
+    const rowElements = Array.from(document.querySelectorAll('#workersTableBody tr[data-worker-id]'));
+    if (!rowElements.length) {
+        showMessage('لا يوجد عمال في الجدول للتطبيق عليهم', 'warning');
+        return;
+    }
+
+    const existingCount = checkExistingDayAttendance();
+    const dayObj = ORDERED_WEEK_DAYS.find((d) => d.key === selectedDayKey);
+    const dayLabel = dayObj ? dayObj.label : selectedDayKey;
+
+    if (existingCount > 0) {
+        const htmlMsg = `
+            <div class="smart-confirm-content">
+                <div class="smart-confirm-banner warning">
+                    <i class="fas fa-calendar-check"></i>
+                    <div>
+                        <strong>يوم (${escapeHtml(dayLabel)}) مسجل به حضور بالفعل</strong>
+                        <span>يحتوي هذا اليوم حالياً على (${existingCount}) عامل مسجلين كحضور.</span>
+                    </div>
+                </div>
+                <p class="smart-confirm-text">تطبيق البيانات الجديدة سيقوم <strong>بتحديث واستبدال</strong> كشف الحضور لهذا اليوم بالأسماء المدخلة حالياً.</p>
+                <div class="smart-confirm-question">هل أنت متأكد من رغبتك في المتابعة واستبدال حضور هذا اليوم؟</div>
+            </div>
+        `;
+        const confirmed = typeof window.showConfirmDialog === 'function'
+            ? await window.showConfirmDialog(htmlMsg, {
+                title: 'تنبيه استبدال الحضور السابق',
+                confirmText: 'نعم، استبدال وتطبيق',
+                cancelText: 'تراجع',
+                isHtml: true
+            })
+            : window.confirm(`تنبيه: يوم (${dayLabel}) يحتوي بالفعل على (${existingCount}) عامل مسجلين كحضور. هل تريد الاستبدال؟`);
+
+        if (!confirmed) {
+            return;
+        }
+    }
+
+    if (unrecognized.length > 0) {
+        const pillsHtml = unrecognized.map((name) => `<span class="name-pill is-unrecognized"><i class="fas fa-times-circle"></i> ${escapeHtml(name)}</span>`).join('');
+        const htmlMsg = `
+            <div class="smart-confirm-content">
+                <div class="smart-confirm-banner danger">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <div>
+                        <strong>يوجد (${unrecognized.length}) اسم غير مسجلين في قائمة العمال:</strong>
+                        <span>لم يتم التعرف على هذه الأسماء كعمال مسجلين في المنظومة.</span>
+                    </div>
+                </div>
+                <div class="smart-confirm-pills-wrap">
+                    ${pillsHtml}
+                </div>
+                <p class="smart-confirm-warning-note">
+                    <i class="fas fa-info-circle"></i> تنبيه: لن يتم تسجيل حضور هذه الأسماء في الجدول ولن تُحسب لهم أي مستحقات مالية.
+                </p>
+                <div class="smart-confirm-question">هل تريد المتابعة وتطبيق الحضور للعمال المسجلين فقط وتجاهل الأسماء غير المسجلة؟</div>
+            </div>
+        `;
+        const confirmed = typeof window.showConfirmDialog === 'function'
+            ? await window.showConfirmDialog(htmlMsg, {
+                title: 'تنبيه تأكيدي: أسماء غير مسجلة',
+                confirmText: 'نعم، تطبيق المسجلين فقط',
+                cancelText: 'تراجع لتصحيح الأسماء',
+                isHtml: true
+            })
+            : window.confirm(`تنبيه: يوجد (${unrecognized.length}) اسم غير مسجل. هل تريد المتابعة وتطبيق المسجلين فقط؟`);
+
+        if (!confirmed) {
+            return;
+        }
+    }
+
+    const isNewLogic = state.weekStart >= '2026-07-11';
+    let appliedCount = 0;
+
+    rowElements.forEach((rowElement) => {
+        const workerId = Number(rowElement.dataset.workerId);
+        const cell = rowElement.querySelector(`.attendance-day-cell[data-day="${selectedDayKey}"]`);
+        if (!cell) return;
+
+        const isPresent = matchedPresentIds.has(workerId);
+        let duration = 0;
+        if (isPresent) {
+            const hasFull = matchedFullIds.has(workerId);
+            const hasHalf = matchedHalfIds.has(workerId);
+            if (hasFull && hasHalf) {
+                duration = 1.5;
+            } else if (hasFull) {
+                duration = 1;
+            } else if (hasHalf) {
+                duration = 0.5;
+            } else {
+                duration = isNewLogic ? 0 : 1;
+            }
+        }
+
+        applyAttendanceCellState(cell, isPresent);
+
+        const baseSelect = cell.querySelector('.attendance-base-duration');
+        if (baseSelect) {
+            baseSelect.value = isPresent ? String(baseDuration) : '1';
+        }
+
+        const durationSelect = cell.querySelector('.attendance-duration');
+        if (durationSelect) {
+            durationSelect.value = isPresent ? String(duration) : '0';
+        }
+
+        updateRowCalculations(rowElement);
+        syncAttendanceStateFromRow(rowElement);
+        if (isPresent) appliedCount += 1;
+    });
+
+    updateSummaryFromTable();
+    state.hasUnsavedAttendance = true;
+
+    closeModal('smartAttendanceModal');
+
+    let msg = `تم تطبيق حضور يوم ${dayLabel}: (${appliedCount}) حاضر، (${Math.max(0, rowElements.length - appliedCount)}) غائب`;
+    if (matchedFullIds.size > 0 || matchedHalfIds.size > 0) {
+        msg += ` | السهرات: (${matchedFullIds.size + matchedHalfIds.size})`;
+    }
+    showMessage(msg, 'success');
+
+    if (unrecognized.length > 0) {
+        setTimeout(() => {
+            showMessage(`تنبيه: لم يتم التعرف على (${unrecognized.length}) اسم: ${unrecognized.slice(0, 5).join('، ')}${unrecognized.length > 5 ? '...' : ''}`, 'warning');
+        }, 1500);
+    }
+}
+
 function bindEvents() {
     document.addEventListener('click', handleUnsavedAttendanceNavigation, true);
     document.getElementById('addWorkerBtn').addEventListener('click', () => openWorkerModal());
@@ -1152,6 +2113,84 @@ function bindEvents() {
     if (saveWeekBtnTop) {
         saveWeekBtnTop.addEventListener('click', saveWeekAttendance);
     }
+    const smartBtn = document.getElementById('smartAttendanceBtn');
+    if (smartBtn) {
+        smartBtn.addEventListener('click', openSmartAttendanceModal);
+    }
+    const applySmartBtn = document.getElementById('applySmartAttendanceBtn');
+    if (applySmartBtn) {
+        applySmartBtn.addEventListener('click', applySmartAttendance);
+    }
+    const smartPresentInput = document.getElementById('smartPresentNamesInput');
+    if (smartPresentInput) {
+        smartPresentInput.addEventListener('input', updateSmartAttendancePreview);
+        smartPresentInput.addEventListener('blur', () => deduplicateTextarea('smartPresentNamesInput'));
+        smartPresentInput.addEventListener('paste', () => {
+            setTimeout(() => deduplicateTextarea('smartPresentNamesInput'), 50);
+        });
+    }
+    const smartFullOvertimeInput = document.getElementById('smartFullOvertimeNamesInput');
+    if (smartFullOvertimeInput) {
+        smartFullOvertimeInput.addEventListener('input', updateSmartAttendancePreview);
+        smartFullOvertimeInput.addEventListener('blur', () => deduplicateTextarea('smartFullOvertimeNamesInput'));
+        smartFullOvertimeInput.addEventListener('paste', () => {
+            setTimeout(() => deduplicateTextarea('smartFullOvertimeNamesInput'), 50);
+        });
+    }
+    const smartHalfOvertimeInput = document.getElementById('smartHalfOvertimeNamesInput');
+    if (smartHalfOvertimeInput) {
+        smartHalfOvertimeInput.addEventListener('input', updateSmartAttendancePreview);
+        smartHalfOvertimeInput.addEventListener('blur', () => deduplicateTextarea('smartHalfOvertimeNamesInput'));
+        smartHalfOvertimeInput.addEventListener('paste', () => {
+            setTimeout(() => deduplicateTextarea('smartHalfOvertimeNamesInput'), 50);
+        });
+    }
+    document.getElementById('smartAttendanceDaySelect')?.addEventListener('change', checkExistingDayAttendance);
+    document.getElementById('smartAttendanceModal')?.addEventListener('click', (event) => {
+        const absentBadge = event.target.closest('.badge-absent, .badge-absent-zero');
+        if (absentBadge) {
+            openAbsentWorkersModal();
+            return;
+        }
+        const suggestionBtn = event.target.closest('.pill-suggestion-btn');
+        if (suggestionBtn) {
+            event.stopPropagation();
+            const textareaId = suggestionBtn.dataset.textareaId;
+            const fromName = suggestionBtn.dataset.replaceFrom;
+            const toName = suggestionBtn.dataset.replaceTo;
+            if (textareaId && fromName && toName) {
+                replaceNameInTextarea(textareaId, fromName, toName);
+            }
+            return;
+        }
+        const clearBtn = event.target.closest('.smart-clear-btn[data-clear-target]');
+        if (clearBtn) {
+            const targetId = clearBtn.dataset.clearTarget;
+            const target = document.getElementById(targetId);
+            if (target) {
+                target.value = '';
+                updateSmartAttendancePreview();
+                target.focus();
+            }
+            return;
+        }
+        const clearAllBtn = event.target.closest('#smartClearAllBtn');
+        if (clearAllBtn) {
+            resetSmartAttendanceForm();
+            return;
+        }
+        const pill = event.target.closest('.name-pill[data-textarea-id]');
+        if (!pill) return;
+        const textareaId = pill.dataset.textareaId;
+        const targetName = pill.dataset.targetName;
+        const action = pill.dataset.action;
+        if (action === 'dedupe') {
+            deduplicateTextarea(textareaId);
+        }
+        if (textareaId && targetName) {
+            selectNameInTextarea(textareaId, targetName);
+        }
+    });
     document.getElementById('workerForm').addEventListener('submit', saveWorker);
     document.getElementById('advanceForm').addEventListener('submit', saveAdvance);
     document.getElementById('cancelAdvanceEditBtn').addEventListener('click', resetAdvanceForm);
@@ -1320,12 +2359,44 @@ function bindEvents() {
 
     document.querySelectorAll('.workers-modal-overlay').forEach((overlay) => {
         overlay.addEventListener('click', (event) => {
-            if (event.target === overlay) closeModal(overlay.id);
+            if (event.target !== overlay) return;
+            if (overlay.id === 'smartAttendanceModal') {
+                const card = overlay.querySelector('.workers-modal');
+                if (card) {
+                    card.classList.remove('modal-protect-pulse');
+                    void card.offsetWidth;
+                    card.classList.add('modal-protect-pulse');
+                }
+                return;
+            }
+            closeModal(overlay.id);
         });
+    });
+
+    document.getElementById('absentWorkersSearchInput')?.addEventListener('input', (event) => {
+        renderAbsentWorkersList(event.target.value);
+    });
+
+    document.getElementById('copyAbsentWorkersBtn')?.addEventListener('click', copyAbsentWorkers);
+
+    document.getElementById('absentWorkersModal')?.addEventListener('click', (event) => {
+        const addBtn = event.target.closest('.absent-worker-add-btn');
+        if (addBtn) {
+            const name = addBtn.dataset.workerName;
+            if (name) addAbsentWorkerToPresent(name);
+        }
     });
 
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
+        if (!document.getElementById('absentWorkersModal')?.classList.contains('hidden')) {
+            closeModal('absentWorkersModal');
+            return;
+        }
+        if (!document.getElementById('smartAttendanceModal').classList.contains('hidden')) {
+            closeModal('smartAttendanceModal');
+            return;
+        }
         if (!document.getElementById('advanceModal').classList.contains('hidden')) {
             closeModal('advanceModal');
             return;
@@ -1361,6 +2432,31 @@ function bindEvents() {
             renderRows();
         });
     }
+
+    document.addEventListener('wheel', (event) => {
+        if (!document.documentElement.classList.contains('workers-modal-open')) return;
+        let el = event.target;
+        let canScroll = false;
+        while (el && el !== document.body && el !== document.documentElement) {
+            if (el.matches('textarea, .smart-names-pills, .absent-workers-list-wrap, #workerAdvancesList')) {
+                const hasScroll = el.scrollHeight > el.clientHeight;
+                if (hasScroll) {
+                    const isScrollingUp = event.deltaY < 0;
+                    const isScrollingDown = event.deltaY > 0;
+                    const atTop = el.scrollTop <= 0;
+                    const atBottom = Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
+                    if ((isScrollingUp && !atTop) || (isScrollingDown && !atBottom)) {
+                        canScroll = true;
+                        break;
+                    }
+                }
+            }
+            el = el.parentElement;
+        }
+        if (!canScroll) {
+            event.preventDefault();
+        }
+    }, { passive: false });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

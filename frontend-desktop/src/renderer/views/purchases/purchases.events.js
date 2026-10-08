@@ -35,6 +35,15 @@
                     return;
                 }
 
+                if (action === 'view-supplier-report') {
+                    if (typeof handlers.onViewSupplierReport === 'function') {
+                        handlers.onViewSupplierReport();
+                    } else if (dom.supplierSelect && dom.supplierSelect.value) {
+                        window.location.href = '../customer-reports/index.html?customerId=' + encodeURIComponent(dom.supplierSelect.value);
+                    }
+                    return;
+                }
+
                 if (action === 'open-weights') {
                     handlers.onOpenWeights(actionEl);
                     return;

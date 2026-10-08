@@ -86,7 +86,7 @@
                                 <h3 class="items-section-title">${t('purchases.invoiceItems', 'أصناف الفاتورة')}</h3>
                                 <div class="items-balance-row">
                                     <div id="supplierBalance" class="customer-balance" style="display: none;"></div>
-                                    <button type="button" id="btnSupplierReport" class="btn-icon supplier-report-btn" style="display: none;" title="${t('purchases.viewReport', 'كشف حساب المورد')}">
+                                    <button type="button" id="btnSupplierReport" class="btn-icon supplier-report-btn" data-action="view-supplier-report" style="display: none;" title="${t('purchases.viewReport', 'كشف حساب المورد')}">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                     </button>
                                 </div>

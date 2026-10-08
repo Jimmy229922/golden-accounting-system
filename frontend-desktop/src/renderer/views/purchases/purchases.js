@@ -60,6 +60,7 @@ function initializeElements() {
         dom: purchasesState.dom,
         handlers: {
             onSupplierChange: handleSupplierChange,
+            onViewSupplierReport: openSupplierReport,
             onAddRow: () => addInvoiceRow(),
             onSubmitInvoice: submitInvoice,
             onLoadPrevInvoice: () => navigateInvoice(-1),
@@ -231,8 +232,10 @@ function setEditLocked(locked) {
             control.dataset.action === 'submit-invoice' ||
             control.dataset.action === 'load-prev-invoice' ||
             control.dataset.action === 'load-next-invoice' ||
+            control.dataset.action === 'view-supplier-report' ||
             control.id === 'cancelEditBtn' ||
-            control.id === 'deleteInvoiceBtn'
+            control.id === 'deleteInvoiceBtn' ||
+            control.id === 'btnSupplierReport'
         ) return;
         control.disabled = lockActive;
 
@@ -310,26 +313,44 @@ function setEditLocked(locked) {
     }
 }
 
+function openSupplierReport() {
+    const supplierId = purchasesState.dom.supplierSelect?.value;
+    if (supplierId) {
+        window.location.href = '../customer-reports/index.html?customerId=' + encodeURIComponent(supplierId);
+    }
+}
+
+function updateSupplierReportButton() {
+    const btnReport = document.getElementById('btnSupplierReport');
+    if (!btnReport) return;
+
+    const supplierId = purchasesState.dom.supplierSelect?.value;
+    if (supplierId) {
+        btnReport.style.display = 'inline-flex';
+        btnReport.disabled = false;
+        btnReport.style.cursor = 'pointer';
+        btnReport.onclick = () => {
+            openSupplierReport();
+        };
+    } else {
+        btnReport.style.display = 'none';
+        btnReport.onclick = null;
+    }
+}
+
 async function handleSupplierChange() {
     if (isEditLocked()) return;
 
     if (!purchasesState.dom.supplierSelect || !purchasesState.dom.invoiceItemsBody) return;
 
-    const btnReport = document.getElementById('btnSupplierReport');
+    updateSupplierReportButton();
 
     if (purchasesState.dom.supplierSelect.value) {
-        if (btnReport) {
-            btnReport.style.display = 'inline-flex';
-            btnReport.onclick = () => {
-                window.location.href = `../customer-reports/index.html?customerId=${purchasesState.dom.supplierSelect.value}`;
-            };
-        }
         await displaySupplierBalance();
         if (purchasesState.dom.invoiceItemsBody.children.length === 0) {
             addInvoiceRow();
         }
     } else {
-        if (btnReport) btnReport.style.display = 'none';
         const balanceDiv = document.getElementById('supplierBalance');
         if (balanceDiv) balanceDiv.style.display = 'none';
         clearSelectedItemAvailability();
@@ -377,6 +398,8 @@ async function loadInvoiceForEdit(id) {
 
         purchasesState.dom.supplierSelect.value = invoice.supplier_id;
         if (purchasesState.supplierAutocomplete) purchasesState.supplierAutocomplete.refresh();
+        updateSupplierReportButton();
+        await displaySupplierBalance();
         updateDeleteButtonState();
 
         const invoiceNumberInput = document.getElementById('invoiceNumber');
@@ -1933,6 +1956,7 @@ async function updateInvoice() {
 async function resetForm() {
     purchasesState.dom.supplierSelect.value = '';
     if (purchasesState.supplierAutocomplete) purchasesState.supplierAutocomplete.refresh();
+    updateSupplierReportButton();
 
     const balanceDiv = document.getElementById('supplierBalance');
     if (balanceDiv) balanceDiv.style.display = 'none';
