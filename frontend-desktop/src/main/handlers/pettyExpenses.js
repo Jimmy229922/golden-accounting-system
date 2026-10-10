@@ -6,7 +6,8 @@ const { db } = require('../db');
 const DEFAULT_PAGE_SIZE = 50;
 
 function roundMoney(value) {
-    const n = Number(value) || 0;
+    const clean = typeof value === 'string' ? value.replace(/,/g, '') : value;
+    const n = Number(clean) || 0;
     return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
@@ -82,7 +83,8 @@ function register() {
                 }
 
                 if (params.amount !== undefined && params.amount !== null && String(params.amount).trim() !== '') {
-                    const parsedAmount = Number(params.amount);
+                    const cleanAmount = typeof params.amount === 'string' ? params.amount.replace(/,/g, '') : params.amount;
+                    const parsedAmount = Number(cleanAmount);
                     if (!Number.isNaN(parsedAmount)) {
                         where.push('amount = @amount');
                         args.amount = parsedAmount;

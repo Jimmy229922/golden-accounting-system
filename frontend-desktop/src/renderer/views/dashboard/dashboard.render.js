@@ -112,21 +112,21 @@
             </div>
 
             <section class="metrics-grid">
-                <div class="metric-card">
+                <div class="metric-card interactive-card" id="totalExpensesCard" style="cursor: pointer; position: relative" onclick="window.showExpensesDetails()">
                     <div class="metric-header">
-                        <div class="metric-icon"><i class="fas fa-chart-line"></i></div>
+                        <div class="metric-icon"><i class="fas fa-receipt"></i></div>
                     </div>
-                    <h3 class="metric-value" id="salesMonth">—</h3>
-                    <p class="metric-label">${t('dashboard.salesMonth', 'إجمالي المبيعات')}</p>
-                    <div class="metric-trend" id="salesMonthTrend"></div>
+                    <h3 class="metric-value" id="totalExpenses">—</h3>
+                    <p class="metric-label">${t('dashboard.totalExpenses', 'إجمالي المصروفات')}</p>
+                    <div class="metric-trend" id="totalExpensesTrend"></div>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card interactive-card" id="totalRevenuesCard" style="cursor: pointer; position: relative" onclick="window.showRevenuesDetails()">
                     <div class="metric-header">
-                        <div class="metric-icon"><i class="fas fa-shopping-basket"></i></div>
+                        <div class="metric-icon"><i class="fas fa-sack-dollar"></i></div>
                     </div>
-                    <h3 class="metric-value" id="purchasesMonth">—</h3>
-                    <p class="metric-label">${t('dashboard.purchasesMonth', 'إجمالي المشتريات')}</p>
-                    <div class="metric-trend" id="purchasesMonthTrend"></div>
+                    <h3 class="metric-value" id="totalRevenues">—</h3>
+                    <p class="metric-label">${t('dashboard.totalRevenues', 'الإيرادات')}</p>
+                    <div class="metric-trend" id="totalRevenuesTrend"></div>
                 </div>
                   <div class="metric-card interactive-card" id="netProfitCard" style="cursor: pointer; position: relative" onclick="window.showNetProfitDetails()">
                     <div class="metric-header">
@@ -137,10 +137,11 @@
                 </div>
                 <div class="metric-card">
                     <div class="metric-header">
-                        <div class="metric-icon"><i class="fas fa-landmark"></i></div>
+                        <div class="metric-icon"><i class="fas fa-shopping-basket"></i></div>
                     </div>
-                    <h3 class="metric-value" id="treasuryBalance">—</h3>
-                    <p class="metric-label">${t('dashboard.treasuryBalance', 'رصيد الخزينة')}</p>
+                    <h3 class="metric-value" id="purchasesMonth">—</h3>
+                    <p class="metric-label">${t('dashboard.purchasesMonth', 'إجمالي المشتريات')}</p>
+                    <div class="metric-trend" id="purchasesMonthTrend"></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-header">
@@ -151,10 +152,10 @@
                 </div>
                 <div class="metric-card">
                     <div class="metric-header">
-                        <div class="metric-icon"><i class="fas fa-tags"></i></div>
+                        <div class="metric-icon"><i class="fas fa-landmark"></i></div>
                     </div>
-                    <h3 class="metric-value" id="itemsCount">—</h3>
-                    <p class="metric-label">${t('dashboard.itemsCount', 'عدد الأصناف المسجلة')}</p>
+                    <h3 class="metric-value" id="treasuryBalance">—</h3>
+                    <p class="metric-label">${t('dashboard.treasuryBalance', 'رصيد الخزينة')}</p>
                 </div>
                 <div class="metric-card">
                     <div class="metric-header">
@@ -302,7 +303,7 @@
             <td>${tx.date || '—'}</td>
             <td><span class="type-badge type-${tx.type}">${tx.type === 'sale' ? t('dashboard.saleType', 'بيع') : t('dashboard.purchaseType', 'شراء')}</span></td>
             <td>${tx.party_name || '—'}</td>
-            <td><strong>${(tx.amount || 0).toFixed(2)}</strong></td>
+            <td><strong>${(Number(tx.amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
         </tr>
     `;
         }).join('');

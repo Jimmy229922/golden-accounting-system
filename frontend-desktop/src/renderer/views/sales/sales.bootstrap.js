@@ -98,11 +98,44 @@ function initializeElements() {
     }
 
     if (salesState.dom.discountValueInput) {
-        salesState.dom.discountValueInput.addEventListener('input', () => calculateInvoiceTotal());
+        salesState.dom.discountValueInput.addEventListener('input', (e) => {
+            if (salesState.dom.discountTypeSelect?.value === 'amount') {
+                formatInputWithCursor(e.target);
+            }
+            calculateInvoiceTotal();
+        });
+        salesState.dom.discountValueInput.addEventListener('keydown', (e) => {
+            if (salesState.dom.discountTypeSelect?.value === 'amount' && e.key === 'Backspace') {
+                const input = e.target;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === end && start > 0 && input.value[start - 1] === ',') {
+                    e.preventDefault();
+                    const val = input.value;
+                    input.value = val.slice(0, start - 2) + val.slice(start);
+                    input.setSelectionRange(start - 2, start - 2);
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+        });
     }
 
     if (salesState.dom.paidAmountInput) {
         salesState.dom.paidAmountInput.addEventListener('input', handlePaidAmountInput);
+        salesState.dom.paidAmountInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                const input = e.target;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === end && start > 0 && input.value[start - 1] === ',') {
+                    e.preventDefault();
+                    const val = input.value;
+                    input.value = val.slice(0, start - 2) + val.slice(start);
+                    input.setSelectionRange(start - 2, start - 2);
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+        });
     }
 
     const invoiceNumberInput = document.getElementById('invoiceNumber');
@@ -1783,7 +1816,58 @@ function formatMoneyInputValue(value) {
     if (!normalized) return '';
 
     const parts = normalized.split('.');
+    const integerPart = (parts.shift() || '').replace(/[^0-9]/g, '');
+    const decimalPart = parts.join('').replace(/[^0-9]/g, '');
+    const formattedInteger = (integerPart ? Number(integerPart) : 0).toLocaleString('en-US');
+    const hasDot = normalized.includes('.');
 
+    if (hasDot) {
+        return `${formattedInteger}.${decimalPart}`;
+    }
+
+    return formattedInteger;
+}
+
+function formatInputWithCursor(input) {
+    if (!input) return;
+    const val = input.value || '';
+    const oldCursor = input.selectionStart ?? val.length;
+
+    let digitCount = 0;
+    for (let i = 0; i < oldCursor && i < val.length; i++) {
+        if (/[0-9.]/.test(val[i])) digitCount++;
+    }
+
+    const formatted = formatMoneyInputValue(val);
+    input.value = formatted;
+
+    let newCursor = formatted.length;
+    let currentDigits = 0;
+    for (let i = 0; i < formatted.length; i++) {
+        if (/[0-9.]/.test(formatted[i])) {
+            currentDigits++;
+        }
+        if (currentDigits === digitCount) {
+            newCursor = i + 1;
+            break;
+        }
+    }
+
+    try {
+        input.setSelectionRange(newCursor, newCursor);
+    } catch (_) {}
+}
+
+function handlePaidAmountInput(event) {
+    const input = event?.target;
+    if (!input) return;
+    formatInputWithCursor(input);
+    calculateInvoiceTotal();
+}
+
+function getInvoiceFinancials(subtotal) {
+    const safeSubtotal = Number.isFinite(subtotal) && subtotal > 0 ? subtotal : 0;
+    const discountType = salesState.dom.discountTypeSelect?.value || 'amount';
     const discountValueRaw = parseLocaleFloat(salesState.dom.discountValueInput?.value || '0');
     const discountValue = Number.isFinite(discountValueRaw) && discountValueRaw > 0 ? discountValueRaw : 0;
 

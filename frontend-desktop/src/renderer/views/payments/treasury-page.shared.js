@@ -101,7 +101,21 @@
             document
                 .getElementById(config.ids.entitySelect)
                 .addEventListener('change', handleEntityChange);
-            document.getElementById('amount').addEventListener('input', handleAmountInput);
+            const amountInput = document.getElementById('amount');
+            amountInput.addEventListener('input', handleAmountInput);
+            amountInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace') {
+                    const start = amountInput.selectionStart;
+                    const end = amountInput.selectionEnd;
+                    if (start === end && start > 0 && amountInput.value[start - 1] === ',') {
+                        e.preventDefault();
+                        const val = amountInput.value;
+                        amountInput.value = val.slice(0, start - 2) + val.slice(start);
+                        amountInput.setSelectionRange(start - 2, start - 2);
+                        amountInput.dispatchEvent(new Event('input'));
+                    }
+                }
+            });
             document.getElementById('voucherSearchBtn').addEventListener('click', searchVoucher);
         }
 
@@ -127,6 +141,12 @@
             return Number.isFinite(num) ? num : NaN;
         }
 
+        function formatMoney(value) {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return '0.00';
+            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
         function formatMoneyInput(value) {
             const normalized = normalizeNumberString(value);
             if (!normalized) return '';
@@ -144,10 +164,40 @@
             return formattedInteger;
         }
 
+        function formatInputWithCursor(input) {
+            if (!input) return;
+            const val = input.value || '';
+            const oldCursor = input.selectionStart ?? val.length;
+
+            let digitCount = 0;
+            for (let i = 0; i < oldCursor && i < val.length; i++) {
+                if (/[0-9.]/.test(val[i])) digitCount++;
+            }
+
+            const formatted = formatMoneyInput(val);
+            input.value = formatted;
+
+            let newCursor = formatted.length;
+            let currentDigits = 0;
+            for (let i = 0; i < formatted.length; i++) {
+                if (/[0-9.]/.test(formatted[i])) {
+                    currentDigits++;
+                }
+                if (currentDigits === digitCount) {
+                    newCursor = i + 1;
+                    break;
+                }
+            }
+
+            try {
+                input.setSelectionRange(newCursor, newCursor);
+            } catch (_) {}
+        }
+
         function handleAmountInput(event) {
             const input = event?.target;
             if (!input) return;
-            input.value = formatMoneyInput(input.value);
+            formatInputWithCursor(input);
             updatePreview();
         }
 
@@ -202,7 +252,7 @@
                     option.value = entity.id;
                     option.textContent = `${entity.name} ${
                         entity.balance > 0
-                            ? fmt(text('owedSuffix'), { amount: entity.balance.toFixed(2) })
+                            ? fmt(text('owedSuffix'), { amount: formatMoney(entity.balance) })
                             : ''
                     }`;
                     select.appendChild(option);
@@ -324,10 +374,10 @@
 
         function formatBalancePreview(balance) {
             if (balance > 0) {
-                return `${balance.toFixed(2)} ${text('balanceOwed')}`;
+                return `${formatMoney(balance)} ${text('balanceOwed')}`;
             }
             if (balance < 0) {
-                return `${Math.abs(balance).toFixed(2)} ${text('balanceCredit')}`;
+                return `${formatMoney(Math.abs(balance))} ${text('balanceCredit')}`;
             }
             return `0.00 ${text('balanceBalanced')}`;
         }
@@ -383,17 +433,17 @@
             const todayTotal = recentTransactions
                 .filter((tr) => tr.transaction_date === today)
                 .reduce((sum, tr) => sum + tr.amount, 0);
-            document.getElementById(config.ids.todayStat).textContent = todayTotal.toFixed(2);
+            document.getElementById(config.ids.todayStat).textContent = formatMoney(todayTotal);
 
             const positiveBalanceEntities = allEntities.filter((entity) => entity.balance > 0);
-            document.getElementById(config.ids.countStat).textContent = positiveBalanceEntities.length;
+            document.getElementById(config.ids.countStat).textContent = Number(positiveBalanceEntities.length).toLocaleString('en-US');
 
             const totalPositiveBalance = positiveBalanceEntities.reduce(
                 (sum, entity) => sum + entity.balance,
                 0
             );
             document.getElementById(config.ids.totalStat).textContent =
-                totalPositiveBalance.toFixed(2);
+                formatMoney(totalPositiveBalance);
         }
 
         function setQuickAmount(amount) {

@@ -122,7 +122,7 @@ timeout /t 2 >nul
 exit /b 0
 
 :check_backend_health
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -Uri '%BACKEND_HEALTH_URL%' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 300) { exit 0 } else { exit 1 } } catch { exit 1 }"
+netstat -ano -p tcp | findstr /R /C:":4000 " >nul 2>&1
 exit /b %ERRORLEVEL%
 
 :wait_backend_health

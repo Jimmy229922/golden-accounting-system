@@ -142,9 +142,38 @@ function updateEgyptianAmount() {
 
 function attachNumberFormatting(input) {
     input.addEventListener('input', () => {
-        const formatted = formatInputValue(input.value);
+        const val = input.value || '';
+        const oldCursor = input.selectionStart ?? val.length;
+        let digitCount = 0;
+        for (let i = 0; i < oldCursor && i < val.length; i++) {
+            if (/[0-9.]/.test(val[i])) digitCount++;
+        }
+        const formatted = formatInputValue(val);
         input.value = formatted;
+        let newCursor = formatted.length;
+        let currentDigits = 0;
+        for (let i = 0; i < formatted.length; i++) {
+            if (/[0-9.]/.test(formatted[i])) currentDigits++;
+            if (currentDigits === digitCount) {
+                newCursor = i + 1;
+                break;
+            }
+        }
+        try { input.setSelectionRange(newCursor, newCursor); } catch (_) {}
         updateEgyptianAmount();
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace') {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            if (start === end && start > 0 && input.value[start - 1] === ',') {
+                e.preventDefault();
+                const val = input.value;
+                input.value = val.slice(0, start - 2) + val.slice(start);
+                input.setSelectionRange(start - 2, start - 2);
+                input.dispatchEvent(new Event('input'));
+            }
+        }
     });
 }
 

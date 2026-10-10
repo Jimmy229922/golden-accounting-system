@@ -97,11 +97,44 @@ function initializeElements() {
     }
 
     if (purchasesState.dom.discountValueInput) {
-        purchasesState.dom.discountValueInput.addEventListener('input', () => calculateInvoiceTotal());
+        purchasesState.dom.discountValueInput.addEventListener('input', (e) => {
+            if (purchasesState.dom.discountTypeSelect?.value === 'amount') {
+                formatInputWithCursor(e.target);
+            }
+            calculateInvoiceTotal();
+        });
+        purchasesState.dom.discountValueInput.addEventListener('keydown', (e) => {
+            if (purchasesState.dom.discountTypeSelect?.value === 'amount' && e.key === 'Backspace') {
+                const input = e.target;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === end && start > 0 && input.value[start - 1] === ',') {
+                    e.preventDefault();
+                    const val = input.value;
+                    input.value = val.slice(0, start - 2) + val.slice(start);
+                    input.setSelectionRange(start - 2, start - 2);
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+        });
     }
 
     if (purchasesState.dom.paidAmountInput) {
         purchasesState.dom.paidAmountInput.addEventListener('input', handlePaidAmountInput);
+        purchasesState.dom.paidAmountInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                const input = e.target;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === end && start > 0 && input.value[start - 1] === ',') {
+                    e.preventDefault();
+                    const val = input.value;
+                    input.value = val.slice(0, start - 2) + val.slice(start);
+                    input.setSelectionRange(start - 2, start - 2);
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+        });
     }
 
     if (purchasesState.dom.invoiceRemainingSpan) {
@@ -110,6 +143,20 @@ function initializeElements() {
             formatInputWithCursor(event.target);
             if (purchasesState.dom.resetRemainingBtn) {
                 purchasesState.dom.resetRemainingBtn.style.display = 'inline-block';
+            }
+        });
+        purchasesState.dom.invoiceRemainingSpan.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                const input = e.target;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === end && start > 0 && input.value[start - 1] === ',') {
+                    e.preventDefault();
+                    const val = input.value;
+                    input.value = val.slice(0, start - 2) + val.slice(start);
+                    input.setSelectionRange(start - 2, start - 2);
+                    input.dispatchEvent(new Event('input'));
+                }
             }
         });
     }

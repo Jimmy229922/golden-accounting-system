@@ -193,12 +193,12 @@ function updateTotalPreview() {
 
     const priceInput = document.getElementById('tonPrice');
     if (priceInput) {
-        priceInput.value = avgPrice > 0 ? avgPrice.toFixed(2) : '0.00';
+        priceInput.value = avgPrice > 0 ? formatMoney(avgPrice) : '0.00';
     }
 
     const totalInput = document.getElementById('totalUsd');
     if (totalInput) {
-        totalInput.value = totalUsd.toFixed(2);
+        totalInput.value = formatMoney(totalUsd);
     }
 
     const discountInput = document.getElementById('discountUsd');
@@ -210,7 +210,7 @@ function updateTotalPreview() {
     const net = Math.max(0, totalUsd - discount);
     const netInput = document.getElementById('netUsd');
     if (netInput) {
-        netInput.value = net.toFixed(2);
+        netInput.value = formatMoney(net);
     }
 }
 

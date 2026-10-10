@@ -692,16 +692,53 @@ function register() {
             `).get(...invoiceRange.params).total;
             const purchasesMonth = purchasesTotalMonth;
 
-            // --- Net profit (sales revenue - COGS this month) ---
-            const cogsMonthSales = db.prepare(`
-                SELECT COALESCE(SUM(sid.quantity * COALESCE(NULLIF(sid.cost_price, 0), i.cost_price, 0)), 0) as total
-                FROM sales_invoice_details sid
-                JOIN sales_invoices si ON sid.invoice_id = si.id
-                JOIN items i ON sid.item_id = i.id
-                WHERE 1=1${salesInvoiceRange.clause}
-            `).get(...salesInvoiceRange.params).total;
-            const cogsMonth = cogsMonthSales;
-            const netProfit = salesMonth - cogsMonth;
+            const pettyRange = buildRangeClause('expense_date', startDate, endDate);
+            const pettyStats = db.prepare(`
+                SELECT 
+                    COALESCE(SUM(CASE WHEN category = 'general' THEN amount ELSE 0 END), 0) as pettyGeneral,
+                    COALESCE(SUM(CASE WHEN category = 'bags' THEN amount ELSE 0 END), 0) as pettyBags,
+                    COALESCE(SUM(CASE WHEN category = 'inspection' THEN amount ELSE 0 END), 0) as pettyInspection,
+                    COALESCE(SUM(CASE WHEN category = 'shipping_clearance' THEN amount ELSE 0 END), 0) as pettyShippingClearance,
+                    COALESCE(SUM(CASE WHEN category = 'operation' THEN amount ELSE 0 END), 0) as pettyOperation,
+                    COALESCE(SUM(amount), 0) as pettyTotal
+                FROM petty_expenses
+                WHERE category IN ('general', 'bags', 'inspection', 'shipping_clearance', 'operation')
+                ${pettyRange.clause}
+            `).get(...pettyRange.params) || {
+                pettyGeneral: 0,
+                pettyBags: 0,
+                pettyInspection: 0,
+                pettyShippingClearance: 0,
+                pettyOperation: 0,
+                pettyTotal: 0
+            };
+
+            let effectivePurchaseOpeningBalance = 0;
+            if (!startDate || /^\d{4}-01-01$/.test(startDate)) {
+                const openingRow = db.prepare("SELECT value FROM settings WHERE key = 'reports_purchase_opening_balance'").get();
+                effectivePurchaseOpeningBalance = openingRow ? (Number(openingRow.value) || 0) : 0;
+            }
+            const generalReportsPurchasesTotal = purchasesTotalMonth + effectivePurchaseOpeningBalance;
+            const totalExpenses = (pettyStats.pettyTotal || 0) + generalReportsPurchasesTotal;
+
+            const revenuesRange = buildRangeClause('record_date', startDate, endDate);
+            const exportRevenuesRow = db.prepare(`
+                SELECT COALESCE(SUM(amount_egp), 0) as totalEgp
+                FROM export_revenues
+                WHERE 1=1${revenuesRange.clause}
+            `).get(...revenuesRange.params);
+            const exportRevenuesEgp = exportRevenuesRow ? (exportRevenuesRow.totalEgp || 0) : 0;
+
+            const localSalesRow = db.prepare(`
+                SELECT COALESCE(SUM(total), 0) as totalAmount
+                FROM local_sales
+                WHERE 1=1${revenuesRange.clause}
+            `).get(...revenuesRange.params);
+            const localSalesTotal = localSalesRow ? (localSalesRow.totalAmount || 0) : 0;
+
+            const totalRevenues = exportRevenuesEgp + localSalesTotal;
+
+            const netProfit = totalRevenues - totalExpenses;
 
             // --- Treasury balance ---
             const treasuryIncome = db.prepare(`
@@ -789,9 +826,10 @@ function register() {
                 GROUP BY sid.item_id ORDER BY total_qty DESC LIMIT 5
             `).all();
 
-            // --- Trends (current vs previous period) ---
             let prevSalesMonth = salesMonth;
             let prevPurchasesMonth = purchasesMonth;
+            let prevTotalExpenses = totalExpenses;
+            let prevTotalRevenues = totalRevenues;
 
             if (startDate && endDate) {
                 const rangeStart = new Date(`${startDate}T00:00:00`);
@@ -816,6 +854,37 @@ function register() {
                         FROM purchase_invoices WHERE 1=1${prevInvoiceRange.clause}
                     `).get(...prevInvoiceRange.params).total;
                     prevPurchasesMonth = prevPurchasesTotal;
+
+                    const prevPettyRange = buildRangeClause('expense_date', prevStartStr, prevEndStr);
+                    const prevPettyRow = db.prepare(`
+                        SELECT COALESCE(SUM(amount), 0) as total
+                        FROM petty_expenses
+                        WHERE category IN ('general', 'bags', 'inspection', 'shipping_clearance', 'operation')
+                        ${prevPettyRange.clause}
+                    `).get(...prevPettyRange.params);
+                    const prevPettyTotal = (prevPettyRow && prevPettyRow.total) || 0;
+                    let prevPurchaseOpening = 0;
+                    if (!prevStartStr || /^\d{4}-01-01$/.test(prevStartStr)) {
+                        prevPurchaseOpening = effectivePurchaseOpeningBalance;
+                    }
+                    prevTotalExpenses = prevPettyTotal + prevPurchasesTotal + prevPurchaseOpening;
+
+                    const prevRevenuesRange = buildRangeClause('record_date', prevStartStr, prevEndStr);
+                    const prevExportRow = db.prepare(`
+                        SELECT COALESCE(SUM(amount_egp), 0) as total
+                        FROM export_revenues
+                        WHERE 1=1${prevRevenuesRange.clause}
+                    `).get(...prevRevenuesRange.params);
+                    const prevExportTotal = (prevExportRow && prevExportRow.total) || 0;
+
+                    const prevLocalRow = db.prepare(`
+                        SELECT COALESCE(SUM(total), 0) as total
+                        FROM local_sales
+                        WHERE 1=1${prevRevenuesRange.clause}
+                    `).get(...prevRevenuesRange.params);
+                    const prevLocalTotal = (prevLocalRow && prevLocalRow.total) || 0;
+
+                    prevTotalRevenues = prevExportTotal + prevLocalTotal;
                 }
             }
 
@@ -827,14 +896,30 @@ function register() {
             return {
                 customersCount, suppliersCount, itemsCount, stockValue,
                 salesToday, salesMonth, purchasesToday, purchasesMonth,
+                totalExpenses,
+                totalRevenues,
+                revenuesBreakdown: {
+                    exportRevenuesEgp,
+                    localSalesTotal,
+                    totalRevenues
+                },
+                expensesBreakdown: {
+                    pettyGeneral: pettyStats.pettyGeneral || 0,
+                    pettyBags: pettyStats.pettyBags || 0,
+                    pettyInspection: pettyStats.pettyInspection || 0,
+                    pettyShippingClearance: pettyStats.pettyShippingClearance || 0,
+                    pettyOperation: pettyStats.pettyOperation || 0,
+                    purchasesInvoices: purchasesTotalMonth,
+                    purchaseOpeningBalance: effectivePurchaseOpeningBalance,
+                    purchasesTotal: generalReportsPurchasesTotal,
+                    totalExpenses
+                },
                 netProfit, treasuryBalance, receivables, payables,
                 chartData: { dailySales, dailyPurchases },
                 recentTransactions,
                 profitDetails: {
-                    salesTotalMonth,
-                    salesMonth,
-                    cogsMonthSales,
-                    cogsMonth,
+                    totalRevenues,
+                    totalExpenses,
                     netProfit
                 },
                 alerts: { lowStockItems, highReceivables, oldInvoices },
@@ -846,6 +931,8 @@ function register() {
                 },
                 topItems,
                 trends: {
+                    totalExpenses: calcTrend(totalExpenses, prevTotalExpenses),
+                    totalRevenues: calcTrend(totalRevenues, prevTotalRevenues),
                     salesMonth: calcTrend(salesMonth, prevSalesMonth),
                     purchasesMonth: calcTrend(purchasesMonth, prevPurchasesMonth)
                 }

@@ -105,6 +105,8 @@
     "salesMonth": "إجمالي المبيعات",
     "purchasesToday": "مشتريات اليوم",
     "purchasesMonth": "إجمالي المشتريات",
+    "totalExpenses": "إجمالي المصروفات",
+    "totalRevenues": "الإيرادات",
     "dateFrom": "من تاريخ",
     "dateTo": "إلى تاريخ",
     "applyFilter": "تطبيق",

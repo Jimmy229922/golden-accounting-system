@@ -1,4 +1,4 @@
-﻿let inventoryTableBody, searchInput, itemCardModal, itemCardBody, modalItemName;
+let inventoryTableBody, searchInput, itemCardModal, itemCardBody, modalItemName;
 let damagedTableBody, damagedItemSelect, damagedWarehouseSelect, damagedQuantityInput, damagedReasonInput;
 let damagedBatchInput, damagedExpiryInput, damagedDateInput, damagedNotesInput, damagedManagerModal, damagedEditModal;
 let editDamagedId, editDamagedItemSelect, editDamagedWarehouseSelect, editDamagedQuantityInput, editDamagedReasonInput;
@@ -563,9 +563,9 @@ function renderDamagedEntries(entries) {
         row.innerHTML = `
             <td>${escapeHtml(formatDate(entry.damaged_date || entry.created_at))}</td>
             <td>${escapeHtml(entry.item_name || '')}</td>
-            <td>${Number(entry.quantity || 0).toFixed(4)}</td>
+            <td>${Number(entry.quantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</td>
             <td title="${escapeHtml(entry.reason || '')}">${escapeHtml(entry.reason || '')}</td>
-            <td>${Number(entry.loss_amount || 0).toFixed(2)}</td>
+            <td>${Number(entry.loss_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td class="inv-damaged-actions-cell">${actions}</td>
         `;
 
@@ -802,10 +802,10 @@ function renderTable(items) {
             <td>${item.barcode || '-'}</td>
             <td>${item.name}</td>
             <td>${item.unit_name || '-'}</td>
-            <td class="${quantityClass}">${item.stock_quantity}</td>
-            <td class="amount-cell">${item.cost_price.toFixed(2)}</td>
-            <td class="amount-cell">${item.sale_price.toFixed(2)}</td>
-            <td class="amount-cell">${totalValue.toFixed(2)}</td>
+            <td class="${quantityClass}">${Number(item.stock_quantity || 0).toLocaleString('en-US')}</td>
+            <td class="amount-cell">${Number(item.cost_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="amount-cell">${Number(item.sale_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="amount-cell">${Number(totalValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td>${statusBadge}</td>
             <td>
                 <button class="inv-btn-card" data-action="show-item-card" data-item-id="${item.id}" data-item-name="${encodedName}"><i class="fas fa-file-alt"></i> ${t('inventory.itemCard', '???? ?????')}</button>
@@ -821,12 +821,12 @@ function updateStats(items) {
     const totalSaleValue = items.reduce((sum, item) => sum + (item.stock_quantity * item.sale_price), 0);
     const profitMargin = totalSaleValue - totalCostValue;
     const lowStockCount = items.filter(item => item.stock_quantity <= (item.reorder_level || 0)).length;
-    document.getElementById('totalItems').textContent = totalItems;
-    document.getElementById('totalQuantity').textContent = totalQuantity;
-    document.getElementById('totalValue').textContent = totalCostValue.toFixed(2);
-    document.getElementById('totalSaleValue').textContent = totalSaleValue.toFixed(2);
-    document.getElementById('profitMargin').textContent = profitMargin.toFixed(2);
-    document.getElementById('lowStockCount').textContent = lowStockCount;
+    document.getElementById('totalItems').textContent = Number(totalItems).toLocaleString('en-US');
+    document.getElementById('totalQuantity').textContent = Number(totalQuantity).toLocaleString('en-US');
+    document.getElementById('totalValue').textContent = Number(totalCostValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('totalSaleValue').textContent = Number(totalSaleValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('profitMargin').textContent = Number(profitMargin).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('lowStockCount').textContent = Number(lowStockCount).toLocaleString('en-US');
 }
 function toggleShortages() {
     showShortagesOnly = !showShortagesOnly;

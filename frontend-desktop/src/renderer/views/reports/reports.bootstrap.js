@@ -23,9 +23,24 @@ let currentPage = 1;
 const PAGE_SIZE = 20;
 const CUR = 'ج.م';
 const PURCHASE_OPENING_BALANCE_KEY = 'reports_purchase_opening_balance';
+const PURCHASE_OPENING_BALANCE_ITEMS_KEY = 'reports_purchase_opening_balance_items';
 let purchaseOpeningBalanceValue = 0;
-let purchaseOpeningBalanceInput;
-let savePurchaseOpeningBalanceBtn;
+let purchaseOpeningBalanceItems = [];
+let modalDraftItems = [];
+let purchaseOpeningDisplayValue;
+let purchaseOpeningDisplayCount;
+let openPurchaseOpeningModalBtn;
+let purchaseOpeningModalEl;
+let purchaseOpeningModalCloseBtn;
+let cancelOpeningBalanceModalBtn;
+let saveOpeningBalanceModalBtn;
+let purchaseOpeningItemForm;
+let newOpeningItemAmount;
+let newOpeningItemNote;
+let purchaseOpeningTableBody;
+let purchaseOpeningEmptyState;
+let modalPurchaseOpeningTotal;
+let modalPurchaseOpeningCount;
 function formatCurrency(v) {
     const n = Number(v) || 0;
     return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + CUR;
@@ -110,6 +125,16 @@ function parsePurchaseOpeningBalanceValue(value) {
     return Number(numericValue.toFixed(2));
 }
 
+function updatePurchaseOpeningBalanceUI() {
+    if (purchaseOpeningDisplayValue) {
+        purchaseOpeningDisplayValue.textContent = formatCurrency(purchaseOpeningBalanceValue);
+    }
+    if (purchaseOpeningDisplayCount) {
+        const count = Array.isArray(purchaseOpeningBalanceItems) ? purchaseOpeningBalanceItems.length : 0;
+        purchaseOpeningDisplayCount.textContent = `(${count} بنود)`;
+    }
+}
+
 async function loadPurchaseOpeningBalance() {
     if (!window.electronAPI || typeof window.electronAPI.getSettings !== 'function') {
         return;
@@ -117,51 +142,227 @@ async function loadPurchaseOpeningBalance() {
 
     try {
         const settings = await window.electronAPI.getSettings();
-        purchaseOpeningBalanceValue = parsePurchaseOpeningBalanceValue(settings?.[PURCHASE_OPENING_BALANCE_KEY]);
+        const rawItems = settings?.[PURCHASE_OPENING_BALANCE_ITEMS_KEY];
+        let loadedItems = [];
+        if (rawItems) {
+            try {
+                const parsed = JSON.parse(rawItems);
+                if (Array.isArray(parsed)) {
+                    loadedItems = parsed;
+                }
+            } catch (_) {}
+        }
+
+        const legacyValue = parsePurchaseOpeningBalanceValue(settings?.[PURCHASE_OPENING_BALANCE_KEY]);
+
+        if (loadedItems.length > 0) {
+            purchaseOpeningBalanceItems = loadedItems;
+            purchaseOpeningBalanceValue = purchaseOpeningBalanceItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0);
+        } else if (legacyValue > 0) {
+            purchaseOpeningBalanceValue = legacyValue;
+            purchaseOpeningBalanceItems = [{
+                id: 'item_' + Date.now(),
+                amount: legacyValue,
+                note: 'بداية المدة السابقة',
+                date: new Date().toISOString().split('T')[0]
+            }];
+        } else {
+            purchaseOpeningBalanceItems = [];
+            purchaseOpeningBalanceValue = 0;
+        }
+
+        purchaseOpeningBalanceValue = Number(purchaseOpeningBalanceValue.toFixed(2));
     } catch (_) {
+        purchaseOpeningBalanceItems = [];
         purchaseOpeningBalanceValue = 0;
     }
 
-    if (purchaseOpeningBalanceInput) {
-        purchaseOpeningBalanceInput.value = String(purchaseOpeningBalanceValue);
-    }
+    updatePurchaseOpeningBalanceUI();
 }
 
-async function savePurchaseOpeningBalance() {
-    if (!purchaseOpeningBalanceInput || !window.electronAPI || typeof window.electronAPI.saveSettings !== 'function') {
+function renderModalDraftItems() {
+    if (!purchaseOpeningTableBody) return;
+
+    if (!modalDraftItems || !modalDraftItems.length) {
+        purchaseOpeningTableBody.innerHTML = '';
+        if (purchaseOpeningEmptyState) purchaseOpeningEmptyState.style.display = 'flex';
+        if (modalPurchaseOpeningTotal) modalPurchaseOpeningTotal.textContent = formatCurrency(0);
+        if (modalPurchaseOpeningCount) modalPurchaseOpeningCount.textContent = '0 بنود';
         return;
     }
 
-    const nextValue = parsePurchaseOpeningBalanceValue(purchaseOpeningBalanceInput.value);
-    purchaseOpeningBalanceInput.value = String(nextValue);
+    if (purchaseOpeningEmptyState) purchaseOpeningEmptyState.style.display = 'none';
 
-    if (savePurchaseOpeningBalanceBtn) {
-        savePurchaseOpeningBalanceBtn.disabled = true;
+    let total = 0;
+    purchaseOpeningTableBody.innerHTML = modalDraftItems.map((item, idx) => {
+        const amt = Number(item.amount) || 0;
+        total += amt;
+        return `
+            <tr>
+                <td style="color: var(--text-muted); font-weight: 700;">${idx + 1}</td>
+                <td class="amount-cell">${formatCurrency(amt)}</td>
+                <td>${escapeHtml(item.note || '-')}</td>
+                <td style="text-align: center;">
+                    <button type="button" class="btn-del-opening-item" data-index="${idx}" title="حذف هذا البند">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (modalPurchaseOpeningTotal) {
+        modalPurchaseOpeningTotal.textContent = formatCurrency(total);
+    }
+    if (modalPurchaseOpeningCount) {
+        modalPurchaseOpeningCount.textContent = `${modalDraftItems.length} بنود`;
+    }
+}
+
+function openPurchaseOpeningModal() {
+    modalDraftItems = JSON.parse(JSON.stringify(purchaseOpeningBalanceItems || []));
+    renderModalDraftItems();
+    if (newOpeningItemAmount) newOpeningItemAmount.value = '';
+    if (newOpeningItemNote) newOpeningItemNote.value = '';
+    if (purchaseOpeningModalEl) {
+        purchaseOpeningModalEl.classList.add('is-open');
+        purchaseOpeningModalEl.setAttribute('aria-hidden', 'false');
+    }
+    if (newOpeningItemAmount) {
+        setTimeout(() => newOpeningItemAmount.focus(), 80);
+    }
+}
+
+function closePurchaseOpeningModal() {
+    if (purchaseOpeningModalEl) {
+        purchaseOpeningModalEl.classList.remove('is-open');
+        purchaseOpeningModalEl.setAttribute('aria-hidden', 'true');
+    }
+}
+
+function formatMoneyInputValue(value) {
+    const s = String(value || '').replace(/[٬،]/g, '.').replace(/,/g, '').replace(/[^0-9.]/g, '');
+    if (!s) return '';
+    const parts = s.split('.');
+    const integerPart = (parts.shift() || '').replace(/[^0-9]/g, '');
+    const decimalPart = parts.join('').replace(/[^0-9]/g, '');
+    const formattedInteger = (integerPart ? Number(integerPart) : 0).toLocaleString('en-US');
+    if (s.includes('.')) {
+        return `${formattedInteger}.${decimalPart}`;
+    }
+    return formattedInteger;
+}
+
+function formatInputWithCursor(input) {
+    if (!input) return;
+    const val = input.value || '';
+    const oldCursor = input.selectionStart ?? val.length;
+
+    let digitCount = 0;
+    for (let i = 0; i < oldCursor && i < val.length; i++) {
+        if (/[0-9.]/.test(val[i])) digitCount++;
+    }
+
+    const formatted = formatMoneyInputValue(val);
+    input.value = formatted;
+
+    let newCursor = formatted.length;
+    let currentDigits = 0;
+    for (let i = 0; i < formatted.length; i++) {
+        if (/[0-9.]/.test(formatted[i])) {
+            currentDigits++;
+        }
+        if (currentDigits === digitCount) {
+            newCursor = i + 1;
+            break;
+        }
+    }
+
+    try {
+        input.setSelectionRange(newCursor, newCursor);
+    } catch (_) {}
+}
+
+function handleAddOpeningItem(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (!newOpeningItemAmount || !newOpeningItemNote) return;
+
+    const amount = Number(String(newOpeningItemAmount.value).replace(/,/g, ''));
+    const note = String(newOpeningItemNote.value || '').trim();
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        if (window.showToast) window.showToast('يرجى إدخال مبلغ صحيح أكبر من الصفر.', 'warning');
+        newOpeningItemAmount.focus();
+        return;
+    }
+
+    if (!note) {
+        if (window.showToast) window.showToast('يرجى إدخال ملاحظة أو بيان لهذا المبلغ.', 'warning');
+        newOpeningItemNote.focus();
+        return;
+    }
+
+    modalDraftItems.push({
+        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        amount: Number(amount.toFixed(2)),
+        note: note,
+        date: new Date().toISOString().split('T')[0]
+    });
+
+    renderModalDraftItems();
+    newOpeningItemAmount.value = '';
+    newOpeningItemNote.value = '';
+    newOpeningItemAmount.focus();
+}
+
+function handleDeleteOpeningItem(index) {
+    const idx = Number(index);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= modalDraftItems.length) return;
+    modalDraftItems.splice(idx, 1);
+    renderModalDraftItems();
+}
+
+async function savePurchaseOpeningBalanceFromModal() {
+    if (!window.electronAPI || typeof window.electronAPI.saveSettings !== 'function') {
+        return;
+    }
+
+    const calculatedTotal = modalDraftItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0);
+    const totalToSave = Number(calculatedTotal.toFixed(2));
+
+    if (saveOpeningBalanceModalBtn) {
+        saveOpeningBalanceModalBtn.disabled = true;
     }
 
     try {
         const result = await window.electronAPI.saveSettings({
-            [PURCHASE_OPENING_BALANCE_KEY]: String(nextValue)
+            [PURCHASE_OPENING_BALANCE_KEY]: String(totalToSave),
+            [PURCHASE_OPENING_BALANCE_ITEMS_KEY]: JSON.stringify(modalDraftItems)
         });
 
         if (!result || !result.success) {
-            const errorMessage = (result && result.error) || 'تعذر حفظ بداية مدة المشتريات.';
+            const errorMessage = (result && result.error) || 'تعذر حفظ بنود بداية مدة المشتريات.';
             setStatus(errorMessage, 'error');
             if (window.showToast) window.showToast(errorMessage, 'error');
             return;
         }
 
-        purchaseOpeningBalanceValue = nextValue;
+        purchaseOpeningBalanceItems = JSON.parse(JSON.stringify(modalDraftItems));
+        purchaseOpeningBalanceValue = totalToSave;
+
+        updatePurchaseOpeningBalanceUI();
         updateSummary(currentReports);
-        setStatus('تم حفظ بداية مدة المشتريات بنجاح.', 'success');
-        if (window.showToast) window.showToast('تم حفظ بداية مدة المشتريات.', 'success');
+        closePurchaseOpeningModal();
+
+        setStatus('تم حفظ بنود بداية مدة المشتريات بنجاح.', 'success');
+        if (window.showToast) window.showToast('تم حفظ بنود بداية مدة المشتريات بنجاح.', 'success');
     } catch (error) {
-        const errorMessage = error.message || 'تعذر حفظ بداية مدة المشتريات.';
+        const errorMessage = error.message || 'تعذر حفظ بنود بداية مدة المشتريات.';
         setStatus(errorMessage, 'error');
         if (window.showToast) window.showToast(errorMessage, 'error');
     } finally {
-        if (savePurchaseOpeningBalanceBtn) {
-            savePurchaseOpeningBalanceBtn.disabled = false;
+        if (saveOpeningBalanceModalBtn) {
+            saveOpeningBalanceModalBtn.disabled = false;
         }
     }
 }
@@ -213,8 +414,38 @@ function initializeElements() {
     reportsStatusEl = document.getElementById('reportsStatus');
     heroResultCountEl = document.getElementById('heroResultCount');
     lastUpdatedLabelEl = document.getElementById('lastUpdatedLabel');
-    purchaseOpeningBalanceInput = document.getElementById('purchaseOpeningBalanceInput');
-    savePurchaseOpeningBalanceBtn = document.getElementById('savePurchaseOpeningBalanceBtn');
+    purchaseOpeningDisplayValue = document.getElementById('purchaseOpeningDisplayValue');
+    purchaseOpeningDisplayCount = document.getElementById('purchaseOpeningDisplayCount');
+    openPurchaseOpeningModalBtn = document.getElementById('openPurchaseOpeningModalBtn');
+    purchaseOpeningModalEl = document.getElementById('purchaseOpeningModal');
+    purchaseOpeningModalCloseBtn = document.getElementById('purchaseOpeningModalCloseBtn');
+    cancelOpeningBalanceModalBtn = document.getElementById('cancelOpeningBalanceModalBtn');
+    saveOpeningBalanceModalBtn = document.getElementById('saveOpeningBalanceModalBtn');
+    purchaseOpeningItemForm = document.getElementById('purchaseOpeningItemForm');
+    newOpeningItemAmount = document.getElementById('newOpeningItemAmount');
+    newOpeningItemNote = document.getElementById('newOpeningItemNote');
+    purchaseOpeningTableBody = document.getElementById('purchaseOpeningTableBody');
+    purchaseOpeningEmptyState = document.getElementById('purchaseOpeningEmptyState');
+    modalPurchaseOpeningTotal = document.getElementById('modalPurchaseOpeningTotal');
+    modalPurchaseOpeningCount = document.getElementById('modalPurchaseOpeningCount');
+
+    if (newOpeningItemAmount) {
+        newOpeningItemAmount.addEventListener('input', (e) => formatInputWithCursor(e.target));
+        newOpeningItemAmount.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                const input = e.target;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === end && start > 0 && input.value[start - 1] === ',') {
+                    e.preventDefault();
+                    const val = input.value;
+                    input.value = val.slice(0, start - 2) + val.slice(start);
+                    input.setSelectionRange(start - 2, start - 2);
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+        });
+    }
 
     voucherModalEl = document.getElementById('voucherModal');
     voucherModalBodyEl = document.getElementById('voucherModalBody');
@@ -239,8 +470,35 @@ function initializeElements() {
         });
     }
 
-    if (savePurchaseOpeningBalanceBtn) {
-        savePurchaseOpeningBalanceBtn.addEventListener('click', savePurchaseOpeningBalance);
+    if (openPurchaseOpeningModalBtn) {
+        openPurchaseOpeningModalBtn.addEventListener('click', openPurchaseOpeningModal);
+    }
+    if (purchaseOpeningModalCloseBtn) {
+        purchaseOpeningModalCloseBtn.addEventListener('click', closePurchaseOpeningModal);
+    }
+    if (cancelOpeningBalanceModalBtn) {
+        cancelOpeningBalanceModalBtn.addEventListener('click', closePurchaseOpeningModal);
+    }
+    if (purchaseOpeningItemForm) {
+        purchaseOpeningItemForm.addEventListener('submit', handleAddOpeningItem);
+    }
+    if (purchaseOpeningTableBody) {
+        purchaseOpeningTableBody.addEventListener('click', (e) => {
+            const delBtn = e.target.closest('.btn-del-opening-item');
+            if (delBtn && delBtn.dataset.index !== undefined) {
+                handleDeleteOpeningItem(delBtn.dataset.index);
+            }
+        });
+    }
+    if (saveOpeningBalanceModalBtn) {
+        saveOpeningBalanceModalBtn.addEventListener('click', savePurchaseOpeningBalanceFromModal);
+    }
+    if (purchaseOpeningModalEl) {
+        purchaseOpeningModalEl.addEventListener('click', (e) => {
+            if (e.target === purchaseOpeningModalEl) {
+                closePurchaseOpeningModal();
+            }
+        });
     }
 
     if (reportsTableBody) {

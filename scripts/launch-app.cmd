@@ -96,7 +96,7 @@ exit /b 1
 
 :start_backend_if_needed
 :: Quick check if backend is already running (skip if yes)
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -Uri '%BACKEND_HEALTH_URL%' -UseBasicParsing -TimeoutSec 1; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 300) { exit 0 } else { exit 1 } } catch { exit 1 }"
+netstat -ano -p tcp | findstr /R /C:":4000 " >nul 2>&1
 if "%ERRORLEVEL%"=="0" (
   echo [Launcher] Backend already running.
   exit /b 0

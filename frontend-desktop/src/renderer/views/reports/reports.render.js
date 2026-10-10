@@ -137,16 +137,17 @@
                     <div class="period-opening-panel">
                         <div class="period-opening-copy">
                             <h3>بداية مدة المشتريات</h3>
-                            <p>قيمة ثابتة تضاف إلى إجمالي المشتريات في التقرير العام عندما تبدأ الفترة من 01-01.</p>
+                            <p>قيمة تضاف إلى إجمالي المشتريات في التقرير العام عندما تبدأ الفترة من 01-01.</p>
                         </div>
                         <div class="period-opening-controls">
-                            <div class="form-group period-opening-field">
-                                <label for="purchaseOpeningBalanceInput"><i class="fas fa-coins"></i> قيمة بداية المدة</label>
-                                <input type="number" id="purchaseOpeningBalanceInput" class="form-control" min="0" step="0.01" value="0">
+                            <div class="period-opening-summary-chip">
+                                <span class="chip-label"><i class="fas fa-coins"></i> القيمة الحالية:</span>
+                                <strong id="purchaseOpeningDisplayValue" class="chip-value">0.00 ${CUR}</strong>
+                                <span id="purchaseOpeningDisplayCount" class="chip-badge">(0 بنود)</span>
                             </div>
-                            <button id="savePurchaseOpeningBalanceBtn" type="button" class="btn-secondary">
-                                <i class="fas fa-save"></i>
-                                <span>حفظ بداية المدة</span>
+                            <button id="openPurchaseOpeningModalBtn" type="button" class="btn-primary">
+                                <i class="fas fa-list-ul"></i>
+                                <span>إدارة بنود بداية المدة</span>
                             </button>
                         </div>
                     </div>
@@ -225,6 +226,81 @@
                             <span>${t('reports.printVoucher', 'طباعة السند')}</span>
                         </button>
                         <button type="button" class="btn-secondary" id="voucherModalCloseBtnFooter">
+                            ${t('reports.close', 'إغلاق')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="purchaseOpeningModal" class="voucher-modal-overlay" aria-hidden="true">
+                <div class="voucher-modal purchase-opening-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="purchaseOpeningModalTitle">
+                    <div class="voucher-modal-header">
+                        <div class="voucher-modal-title-wrap">
+                            <div class="voucher-modal-icon"><i class="fas fa-hourglass-start"></i></div>
+                            <div>
+                                <h3 id="purchaseOpeningModalTitle">بنود بداية مدة المشتريات</h3>
+                                <p id="purchaseOpeningModalSubtitle">أدخل مبالغ بداية المدة مع ملاحظة لكل بند، وسيتم جمعها تلقائياً لإجمالي المشتريات.</p>
+                            </div>
+                        </div>
+                        <button type="button" class="voucher-modal-close" id="purchaseOpeningModalCloseBtn" aria-label="${t('reports.close', 'إغلاق')}">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <div class="voucher-modal-content purchase-opening-modal-content">
+                        <form id="purchaseOpeningItemForm" class="purchase-opening-form">
+                            <div class="purchase-opening-form-grid">
+                                <div class="form-group form-group-amount">
+                                    <label for="newOpeningItemAmount"><i class="fas fa-coins"></i> المبلغ (${CUR})</label>
+                                    <input type="text" id="newOpeningItemAmount" class="form-control" inputmode="decimal" placeholder="0.00" required>
+                                </div>
+                                <div class="form-group form-group-note">
+                                    <label for="newOpeningItemNote"><i class="fas fa-sticky-note"></i> البيان / الملاحظة</label>
+                                    <input type="text" id="newOpeningItemNote" class="form-control" placeholder="اكتب ملاحظة أو تفاصيل هذا المبلغ..." required>
+                                </div>
+                                <div class="form-group form-group-add">
+                                    <label class="invisible-label">&nbsp;</label>
+                                    <button type="submit" id="addOpeningItemBtn" class="btn-primary">
+                                        <i class="fas fa-plus"></i>
+                                        <span>إضافة</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div class="purchase-opening-table-wrap">
+                            <table class="table purchase-opening-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">#</th>
+                                        <th style="width: 150px;">المبلغ</th>
+                                        <th>البيان والملاحظة</th>
+                                        <th style="width: 80px; text-align: center;">إجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="purchaseOpeningTableBody"></tbody>
+                            </table>
+                            <div id="purchaseOpeningEmptyState" class="purchase-opening-empty">
+                                <i class="fas fa-inbox"></i>
+                                <span>لا توجد بنود مضافة حالياً. أضف أول بند من النموذج أعلاه.</span>
+                            </div>
+                        </div>
+
+                        <div class="purchase-opening-total-bar">
+                            <div class="total-bar-info">
+                                <span class="total-bar-label">إجمالي مبالغ بداية المدة:</span>
+                                <strong id="modalPurchaseOpeningTotal">0.00 ${CUR}</strong>
+                            </div>
+                            <div class="total-bar-count" id="modalPurchaseOpeningCount">0 بنود</div>
+                        </div>
+                    </div>
+
+                    <div class="voucher-modal-footer">
+                        <button type="button" class="btn-primary" id="saveOpeningBalanceModalBtn">
+                            <i class="fas fa-save"></i>
+                            <span>حفظ التغييرات</span>
+                        </button>
+                        <button type="button" class="btn-secondary" id="cancelOpeningBalanceModalBtn">
                             ${t('reports.close', 'إغلاق')}
                         </button>
                     </div>

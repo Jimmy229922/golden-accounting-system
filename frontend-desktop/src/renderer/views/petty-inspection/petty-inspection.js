@@ -205,7 +205,7 @@ function renderPage() {
                                 <div class="form-group">
                                     <label><i class="fas fa-money-bill-wave text-icon"></i> المبلغ <span class="required-asterisk">*</span></label>
                                     <div class="input-with-currency">
-                                        <input type="number" id="amount" class="form-control amount-input" min="0" step="any" placeholder="0.00" required>
+                                        <input type="text" id="amount" class="form-control amount-input" placeholder="0.00" inputmode="decimal" required>
                                         <span class="currency-badge">ج.م</span>
                                     </div>
                                 </div>
@@ -235,6 +235,54 @@ function renderPage() {
 
 function bindEvents() {
     document.getElementById('pettyForm').addEventListener('submit', saveExpense);
+
+    const amountInput = document.getElementById('amount');
+    if (amountInput) {
+        amountInput.addEventListener('input', (e) => {
+            const input = e.target;
+            const val = input.value || '';
+            const oldCursor = input.selectionStart ?? val.length;
+            let digitCount = 0;
+            for (let i = 0; i < oldCursor && i < val.length; i++) {
+                if (/[0-9.]/.test(val[i])) digitCount++;
+            }
+            const clean = val.replace(/[٬،]/g, '.').replace(/,/g, '').replace(/[^0-9.]/g, '');
+            if (!clean) {
+                input.value = '';
+                return;
+            }
+            const parts = clean.split('.');
+            const integerPart = (parts.shift() || '').replace(/[^0-9]/g, '');
+            const decimalPart = parts.join('').replace(/[^0-9]/g, '');
+            const formattedInteger = (integerPart ? Number(integerPart) : 0).toLocaleString('en-US');
+            const formatted = clean.includes('.') ? `${formattedInteger}.${decimalPart}` : formattedInteger;
+            input.value = formatted;
+            let newCursor = formatted.length;
+            let currentDigits = 0;
+            for (let i = 0; i < formatted.length; i++) {
+                if (/[0-9.]/.test(formatted[i])) currentDigits++;
+                if (currentDigits === digitCount) {
+                    newCursor = i + 1;
+                    break;
+                }
+            }
+            try { input.setSelectionRange(newCursor, newCursor); } catch (_) {}
+        });
+        amountInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                const input = e.target;
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                if (start === end && start > 0 && input.value[start - 1] === ',') {
+                    e.preventDefault();
+                    const val = input.value;
+                    input.value = val.slice(0, start - 2) + val.slice(start);
+                    input.setSelectionRange(start - 2, start - 2);
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+        });
+    }
 
     const triggerSearch = () => {
         state.page = 1;
@@ -403,7 +451,7 @@ async function openEditModal(id) {
     state.editingId = row.id;
     document.getElementById('documentNumber').value = row.document_number || '';
     document.getElementById('expenseDate').value = row.expense_date || today();
-    document.getElementById('amount').value = row.amount ?? '';
+    document.getElementById('amount').value = row.amount ? formatMoney(row.amount) : '';
     document.getElementById('statement').value = row.statement || '';
     document.getElementById('notes').value = row.notes || '';
     document.getElementById('addExpenseModal').classList.remove('hidden');
@@ -435,7 +483,7 @@ async function saveExpense(event) {
     if (state.isSaving) return;
     const payload = {
         expense_date: document.getElementById('expenseDate').value || today(),
-        amount: document.getElementById('amount').value,
+        amount: String(document.getElementById('amount').value).replace(/,/g, ''),
         statement: document.getElementById('statement').value,
         notes: document.getElementById('notes').value
     };

@@ -1,4 +1,4 @@
-﻿let refreshBtn;
+let refreshBtn;
 let lastUpdatedEl;
 let startDateInput;
 let endDateInput;
@@ -38,7 +38,8 @@ function getNavHTML() {
 }
 
 function money(val) {
-    return (val || 0).toFixed(2) + ' ' + t('common.currency.egpSymbol', 'ج.م');
+    const n = Number(val) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + t('common.currency.egpSymbol', 'ج.م');
 }
 
 function trendHTML(percent) {
@@ -301,12 +302,18 @@ async function loadDashboardStats(filters = currentFilters) {
         document.getElementById('todayCollections').textContent = money(ts.collections);
         document.getElementById('todayPayments').textContent = money(ts.payments);
 
-        document.getElementById('salesMonth').textContent = money(stats.salesMonth);
+        const totalExpensesEl = document.getElementById('totalExpenses');
+        if (totalExpensesEl) totalExpensesEl.textContent = money(stats.totalExpenses);
+        const totalRevenuesEl = document.getElementById('totalRevenues');
+        if (totalRevenuesEl) totalRevenuesEl.textContent = money(stats.totalRevenues);
+        const salesMonthEl = document.getElementById('salesMonth');
+        if (salesMonthEl) salesMonthEl.textContent = money(stats.salesMonth);
         document.getElementById('purchasesMonth').textContent = money(stats.purchasesMonth);
         document.getElementById('netProfit').textContent = money(stats.netProfit);
         document.getElementById('treasuryBalance').textContent = money(stats.treasuryBalance);
         document.getElementById('stockValue').textContent = money(stats.stockValue);
-        document.getElementById('itemsCount').textContent = stats.itemsCount || 0;
+        const itemsCountEl = document.getElementById('itemsCount');
+        if (itemsCountEl) itemsCountEl.textContent = stats.itemsCount || 0;
         document.getElementById('receivables').textContent = money(stats.receivables);
         document.getElementById('payables').textContent = money(stats.payables);
 
@@ -314,6 +321,10 @@ async function loadDashboardStats(filters = currentFilters) {
         document.getElementById('suppliersCount').textContent = stats.suppliersCount || 0;
 
         if (stats.trends) {
+            const teTrend = document.getElementById('totalExpensesTrend');
+            if (teTrend && stats.trends.totalExpenses !== undefined) teTrend.innerHTML = trendHTML(stats.trends.totalExpenses);
+            const trTrend = document.getElementById('totalRevenuesTrend');
+            if (trTrend && stats.trends.totalRevenues !== undefined) trTrend.innerHTML = trendHTML(stats.trends.totalRevenues);
             const smTrend = document.getElementById('salesMonthTrend');
             const pmTrend = document.getElementById('purchasesMonthTrend');
             if (smTrend) smTrend.innerHTML = trendHTML(stats.trends.salesMonth);
@@ -360,7 +371,7 @@ window.showNetProfitDetails = function() {
     modal.innerHTML = `
         <div class="confirm-dialog-card" style="width: min(500px, 90%); padding: 0;">
             <div class="confirm-dialog-header" style="background: var(--nav-bg, #0f172a); border-bottom: 2px solid var(--border-color, rgba(255,255,255,0.05)); display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;">
-                <span style="font-size: 1.1rem; color: #38bdf8;"><i class="fas fa-calculator" style="margin-inline-end: 8px;"></i> تفاصيل مجمل الربح للإيضاح</span>
+                <span style="font-size: 1.1rem; color: #38bdf8;"><i class="fas fa-coins" style="margin-inline-end: 8px;"></i> تفاصيل صافي الربح التقديري</span>
                 <button onclick="document.getElementById('profitDetailsModal').remove()" style="background: none; border: none; color: var(--text-muted, #94a3b8); cursor: pointer; font-size: 1.2rem;"><i class="fas fa-times"></i></button>
             </div>
             <div class="confirm-dialog-message" style="padding: 20px; font-size: 0.95rem; line-height: 1.8; color: var(--text-color, #fff);">
@@ -369,42 +380,179 @@ window.showNetProfitDetails = function() {
                 </div>
                 
                 <div style="background: var(--secondary-bg, rgba(15,23,42,0.6)); border: 1px solid var(--border-color, rgba(255,255,255,0.05)); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-                    <h4 style="margin: 0 0 10px 0; color: #10b981; font-size: 1rem;"><i class="fas fa-shopping-cart" style="margin-inline-end:5px;"></i> أولاً: المبيعات الفعّالة (الفترة المحددة)</h4>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-sack-dollar" style="margin-inline-end: 8px; color: #22c55e;"></i> أولاً: الإيرادات:</span>
+                        <strong style="color: #22c55e; font-size: 1.1rem;">${m(p.totalRevenues)}</strong>
+                    </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: var(--text-muted, #cbd5e1)">إجمالي الفواتير:</span>
-                        <strong style="color: var(--text-color, #fff)">${m(p.salesTotalMonth)}</strong>
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-receipt" style="margin-inline-end: 8px; color: #f59e0b;"></i> ثانياً: إجمالي المصروفات:</span>
+                        <strong style="color: #f59e0b; font-size: 1.1rem;">${m(p.totalExpenses)}</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 10px; border-top: 1px dashed var(--border-color, rgba(255,255,255,0.1)); padding-top: 10px;">
-                        <span style="color:#0ea5e9; font-weight:bold;">= صافي المبيعات:</span>
-                        <strong style="color: #0ea5e9; font-size: 1.1rem;">${m(p.salesMonth)}</strong>
-                    </div>
+
                 </div>
 
-                <div style="background: var(--secondary-bg, rgba(15,23,42,0.6)); border: 1px solid var(--border-color, rgba(255,255,255,0.05)); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-                    <h4 style="margin: 0 0 10px 0; color: #f59e0b; font-size: 1rem;"><i class="fas fa-boxes" style="margin-inline-end:5px;"></i> ثانياً: تكلفة المبيعات (رأس المال)</h4>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: var(--text-muted, #cbd5e1)">تكلفة البضاعة الخارجة:</span>
-                        <strong style="color: var(--text-color, #fff)">${m(p.cogsMonthSales)}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 10px; border-top: 1px dashed var(--border-color, rgba(255,255,255,0.1)); padding-top: 10px;">
-                        <span style="color:#f59e0b; font-weight:bold;">= التكلفة الفعلية (المخصومة):</span>
-                        <strong style="color: #f59e0b; font-size: 1.1rem;">${m(p.cogsMonth)}</strong>
-                    </div>
-                </div>
 
-                <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 15px;">
-                    <h4 style="margin: 0 0 5px 0; color: var(--text-color, #fff); font-size: 1.1rem; text-align: center;">الخلاصة (صافي المبيعات - التكلفة)</h4>
+
+
+
+
+
+
+
+
+
+
+
+                <div style="background: ${p.netProfit >= 0 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)'}; border: 1px solid ${p.netProfit >= 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}; border-radius: 8px; padding: 15px;">
+                    <h4 style="margin: 0 0 5px 0; color: ${p.netProfit >= 0 ? '#10b981' : '#ef4444'}; font-size: 1.1rem; text-align: center;">الخلاصة (الإيرادات - المصروفات)</h4>
                     <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 10px;">
-                        <strong style="color: #10b981; font-size: 1.4rem;">${m(p.netProfit)}</strong>
+                        <strong style="color: ${p.netProfit >= 0 ? '#10b981' : '#ef4444'}; font-size: 1.4rem;">${m(p.netProfit)}</strong>
                     </div>
                     <div style="text-align: center; margin-top: 12px; font-size: 0.8rem; color: var(--text-muted, #94a3b8); line-height: 1.6;">
-                        <i class="fas fa-info-circle"></i> يمثل هذا الرقم "مجمل الربح التجاري" من البضاعة، ولا يخصم منه المصروفات الإدارية المسجلة بالخزينة لضمان دقة قياس أداء حركة الأصناف.
+                        <i class="fas fa-info-circle"></i> ${p.netProfit >= 0 ? 'صافي أرباح تشغيلية (فائض الإيرادات عن إجمالي المصروفات)' : 'صافي خسائر تشغيلية (زيادة المصروفات عن الإيرادات)'}
                     </div>
                 </div>
             </div>
             
             <div class="confirm-dialog-actions" style="border-top: 1px solid var(--border-color, rgba(255,255,255,0.05)); padding: 15px 20px; text-align: center; display: block;">
                 <button onclick="document.getElementById('profitDetailsModal').remove()" class="confirm-dialog-btn confirm" style="width: 100%; max-width: 200px;">فهمت، إغلاق</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => modal.classList.add('show'));
+    modal.addEventListener('click', (e) => {
+        if(e.target === modal) modal.remove();
+    });
+};
+
+window.showExpensesDetails = function() {
+    if (!lastStats || !lastStats.expensesBreakdown) return;
+
+    let modal = document.getElementById('expensesDetailsModal');
+    if (modal) modal.remove();
+
+    const b = lastStats.expensesBreakdown;
+    const periodText = getPeriodText();
+    const m = (val) => Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+
+    modal = document.createElement('div');
+    modal.id = 'expensesDetailsModal';
+    modal.className = 'confirm-dialog-overlay';
+    modal.style.zIndex = '999999';
+
+    modal.innerHTML = `
+        <div class="confirm-dialog-card" style="width: min(520px, 92%); padding: 0;">
+            <div class="confirm-dialog-header" style="background: var(--nav-bg, #0f172a); border-bottom: 2px solid var(--border-color, rgba(255,255,255,0.05)); display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;">
+                <span style="font-size: 1.1rem; color: #38bdf8;"><i class="fas fa-receipt" style="margin-inline-end: 8px;"></i> تفاصيل إجمالي المصروفات</span>
+                <button onclick="document.getElementById('expensesDetailsModal').remove()" style="background: none; border: none; color: var(--text-muted, #94a3b8); cursor: pointer; font-size: 1.2rem;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="confirm-dialog-message" style="padding: 20px; font-size: 0.95rem; line-height: 1.8; color: var(--text-color, #fff);">
+                <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px; padding: 10px 12px; margin-bottom: 15px; font-size: 0.9rem;">
+                    <i class="fas fa-calendar-alt" style="margin-inline-end: 6px; color: #38bdf8;"></i> ${t('dashboard.periodLabel', 'الفترة')}: ${periodText}
+                </div>
+
+                <div style="background: var(--secondary-bg, rgba(15,23,42,0.6)); border: 1px solid var(--border-color, rgba(255,255,255,0.05)); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-coins" style="margin-inline-end: 8px; color: #f59e0b;"></i> إجمالي النثريات:</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.pettyGeneral)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-search" style="margin-inline-end: 8px; color: #38bdf8;"></i> إجمالي الفحص:</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.pettyInspection)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-box" style="margin-inline-end: 8px; color: #a855f7;"></i> إجمالي الشكاير:</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.pettyBags)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-truck-moving" style="margin-inline-end: 8px; color: #06b6d4;"></i> إجمالي الشحن والتخليص:</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.pettyShippingClearance)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-cogs" style="margin-inline-end: 8px; color: #ec4899;"></i> إجمالي التشغيل:</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.pettyOperation)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-shopping-basket" style="margin-inline-end: 8px; color: #10b981;"></i> إجمالي المشتريات (التقارير العامة):</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.purchasesTotal)}</strong>
+                    </div>
+                    ${b.purchaseOpeningBalance > 0 ? `
+                    <div style="font-size: 0.8rem; color: var(--text-muted, #94a3b8); margin-top: 4px; padding-right: 24px;">
+                        (فواتير المشتريات: ${m(b.purchasesInvoices)} + بداية المدة: ${m(b.purchaseOpeningBalance)})
+                    </div>
+                    ` : ''}
+                </div>
+
+                <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.25); border-radius: 8px; padding: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4 style="margin: 0; color: #38bdf8; font-size: 1.05rem;">المجموع الكلي (إجمالي المصروفات):</h4>
+                        <strong style="color: #38bdf8; font-size: 1.3rem;">${m(b.totalExpenses)}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="confirm-dialog-actions" style="border-top: 1px solid var(--border-color, rgba(255,255,255,0.05)); padding: 15px 20px; text-align: center; display: block;">
+                <button onclick="document.getElementById('expensesDetailsModal').remove()" class="confirm-dialog-btn confirm" style="width: 100%; max-width: 200px;">فهمت، إغلاق</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => modal.classList.add('show'));
+    modal.addEventListener('click', (e) => {
+        if(e.target === modal) modal.remove();
+    });
+};
+
+window.showRevenuesDetails = function() {
+    if (!lastStats || !lastStats.revenuesBreakdown) return;
+
+    let modal = document.getElementById('revenuesDetailsModal');
+    if (modal) modal.remove();
+
+    const b = lastStats.revenuesBreakdown;
+    const periodText = getPeriodText();
+    const m = (val) => Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+
+    modal = document.createElement('div');
+    modal.id = 'revenuesDetailsModal';
+    modal.className = 'confirm-dialog-overlay';
+    modal.style.zIndex = '999999';
+
+    modal.innerHTML = `
+        <div class="confirm-dialog-card" style="width: min(520px, 92%); padding: 0;">
+            <div class="confirm-dialog-header" style="background: var(--nav-bg, #0f172a); border-bottom: 2px solid var(--border-color, rgba(255,255,255,0.05)); display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;">
+                <span style="font-size: 1.1rem; color: #38bdf8;"><i class="fas fa-sack-dollar" style="margin-inline-end: 8px;"></i> تفاصيل الإيرادات</span>
+                <button onclick="document.getElementById('revenuesDetailsModal').remove()" style="background: none; border: none; color: var(--text-muted, #94a3b8); cursor: pointer; font-size: 1.2rem;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="confirm-dialog-message" style="padding: 20px; font-size: 0.95rem; line-height: 1.8; color: var(--text-color, #fff);">
+                <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px; padding: 10px 12px; margin-bottom: 15px; font-size: 0.9rem;">
+                    <i class="fas fa-calendar-alt" style="margin-inline-end: 6px; color: #38bdf8;"></i> ${t('dashboard.periodLabel', 'الفترة')}: ${periodText}
+                </div>
+
+                <div style="background: var(--secondary-bg, rgba(15,23,42,0.6)); border: 1px solid var(--border-color, rgba(255,255,255,0.05)); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-globe" style="margin-inline-end: 8px; color: #22c55e;"></i> إيرادات التصدير (الإجمالي المصري):</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.exportRevenuesEgp)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-cash-register" style="margin-inline-end: 8px; color: #38bdf8;"></i> المبيعات المحلية (إجمالي الإجمالي):</span>
+                        <strong style="color: var(--text-color, #fff)">${m(b.localSalesTotal)}</strong>
+                    </div>
+                </div>
+
+                <div style="background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 8px; padding: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4 style="margin: 0; color: #22c55e; font-size: 1.05rem;">المجموع الكلي (الإيرادات):</h4>
+                        <strong style="color: #22c55e; font-size: 1.3rem;">${m(b.totalRevenues)}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="confirm-dialog-actions" style="border-top: 1px solid var(--border-color, rgba(255,255,255,0.05)); padding: 15px 20px; text-align: center; display: block;">
+                <button onclick="document.getElementById('revenuesDetailsModal').remove()" class="confirm-dialog-btn confirm" style="width: 100%; max-width: 200px;">فهمت، إغلاق</button>
             </div>
         </div>
     `;

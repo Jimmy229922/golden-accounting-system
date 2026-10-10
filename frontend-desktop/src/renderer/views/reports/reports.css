@@ -402,17 +402,45 @@
 
 .period-opening-controls {
     display: flex;
-    align-items: end;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
     flex-wrap: wrap;
 }
 
-.period-opening-field {
-    min-width: 220px;
+.period-opening-summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+    border-radius: 10px;
 }
 
-.period-opening-controls .btn-secondary {
-    min-height: 42px;
+.period-opening-summary-chip .chip-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.period-opening-summary-chip .chip-value {
+    font-size: 1rem;
+    color: var(--primary);
+    font-weight: 800;
+}
+
+.period-opening-summary-chip .chip-badge {
+    font-size: 0.78rem;
+    background: rgba(100, 116, 139, 0.15);
+    padding: 2px 7px;
+    border-radius: 6px;
+    color: var(--text-muted);
+}
+
+.period-opening-controls .btn-primary {
+    min-height: 40px;
     white-space: nowrap;
 }
 
@@ -1148,5 +1176,149 @@ body.modal-open {
 @media (max-width: 768px) {
     :where(.content, .sales-content, .reports-content) {
         padding: 16px;
+    }
+}
+
+.purchase-opening-modal-dialog {
+    max-width: 680px;
+    width: 95%;
+}
+
+.purchase-opening-modal-content {
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.purchase-opening-form-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr auto;
+    gap: 12px;
+    align-items: end;
+    background: rgba(100, 116, 139, 0.06);
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+}
+
+.purchase-opening-form-grid .invisible-label {
+    visibility: hidden;
+    margin-bottom: 6px;
+    display: block;
+}
+
+.purchase-opening-form-grid button {
+    height: 42px;
+    white-space: nowrap;
+}
+
+.purchase-opening-table-wrap {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--table-border);
+    border-radius: 10px;
+}
+
+.purchase-opening-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+.purchase-opening-table th,
+.purchase-opening-table td {
+    padding: 10px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--table-border);
+    font-size: 0.88rem;
+}
+
+.purchase-opening-table th {
+    background: var(--table-header-bg);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.purchase-opening-table td.amount-cell {
+    font-weight: 700;
+    color: var(--primary);
+    direction: ltr;
+    text-align: right;
+}
+
+.purchase-opening-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+}
+
+.purchase-opening-empty i {
+    font-size: 1.8rem;
+    opacity: 0.4;
+}
+
+.purchase-opening-total-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.22);
+    border-radius: 10px;
+}
+
+.purchase-opening-total-bar .total-bar-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.purchase-opening-total-bar .total-bar-label {
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.purchase-opening-total-bar strong {
+    font-size: 1.15rem;
+    color: var(--primary);
+}
+
+.purchase-opening-total-bar .total-bar-count {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.btn-del-opening-item {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-del-opening-item:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+}
+
+@media (max-width: 640px) {
+    .purchase-opening-form-grid {
+        grid-template-columns: 1fr;
+    }
+    .purchase-opening-form-grid .invisible-label {
+        display: none;
     }
 }

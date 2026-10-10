@@ -168,8 +168,8 @@ function runWalCheckpoint() {
 
 function checkDatabaseIntegrity() {
     try {
-        const result = db.pragma('integrity_check');
-        const status = result && result[0] ? result[0].integrity_check : 'unknown';
+        const result = db.pragma('quick_check');
+        const status = result && result[0] ? (result[0].quick_check || result[0].integrity_check) : 'unknown';
         if (status === 'ok') {
             console.log('[db] Integrity check passed');
             return true;

@@ -1,5 +1,11 @@
 (function () {
     function createTreasuryPageRenderer({ config, t, tx, text }) {
+        function formatMoney(value) {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return '0.00';
+            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
         function buildTopNavHTML() {
             if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
                 return window.navManager.getTopNavHTML(t);
@@ -198,7 +204,7 @@
                 }
                 <div class="balance-display">
                     <div class="balance-label">${text('currentBalanceLabel')}</div>
-                    <div class="balance-amount ${balanceClass}">${Math.abs(entity.balance).toFixed(2)} \u062C.\u0645</div>
+                    <div class="balance-amount ${balanceClass}">${formatMoney(Math.abs(entity.balance))} \u062C.\u0645</div>
                     <div class="balance-hint">${balanceHint}</div>
                 </div>
                 <div class="entity-actions">
@@ -251,7 +257,7 @@
                                     <span>${tr.transaction_date} - ${tr.description || text('defaultDescription')}</span>
                                 </div>
                             </div>
-                            <div class="transaction-amount ${config.visuals.transactionClass}">${config.visuals.transactionAmountPrefix}${tr.amount.toFixed(2)}</div>
+                            <div class="transaction-amount ${config.visuals.transactionClass}">${config.visuals.transactionAmountPrefix}${formatMoney(tr.amount)}</div>
                         </div>
                     `;
                 })
@@ -287,7 +293,7 @@
                         </div>
                         <div class="voucher-result-row">
                             <span class="voucher-result-label">${text('amountLabel')}:</span>
-                            <strong>${tr.amount.toFixed(2)} \u062C.\u0645</strong>
+                            <strong>${formatMoney(tr.amount)} \u062C.\u0645</strong>
                         </div>
                         <div class="voucher-result-row">
                             <span class="voucher-result-label">${text('descriptionLabel')}:</span>
