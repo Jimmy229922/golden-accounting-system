@@ -1631,3 +1631,151 @@ body.attendance-is-dragging .attendance-day-cell {
 .modal-protect-pulse {
     animation: modal-protect-pulse 0.22s ease-in-out;
 }
+
+.worker-name-box {
+    display: block;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    padding: 4px 6px;
+    transition: all 0.2s ease;
+}
+
+.workers-table tbody tr.is-low-wage-row td {
+    border-top: 2px solid #ef4444 !important;
+    border-bottom: 2px solid #ef4444 !important;
+    background-color: rgba(239, 68, 68, 0.05) !important;
+}
+
+.workers-table tbody tr.is-low-wage-row td:first-child {
+    border-right: 2px solid #ef4444 !important;
+    border-inline-start: 2px solid #ef4444 !important;
+}
+
+.workers-table tbody tr.is-low-wage-row td:last-child {
+    border-left: 2px solid #ef4444 !important;
+    border-inline-end: 2px solid #ef4444 !important;
+}
+
+.workers-table tbody tr.is-low-wage-row:hover td {
+    background-color: rgba(239, 68, 68, 0.09) !important;
+}
+
+.worker-name-box.worker-name-low-wage {
+    cursor: pointer;
+}
+
+.worker-name-box.worker-name-low-wage strong {
+    color: #dc2626;
+}
+
+.worker-money.worker-wage-low {
+    color: #dc2626 !important;
+    font-weight: 800;
+}
+
+.workers-summary-card.workers-net {
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.workers-summary-card.workers-net:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.09);
+}
+
+.workers-summary-card.workers-net.has-low-wage-warning {
+    --card-accent: #ef4444;
+    border-color: rgba(239, 68, 68, 0.4);
+    background: linear-gradient(135deg, var(--card-bg, #fff) 85%, rgba(239, 68, 68, 0.06) 100%);
+    box-shadow: 0 8px 22px rgba(239, 68, 68, 0.12);
+}
+
+.workers-summary-card.workers-net.has-low-wage-warning::before {
+    background: #ef4444 !important;
+}
+
+.workers-summary-card.workers-net.has-low-wage-warning .workers-summary-icon {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.net-pay-hidden-val {
+    color: #ef4444 !important;
+    font-size: 1.15rem;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 2px;
+}
+
+.low-wage-worker-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--table-border, #f1f5f9);
+    transition: background 0.15s ease;
+}
+
+.low-wage-worker-item:last-child {
+    border-bottom: none;
+}
+
+.low-wage-worker-item:hover {
+    background: rgba(239, 68, 68, 0.04);
+}
+
+.low-wage-worker-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.low-wage-current-badge {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+
+[data-theme="dark"] .workers-table tbody tr.is-low-wage-row td {
+    border-top: 2px solid #f87171 !important;
+    border-bottom: 2px solid #f87171 !important;
+    background-color: rgba(239, 68, 68, 0.12) !important;
+}
+
+[data-theme="dark"] .workers-table tbody tr.is-low-wage-row td:first-child {
+    border-right: 2px solid #f87171 !important;
+    border-inline-start: 2px solid #f87171 !important;
+}
+
+[data-theme="dark"] .workers-table tbody tr.is-low-wage-row td:last-child {
+    border-left: 2px solid #f87171 !important;
+    border-inline-end: 2px solid #f87171 !important;
+}
+
+[data-theme="dark"] .workers-table tbody tr.is-low-wage-row:hover td {
+    background-color: rgba(239, 68, 68, 0.18) !important;
+}
+
+[data-theme="dark"] .worker-name-box.worker-name-low-wage strong {
+    color: #fca5a5;
+}
+
+[data-theme="dark"] .workers-summary-card.workers-net.has-low-wage-warning {
+    border-color: rgba(239, 68, 68, 0.45);
+    background: linear-gradient(135deg, var(--card-bg, #1e293b) 85%, rgba(239, 68, 68, 0.12) 100%);
+}
+
+[data-theme="dark"] .low-wage-worker-item:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+[data-theme="dark"] .low-wage-current-badge {
+    background: rgba(239, 68, 68, 0.22);
+    color: #fca5a5;
+}

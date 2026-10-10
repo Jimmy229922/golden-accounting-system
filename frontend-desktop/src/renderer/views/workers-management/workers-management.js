@@ -12,13 +12,13 @@ const ATTENDANCE_DAYS = [
 ];
 
 const ORDERED_WEEK_DAYS = [
+    { key: 'friday', label: 'الجمعة', offset: -1 },
     { key: 'saturday', label: 'السبت', offset: 0 },
     { key: 'sunday', label: 'الأحد', offset: 1 },
     { key: 'monday', label: 'الاثنين', offset: 2 },
     { key: 'tuesday', label: 'الثلاثاء', offset: 3 },
     { key: 'wednesday', label: 'الأربعاء', offset: 4 },
-    { key: 'thursday', label: 'الخميس', offset: 5 },
-    { key: 'friday', label: 'الجمعة', offset: 6 }
+    { key: 'thursday', label: 'الخميس', offset: 5 }
 ];
 
 const state = {
@@ -200,7 +200,7 @@ function renderPage() {
                     <div class="workers-summary-icon"><i class="fas fa-hand-holding-dollar"></i></div>
                     <div><span>${t('workersManagement.totalAdvances', 'إجمالي السُلف')}</span><strong id="advancesValue">0.00 ج.م</strong></div>
                 </article>
-                <article class="workers-summary-card workers-net">
+                <article class="workers-summary-card workers-net" id="netPayCard">
                     <div class="workers-summary-icon"><i class="fas fa-sack-dollar"></i></div>
                     <div><span>${t('workersManagement.netPayable', 'صافي المستحق')}</span><strong id="netPayValue">0.00 ج.م</strong></div>
                 </article>
@@ -328,7 +328,7 @@ function renderPage() {
                             </div>
                             <div class="workers-field workers-field-full">
                                 <label for="advanceNotesInput">ملاحظات السلفة</label>
-                                <textarea class="workers-textarea" id="advanceNotesInput"></textarea>
+                                <textarea class="workers-textarea" id="advanceNotesInput">سلف</textarea>
                             </div>
                         </div>
                         <div class="workers-inline-actions">
@@ -460,6 +460,29 @@ function renderPage() {
                 </div>
             </div>
         </div>
+
+        <div class="workers-modal-overlay hidden" id="lowWageWorkersModal">
+            <div class="workers-modal" role="dialog" aria-modal="true" aria-labelledby="lowWageWorkersModalTitle" style="max-width: 620px;">
+                <div class="workers-modal-header">
+                    <div>
+                        <h2 id="lowWageWorkersModalTitle"><i class="fas fa-triangle-exclamation" style="color: #ef4444;"></i> عمال بأجر يومي 50 ج أو أقل</h2>
+                        <span class="smart-modal-subtitle">يرجى تعديل الأجر اليومي لهؤلاء العمال لإظهار صافي المستحق</span>
+                    </div>
+                    <button type="button" class="workers-modal-close" data-close-modal="lowWageWorkersModal"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="workers-modal-body">
+                    <div class="absent-modal-toolbar">
+                        <div class="workers-field absent-search-field">
+                            <input type="text" class="workers-input" id="lowWageWorkersSearchInput" placeholder="بحث بالاسم أو المهنة...">
+                        </div>
+                    </div>
+                    <div class="absent-workers-list-wrap" id="lowWageWorkersListContainer"></div>
+                </div>
+                <div class="workers-modal-footer">
+                    <button type="button" class="workers-btn workers-btn-outline" data-close-modal="lowWageWorkersModal">إغلاق</button>
+                </div>
+            </div>
+        </div>
     `;
 }
 
@@ -574,15 +597,19 @@ function renderRows() {
         const archivedLabel = row.is_active ? '' : '<span>مؤرشف</span>';
         const notesTitle = row.notes ? ` title="${escapeHtml(row.notes)}"` : '';
         const netClass = Number(row.net_pay) < 0 ? 'is-negative' : '';
+        const dailyWage = Number(row.daily_wage) || 0;
+        const isLowWage = dailyWage <= 50;
 
         return `
-            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${row.advances_total}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'}">
+            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${row.advances_total}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'} ${isLowWage ? 'is-low-wage-row' : ''}">
                 <td>${index + 1}</td>
                 <td class="worker-name-cell"${notesTitle}>
-                    <strong>${escapeHtml(row.name)}${row.auto_transfer_to_petty ? ' <span class="badge-petty" style="display:inline-block; font-size:10px; background:rgba(59,130,246,0.12); color:#2563eb; padding:1px 6px; border-radius:4px; font-weight:normal;" title="مُرحّل للنثريات أسبوعياً"><i class="fas fa-coins"></i> نثريات</span>' : ''}</strong>
-                    <span>${escapeHtml(row.job_title)} ${archivedLabel}</span>
+                    <div class="worker-name-box ${isLowWage ? 'worker-name-low-wage' : ''}"${isLowWage ? ' title="الأجر اليومي 50 ج أو أقل - انقر لتصحيحه"' : ''}>
+                        <strong>${escapeHtml(row.name)}${row.auto_transfer_to_petty ? ' <span class="badge-petty" style="display:inline-block; font-size:10px; background:rgba(59,130,246,0.12); color:#2563eb; padding:1px 6px; border-radius:4px; font-weight:normal;" title="مُرحّل للنثريات أسبوعياً"><i class="fas fa-coins"></i> نثريات</span>' : ''}</strong>
+                        <span>${escapeHtml(row.job_title)} ${archivedLabel}</span>
+                    </div>
                 </td>
-                <td class="worker-money">${formatMoney(row.daily_wage)} ج.م</td>
+                <td class="worker-money ${isLowWage ? 'worker-wage-low' : ''}">${formatMoney(row.daily_wage)} ج.م</td>
                 ${ATTENDANCE_DAYS.map((day) => buildAttendanceCell(row, day)).join('')}
                 <td class="attendance-units-value">${formatUnits(row.attendance_units)}</td>
                 <td class="worker-money gross-pay-value">${formatMoney(row.gross_pay)} ج.م</td>
@@ -775,10 +802,32 @@ function updateSummaryFromTable() {
         netPay += Number(row.dataset.netPay) || 0;
     });
 
+    const lowWageWorkers = getLowWageWorkers();
+    const hasLowWage = lowWageWorkers.length > 0;
+
     document.getElementById('workersCountValue').textContent = String(rows.length);
     document.getElementById('grossPayValue').textContent = `${formatMoney(grossPay)} ج.م`;
     document.getElementById('advancesValue').textContent = `${formatMoney(advancesTotal)} ج.م`;
-    document.getElementById('netPayValue').textContent = `${formatMoney(netPay)} ج.م`;
+
+    const netPayElement = document.getElementById('netPayValue');
+    const netPayCard = document.getElementById('netPayCard');
+
+    if (netPayElement) {
+        if (hasLowWage) {
+            netPayElement.innerHTML = `<span class="net-pay-hidden-val" title="انقر لعرض العمال (${lowWageWorkers.length})"><i class="fas fa-eye-slash"></i> ---</span>`;
+        } else {
+            netPayElement.textContent = `${formatMoney(netPay)} ج.م`;
+        }
+    }
+
+    if (netPayCard) {
+        netPayCard.classList.toggle('has-low-wage-warning', hasLowWage);
+        if (hasLowWage) {
+            netPayCard.setAttribute('title', `يوجد ${lowWageWorkers.length} عامل بأجر 50 ج أو أقل - انقر لعرضهم وتصحيح أجورهم`);
+        } else {
+            netPayCard.removeAttribute('title');
+        }
+    }
 }
 
 function updateWeekLabels() {
@@ -1009,6 +1058,11 @@ function closeModal(id) {
         if (search) search.value = '';
     }
 
+    if (id === 'lowWageWorkersModal') {
+        const search = document.getElementById('lowWageWorkersSearchInput');
+        if (search) search.value = '';
+    }
+
     updateModalBodyLock();
 }
 
@@ -1100,6 +1154,7 @@ function resetAdvanceForm() {
     const form = document.getElementById('advanceForm');
     if (form) form.reset();
     const dateInput = document.getElementById('advanceDateInput');
+    const notesInput = document.getElementById('advanceNotesInput');
     const cancelButton = document.getElementById('cancelAdvanceEditBtn');
     const saveButton = document.getElementById('saveAdvanceBtn');
     if (dateInput && state.weekStart) {
@@ -1107,6 +1162,7 @@ function resetAdvanceForm() {
         dateInput.min = state.weekStart;
         dateInput.max = addDays(state.weekStart, 6);
     }
+    if (notesInput) notesInput.value = 'سلف';
     if (cancelButton) cancelButton.classList.add('hidden');
     if (saveButton) saveButton.textContent = 'حفظ السلفة';
 }
@@ -1810,6 +1866,80 @@ function openAbsentWorkersModal() {
     searchInput?.focus();
 }
 
+function getLowWageWorkers() {
+    return (state.rows || []).filter((w) => {
+        if (!state.includeArchived && !w.is_active) return false;
+        const wage = Number(w.daily_wage) || 0;
+        return wage <= 50;
+    });
+}
+
+function renderLowWageWorkersList(filterQuery = '') {
+    const container = document.getElementById('lowWageWorkersListContainer');
+    if (!container) return;
+
+    const lowWageWorkers = getLowWageWorkers();
+    const query = String(filterQuery || '').toLowerCase().trim();
+
+    const filtered = query
+        ? lowWageWorkers.filter((w) => (w.name || '').toLowerCase().includes(query) || (w.job_title || '').toLowerCase().includes(query))
+        : lowWageWorkers;
+
+    const countTitle = document.getElementById('lowWageWorkersModalTitle');
+    if (countTitle) {
+        countTitle.innerHTML = `<i class="fas fa-triangle-exclamation" style="color: #ef4444;"></i> عمال بأجر يومي 50 ج أو أقل (${lowWageWorkers.length} عامل)`;
+    }
+
+    if (!lowWageWorkers.length) {
+        container.innerHTML = `
+            <div class="absent-empty-state">
+                <i class="fas fa-circle-check" style="color: #10b981; font-size: 2.4rem;"></i>
+                <strong>جميع أجور العمال صحيحة!</strong>
+                <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #64748b;">لا يوجد أي عامل بأجر يومي 50 ج.م أو أقل حالياً.</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (!filtered.length) {
+        container.innerHTML = `
+            <div class="absent-empty-state">
+                <i class="fas fa-magnifying-glass" style="color: #94a3b8; font-size: 2rem;"></i>
+                <strong>لا توجد نتائج بحث مطابقة</strong>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map((w, idx) => `
+        <div class="low-wage-worker-item">
+            <div class="absent-worker-info">
+                <span class="absent-worker-num">${idx + 1}</span>
+                <div class="absent-worker-details">
+                    <strong>${escapeHtml(w.name)}</strong>
+                    <span>${escapeHtml(w.job_title || 'عامل')}</span>
+                </div>
+            </div>
+            <div class="low-wage-worker-actions">
+                <span class="low-wage-current-badge">${formatMoney(w.daily_wage)} ج.م</span>
+                <button type="button" class="workers-btn workers-btn-primary workers-btn-small" data-action="edit-low-wage-worker" data-id="${w.id}">
+                    <i class="fas fa-pen"></i> تصحيح الأجر
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openLowWageWorkersModal() {
+    renderLowWageWorkersList();
+    openModal('lowWageWorkersModal');
+    const searchInput = document.getElementById('lowWageWorkersSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        setTimeout(() => searchInput.focus(), 80);
+    }
+}
+
 function updateSmartAttendancePreview() {
     const previewEl = document.getElementById('smartAttendancePreview');
     if (!previewEl) return;
@@ -2335,6 +2465,18 @@ function bindEvents() {
     });
 
     document.getElementById('workersTableBody').addEventListener('click', async (event) => {
+        const lowWageBox = event.target.closest('.worker-name-low-wage');
+        if (lowWageBox) {
+            const row = lowWageBox.closest('tr[data-worker-id]');
+            if (row) {
+                const worker = getWorkerById(row.dataset.workerId);
+                if (worker) {
+                    openWorkerModal(worker);
+                    return;
+                }
+            }
+        }
+
         const button = event.target.closest('[data-action]');
         if (!button) return;
 
@@ -2387,8 +2529,31 @@ function bindEvents() {
         }
     });
 
+    document.getElementById('netPayCard')?.addEventListener('click', () => {
+        openLowWageWorkersModal();
+    });
+
+    document.getElementById('lowWageWorkersSearchInput')?.addEventListener('input', (event) => {
+        renderLowWageWorkersList(event.target.value);
+    });
+
+    document.getElementById('lowWageWorkersModal')?.addEventListener('click', (event) => {
+        const editBtn = event.target.closest('[data-action="edit-low-wage-worker"]');
+        if (editBtn) {
+            const worker = getWorkerById(editBtn.dataset.id);
+            if (worker) {
+                closeModal('lowWageWorkersModal');
+                openWorkerModal(worker);
+            }
+        }
+    });
+
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
+        if (!document.getElementById('lowWageWorkersModal')?.classList.contains('hidden')) {
+            closeModal('lowWageWorkersModal');
+            return;
+        }
         if (!document.getElementById('absentWorkersModal')?.classList.contains('hidden')) {
             closeModal('absentWorkersModal');
             return;
