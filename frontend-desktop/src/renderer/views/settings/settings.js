@@ -19,7 +19,7 @@ const SETTINGS_TRACKING_FIELDS = [
     { key: 'profileImage', label: 'الشعار' }
 ];
 const CURRENT_CHANGELOG = {
-    version: '9.1.2',
+    version: '9.1.3',
     title: 'ما الجديد في التحديث الجديد',
     intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار الأحدث بنجاح. إليك أهم الميزات والتعديلات المضافة في هذا الإصدار:',
     items: [

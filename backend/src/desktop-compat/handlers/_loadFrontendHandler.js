@@ -12,6 +12,12 @@ function isGeneratedCompatModule(parent) {
     );
 }
 
+const backendWindowManagerModule = {
+    openAppFlow: () => Promise.resolve(),
+    getMainWindow: () => null,
+    markMainWindowClosingForUpdate: () => {}
+};
+
 function loadFrontendHandler(handlerName) {
     const backendDbModule = require('../db');
     const backendInviteConfigModule = require('../inviteConfig');
@@ -32,6 +38,10 @@ function loadFrontendHandler(handlerName) {
 
         if (request === '../inviteConfig' && isGeneratedCompatModule(parent)) {
             return backendInviteConfigModule;
+        }
+
+        if ((request === '../windowManager' || request === '../windowManager.js') && isGeneratedCompatModule(parent)) {
+            return backendWindowManagerModule;
         }
 
         return originalLoad.call(this, request, parent, isMain);
