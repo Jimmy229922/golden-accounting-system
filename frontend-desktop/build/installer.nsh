@@ -1,6 +1,29 @@
+!macro customInit
+  ${If} $INSTDIR == "D:\JImmy"
+    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\accounting-system"
+  ${ElseIf} ${FileExists} "$INSTDIR\Accounting System.exe"
+  ${Else}
+    ${If} ${FileExists} "$LOCALAPPDATA\Programs\accounting-system\Accounting System.exe"
+      StrCpy $INSTDIR "$LOCALAPPDATA\Programs\accounting-system"
+    ${EndIf}
+  ${EndIf}
+
+  WriteRegStr HKCU "Software\${APP_GUID}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}" "InstallLocation" "$INSTDIR"
+!macroend
+
+!macro customCheckAppRunning
+  nsExec::Exec `taskkill /f /im "${APP_EXECUTABLE_FILENAME}"`
+  Sleep 300
+!macroend
+
 !macro customInstall
-  StrCpy $0 $EXEDIR 2
-  StrCpy $1 "$0\APP_JS"
+  ${If} ${FileExists} "C:\APP_JS\DATA"
+    StrCpy $1 "C:\APP_JS"
+  ${Else}
+    StrCpy $0 $EXEDIR 2
+    StrCpy $1 "$0\APP_JS"
+  ${EndIf}
 
   CreateDirectory "$1"
   CreateDirectory "$1\PIC"

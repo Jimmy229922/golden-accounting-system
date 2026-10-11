@@ -15,12 +15,35 @@ try {
     }
 }
 
+function computeLedgerHash(item) {
+    const effect = Number(item.effect_amount || 0).toFixed(4);
+    const transDate = String(item.trans_date || '');
+    const docNum = String(item.doc_number || '');
+    const docType = String(item.doc_type || '');
+    const total = Number(item.total_amount || 0).toFixed(4);
+    const paid = Number(item.paid_amount || 0).toFixed(4);
+    const rem = Number(item.remaining_amount || 0).toFixed(4);
+    const runBal = Number(item.running_balance || 0).toFixed(4);
+    const notes = String(item.notes || '');
+    return `${effect}_${transDate}_${docNum}_${docType}_${total}_${paid}_${rem}_${runBal}_${notes}`;
+}
+
+function computePartyHash(p) {
+    const code = p.code !== undefined && p.code !== null ? String(p.code) : '';
+    const name = String(p.name || '');
+    const phone = String(p.phone || '');
+    const address = String(p.address || '');
+    const type = String(p.type || '');
+    const balance = Number(p.balance || 0).toFixed(4);
+    return `${code}_${name}_${phone}_${address}_${type}_${balance}`;
+}
+
 class SyncEngine {
     constructor(options = {}) {
         this.accountingDb = options.accountingDb;
         this.storageDir = options.storageDir || path.resolve(__dirname, '../../../..');
         this.companyId = options.companyId;
-        this.desktopVersion = options.desktopVersion || '9.2.0';
+        this.desktopVersion = options.desktopVersion || '9.2.2';
         this.edgeFunctionUrl = options.edgeFunctionUrl;
         this.keyStore = options.keyStore;
         
@@ -125,9 +148,16 @@ class SyncEngine {
     }
 
     getNextSeqNo() {
-        const row = this.stateDb.prepare("SELECT value FROM sync_meta WHERE key = 'last_seq_no'").get();
-        const current = row ? Number(row.value) : 100;
-        return current + 1;
+        const outboxMax = this.stateDb.prepare("SELECT MAX(seq_no) as max_seq FROM outbox_queue").get();
+        const metaRow = this.stateDb.prepare("SELECT value FROM sync_meta WHERE key = 'last_seq_no'").get();
+        const metaSeq = metaRow ? Number(metaRow.value) : 100;
+        const currentMax = Math.max(metaSeq, (outboxMax && outboxMax.max_seq) ? Number(outboxMax.max_seq) : 0);
+        return currentMax + 1;
+    }
+
+    hasPendingOutbox() {
+        const row = this.stateDb.prepare("SELECT count(*) as cnt FROM outbox_queue WHERE status = 'pending'").get();
+        return Boolean(row && row.cnt > 0);
     }
 
     setLastSeqNo(seqNo) {
@@ -184,7 +214,8 @@ class SyncEngine {
                     WHEN pl.transaction_type = 'sales_invoice' THEN COALESCE(si.remaining_amount, si.total_amount - si.paid_amount, 0)
                     WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.remaining_amount, pi.total_amount - pi.paid_amount, 0)
                     ELSE 0
-                END AS remaining_amount
+                END AS remaining_amount,
+                COALESCE(NULLIF(pl.notes, ''), NULLIF(si.notes, ''), NULLIF(pi.notes, ''), NULLIF(tt.description, ''), NULLIF(ls.statement, ''), CASE WHEN pl.transaction_type = 'opening_balance' THEN 'رصيد افتتاحي' ELSE NULL END) AS notes
             FROM party_ledger pl
             LEFT JOIN sales_invoices si ON pl.transaction_type = 'sales_invoice' AND pl.reference_id = si.id
             LEFT JOIN purchase_invoices pi ON pl.transaction_type = 'purchase_invoice' AND pl.reference_id = pi.id
@@ -216,50 +247,10 @@ class SyncEngine {
     // رصد التغييرات التفاضلية (Delta) بمقارنة الحالة الحالية مع جدول الظل
     detectDeltaEvents(seqNo) {
         const { parties, ledger } = this.extractCurrentProjection();
-        const events = [];
-
-        const shadowRows = this.stateDb.prepare('SELECT ledger_id, hash, amount FROM shadow_ledger').all();
-        const shadowMap = new Map();
-        shadowRows.forEach(r => shadowMap.set(r.ledger_id, r));
-
-        const activeLedgerIds = new Set();
-
-        for (const line of ledger) {
-            activeLedgerIds.add(line.ledger_id);
-            const lineHash = `${line.effect_amount}_${line.trans_date}_${line.doc_number}_${line.doc_type}_${line.total_amount}_${line.paid_amount}_${line.remaining_amount}_${line.running_balance}`;
-            const existing = shadowMap.get(line.ledger_id);
-
-            if (!existing || existing.hash !== lineHash) {
-                events.push({
-                    entity_type: 'party_ledger',
-                    action: 'UPSERT',
-                    data: {
-                        ledger_id: line.ledger_id,
-                        party_id: line.party_id,
-                        doc_type: line.doc_type,
-                        doc_number: line.doc_number,
-                        trans_date: line.trans_date,
-                        total_amount: Number(line.total_amount).toFixed(4),
-                        paid_amount: Number(line.paid_amount).toFixed(4),
-                        remaining_amount: Number(line.remaining_amount).toFixed(4),
-                        effect_amount: Number(line.effect_amount).toFixed(4),
-                        running_balance: line.running_balance,
-                        seq_no: seqNo
-                    }
-                });
-            }
-        }
-
-        // رصد الحركات المحذوفة
-        for (const [sLedgerId] of shadowMap.entries()) {
-            if (!activeLedgerIds.has(sLedgerId)) {
-                events.push({
-                    entity_type: 'party_ledger',
-                    action: 'DELETE',
-                    ledger_id: sLedgerId
-                });
-            }
-        }
+        const partyUpserts = [];
+        const partyDeletes = [];
+        const ledgerUpserts = [];
+        const ledgerDeletes = [];
 
         const shadowPartyRows = this.stateDb.prepare('SELECT party_id, hash FROM shadow_parties').all();
         const shadowPartyMap = new Map();
@@ -268,11 +259,11 @@ class SyncEngine {
         const activePartyIds = new Set();
         for (const p of parties) {
             activePartyIds.add(p.id);
-            const partyHash = `${p.code ?? ''}_${p.name ?? ''}_${p.phone ?? ''}_${p.address ?? ''}_${p.type ?? ''}_${Number(p.balance).toFixed(4)}`;
+            const partyHash = computePartyHash(p);
             const existingParty = shadowPartyMap.get(p.id);
 
             if (!existingParty || existingParty.hash !== partyHash) {
-                events.push({
+                partyUpserts.push({
                     entity_type: 'party',
                     action: 'UPSERT',
                     data: {
@@ -291,7 +282,7 @@ class SyncEngine {
 
         for (const [sPartyId] of shadowPartyMap.entries()) {
             if (!activePartyIds.has(sPartyId)) {
-                events.push({
+                partyDeletes.push({
                     entity_type: 'party',
                     action: 'DELETE',
                     party_id: sPartyId
@@ -299,6 +290,50 @@ class SyncEngine {
             }
         }
 
+        const shadowRows = this.stateDb.prepare('SELECT ledger_id, hash, amount FROM shadow_ledger').all();
+        const shadowMap = new Map();
+        shadowRows.forEach(r => shadowMap.set(r.ledger_id, r));
+
+        const activeLedgerIds = new Set();
+
+        for (const line of ledger) {
+            activeLedgerIds.add(line.ledger_id);
+            const lineHash = computeLedgerHash(line);
+            const existing = shadowMap.get(line.ledger_id);
+
+            if (!existing || existing.hash !== lineHash) {
+                ledgerUpserts.push({
+                    entity_type: 'party_ledger',
+                    action: 'UPSERT',
+                    data: {
+                        ledger_id: line.ledger_id,
+                        party_id: line.party_id,
+                        doc_type: line.doc_type,
+                        doc_number: line.doc_number,
+                        trans_date: line.trans_date,
+                        total_amount: Number(line.total_amount).toFixed(4),
+                        paid_amount: Number(line.paid_amount).toFixed(4),
+                        remaining_amount: Number(line.remaining_amount).toFixed(4),
+                        effect_amount: Number(line.effect_amount).toFixed(4),
+                        running_balance: line.running_balance,
+                        notes: line.notes || null,
+                        seq_no: seqNo
+                    }
+                });
+            }
+        }
+
+        for (const [sLedgerId] of shadowMap.entries()) {
+            if (!activeLedgerIds.has(sLedgerId)) {
+                ledgerDeletes.push({
+                    entity_type: 'party_ledger',
+                    action: 'DELETE',
+                    ledger_id: sLedgerId
+                });
+            }
+        }
+
+        const events = [...partyUpserts, ...ledgerUpserts, ...ledgerDeletes, ...partyDeletes];
         return { events, projection: { parties, ledger } };
     }
 
@@ -341,7 +376,7 @@ class SyncEngine {
                 if (ev.entity_type === 'party_ledger') {
                     if (ev.action === 'UPSERT') {
                         const d = ev.data;
-                        const hash = `${d.effect_amount}_${d.trans_date}_${d.doc_number}_${d.doc_type}_${d.total_amount}_${d.paid_amount}_${d.remaining_amount}_${d.running_balance}`;
+                        const hash = computeLedgerHash(d);
                         insertLedgerStmt.run(
                             d.ledger_id,
                             d.party_id,
@@ -358,7 +393,7 @@ class SyncEngine {
                 } else if (ev.entity_type === 'party') {
                     if (ev.action === 'UPSERT') {
                         const d = ev.data;
-                        const hash = `${d.code ?? ''}_${d.name ?? ''}_${d.phone ?? ''}_${d.address ?? ''}_${d.type ?? ''}_${Number(d.balance).toFixed(4)}`;
+                        const hash = computePartyHash(d);
                         insertPartyStmt.run(
                             d.id,
                             d.code ? String(d.code) : null,
@@ -417,7 +452,7 @@ class SyncEngine {
         this.stateDb.transaction(() => {
             for (const line of projection.ledger) {
                 activeIds.add(line.ledger_id);
-                const hash = `${line.effect_amount}_${line.trans_date}_${line.doc_number}_${line.doc_type}_${line.total_amount}_${line.paid_amount}_${line.remaining_amount}_${line.running_balance}`;
+                const hash = computeLedgerHash(line);
                 insertLedgerStmt.run(
                     line.ledger_id,
                     line.party_id,
@@ -440,7 +475,7 @@ class SyncEngine {
             const activePartyIds = new Set();
             for (const p of projection.parties) {
                 activePartyIds.add(p.id);
-                const hash = `${p.code ?? ''}_${p.name ?? ''}_${p.phone ?? ''}_${p.address ?? ''}_${p.type ?? ''}_${Number(p.balance).toFixed(4)}`;
+                const hash = computePartyHash(p);
                 insertPartyStmt.run(
                     p.id,
                     p.code ? String(p.code) : null,
@@ -466,25 +501,37 @@ class SyncEngine {
     }
 
     queueDeltaBatch(seqNo, events, projection = null) {
-        const payload = {
-            mode: 'delta_batch',
-            batch_seq_no: seqNo,
-            desktop_version: this.desktopVersion,
-            events
-        };
+        if (!events || events.length === 0) return null;
+        const CHUNK_SIZE = 300;
+        let curSeq = seqNo;
 
-        this.stateDb.prepare(`
-            INSERT INTO outbox_queue (seq_no, payload_json, status)
-            VALUES (?, ?, 'pending')
-            ON CONFLICT(seq_no) DO UPDATE SET payload_json = excluded.payload_json
-        `).run(seqNo, JSON.stringify(payload));
+        for (let i = 0; i < events.length; i += CHUNK_SIZE) {
+            const chunkEvents = events.slice(i, i + CHUNK_SIZE);
+            chunkEvents.forEach(ev => {
+                if (ev.data) ev.data.seq_no = curSeq;
+            });
+            const payload = {
+                mode: 'delta_batch',
+                batch_seq_no: curSeq,
+                desktop_version: this.desktopVersion,
+                events: chunkEvents
+            };
+
+            this.stateDb.prepare(`
+                INSERT INTO outbox_queue (seq_no, payload_json, status)
+                VALUES (?, ?, 'pending')
+                ON CONFLICT(seq_no) DO UPDATE SET payload_json = excluded.payload_json
+            `).run(curSeq, JSON.stringify(payload));
+
+            curSeq++;
+        }
 
         if (projection) {
             this._pendingProjections = this._pendingProjections || new Map();
-            this._pendingProjections.set(seqNo, projection);
+            this._pendingProjections.set(curSeq - 1, projection);
         }
 
-        return payload;
+        return { mode: 'delta_batch', batch_seq_no: curSeq - 1, events_count: events.length };
     }
 
     async dispatchOutbox(transportFetch = null) {

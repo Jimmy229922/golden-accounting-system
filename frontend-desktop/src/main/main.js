@@ -252,6 +252,22 @@ function isQuittingForAppUpdate() {
     return Boolean(app.isQuittingForAppUpdate);
 }
 
+app.prepareForUpdateShutdown = () => {
+    app.isQuittingForAppUpdate = true;
+    if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    if (syncEngineInstance) {
+        try { syncEngineInstance.close(); } catch (_) {}
+        syncEngineInstance = null;
+    }
+    if (db) {
+        try {
+            db.pragma('wal_checkpoint(TRUNCATE)');
+            db.close();
+        } catch (_) {}
+    }
+};
+
 function getInviteSettingsMap() {
     const rows = db.prepare(
         "SELECT key, value FROM settings WHERE key IN ('invite_code', 'invite_expiry')"
@@ -496,7 +512,7 @@ function startBackgroundSyncEngine() {
             accountingDb: db,
             storageDir,
             companyId: COMPANY_ID,
-            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.0'),
+            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.2'),
             edgeFunctionUrl: EDGE_URL,
             keyStore: {
                 deviceId: identity.deviceId,
@@ -506,16 +522,25 @@ function startBackgroundSyncEngine() {
 
         syncEngineInstance.dispatchOutbox().catch(() => {});
 
+        let isSyncInProgress = false;
         syncTimer = setInterval(async () => {
-            if (!syncEngineInstance) return;
+            if (!syncEngineInstance || isSyncInProgress) return;
+            isSyncInProgress = true;
             try {
+                if (syncEngineInstance.hasPendingOutbox()) {
+                    await syncEngineInstance.dispatchOutbox();
+                    return;
+                }
                 const nextSeq = syncEngineInstance.getNextSeqNo();
                 const delta = syncEngineInstance.detectDeltaEvents(nextSeq);
                 if (delta.events && delta.events.length > 0) {
                     syncEngineInstance.queueDeltaBatch(nextSeq, delta.events, delta.projection);
                 }
                 await syncEngineInstance.dispatchOutbox();
-            } catch (_) {}
+            } catch (_) {
+            } finally {
+                isSyncInProgress = false;
+            }
         }, 15000);
 
         heartbeatTimer = setInterval(async () => {
@@ -523,7 +548,7 @@ function startBackgroundSyncEngine() {
             try {
                 const payload = {
                     mode: 'heartbeat',
-                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.0')
+                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.2')
                 };
                 const bodyStr = JSON.stringify(payload);
                 const signed = signPayload(identity.privateKeyBase64, COMPANY_ID, bodyStr);
@@ -543,6 +568,17 @@ function startBackgroundSyncEngine() {
     } catch (_) {}
 }
 app.on('before-quit', (event) => {
+    if (isQuittingForAppUpdate()) {
+        if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+        if (syncEngineInstance) {
+            try { syncEngineInstance.close(); } catch (_) {}
+            syncEngineInstance = null;
+        }
+        isQuitBackupCompleted = true;
+        isQuitBackupRunning = false;
+        return;
+    }
     if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     if (syncEngineInstance) {
@@ -550,11 +586,6 @@ app.on('before-quit', (event) => {
         syncEngineInstance = null;
     }
     if (!gotTheLock) return;
-    if (isQuittingForAppUpdate()) {
-        isQuitBackupCompleted = true;
-        isQuitBackupRunning = false;
-        return;
-    }
     if (isQuitBackupCompleted || isQuitBackupRunning) {
         return;
     }

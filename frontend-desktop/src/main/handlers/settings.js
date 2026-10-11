@@ -1,4 +1,4 @@
-const { ipcMain, app, shell } = require('electron');
+const { ipcMain, app, shell, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { db } = require('../db');
@@ -832,12 +832,26 @@ function register() {
     ipcMain.handle('quit-and-install-app-update', async (event, installerPath) => {
         try {
             markMainWindowClosingForUpdate();
+            if (typeof app.prepareForUpdateShutdown === 'function') {
+                app.prepareForUpdateShutdown();
+            } else {
+                app.isQuittingForAppUpdate = true;
+            }
+
+            BrowserWindow.getAllWindows().forEach((win) => {
+                try { win.destroy(); } catch (_) {}
+            });
+
             const updater = getAutoUpdater();
             if (updater && typeof updater.quitAndInstall === 'function') {
                 try {
                     updater.quitAndInstall(false, true);
+                    setTimeout(() => {
+                        app.exit(0);
+                    }, 1200);
                     return { success: true };
-                } catch (_) {
+                } catch (updaterErr) {
+                    writeDiagnosticUpdaterLog('ERROR', `updater.quitAndInstall failed: ${updaterErr.message}`);
                 }
             }
 
@@ -853,6 +867,9 @@ function register() {
                     shell.openPath(installerToOpen).catch(() => {});
                 });
                 app.quit();
+                setTimeout(() => {
+                    app.exit(0);
+                }, 1200);
                 return { success: true };
             }
 
