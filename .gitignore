@@ -26,7 +26,15 @@ backend-run.log
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 SUPABASE_LOCAL_CREDENTIALS.md
+device_sync_identity.json
+**/device_sync_identity.json
+create_production_admin_user.js
+**/create_production_admin_user.js
+scripts/sync-sandbox/
+*.blockmap
+latest.yml
 
 # IDEs
 .vscode/

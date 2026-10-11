@@ -445,6 +445,7 @@ app.whenReady().then(async () => {
     });
 
     await openAppFlow();
+    startBackgroundSyncEngine();
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -453,7 +454,101 @@ app.whenReady().then(async () => {
     });
 });
 
+
+let syncEngineInstance = null;
+let syncTimer = null;
+let heartbeatTimer = null;
+
+function startBackgroundSyncEngine() {
+    try {
+        const { evaluateSyncGuard } = require('./sync/syncGuard');
+        const { SyncEngine } = require('./sync/syncEngine');
+        const { loadOrCreateDeviceIdentity, signPayload } = require('./sync/secureKeyStore');
+
+        const portableRoot = getPortableRootPath();
+        const storageDir = path.join(portableRoot, 'DATA');
+        const dbPath = path.join(storageDir, 'accounting.db');
+
+        const guard = evaluateSyncGuard({
+            isPackaged: app.isPackaged,
+            dbPath,
+            syncConfig: {
+                enabled: true,
+                targetUrl: 'https://ryoqhtsdhfbydmejmaby.supabase.co/functions/v1/sync-ingest',
+                targetEnvironment: 'production'
+            },
+            environment: process.env.NODE_ENV || (app.isPackaged ? 'production' : 'development')
+        });
+
+        if (!guard.allowed) {
+            return;
+        }
+
+        const identity = loadOrCreateDeviceIdentity(storageDir);
+        if (!identity) {
+            return;
+        }
+
+        const COMPANY_ID = '715526d2-f05a-458f-8cf7-179ee172a7a1';
+        const EDGE_URL = 'https://ryoqhtsdhfbydmejmaby.supabase.co/functions/v1/sync-ingest';
+
+        syncEngineInstance = new SyncEngine({
+            accountingDb: db,
+            storageDir,
+            companyId: COMPANY_ID,
+            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.0'),
+            edgeFunctionUrl: EDGE_URL,
+            keyStore: {
+                deviceId: identity.deviceId,
+                sign: (payloadStr) => signPayload(identity.privateKeyBase64, COMPANY_ID, payloadStr)
+            }
+        });
+
+        syncEngineInstance.dispatchOutbox().catch(() => {});
+
+        syncTimer = setInterval(async () => {
+            if (!syncEngineInstance) return;
+            try {
+                const nextSeq = syncEngineInstance.getNextSeqNo();
+                const delta = syncEngineInstance.detectDeltaEvents(nextSeq);
+                if (delta.events && delta.events.length > 0) {
+                    syncEngineInstance.queueDeltaBatch(nextSeq, delta.events, delta.projection);
+                }
+                await syncEngineInstance.dispatchOutbox();
+            } catch (_) {}
+        }, 15000);
+
+        heartbeatTimer = setInterval(async () => {
+            if (!syncEngineInstance) return;
+            try {
+                const payload = {
+                    mode: 'heartbeat',
+                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.0')
+                };
+                const bodyStr = JSON.stringify(payload);
+                const signed = signPayload(identity.privateKeyBase64, COMPANY_ID, bodyStr);
+                await fetch(EDGE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Id': identity.deviceId,
+                        'X-Timestamp': signed.timestamp,
+                        'X-Nonce': signed.nonce,
+                        'X-Signature': signed.signatureBase64
+                    },
+                    body: bodyStr
+                });
+            } catch (_) {}
+        }, 60000);
+    } catch (_) {}
+}
 app.on('before-quit', (event) => {
+    if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    if (syncEngineInstance) {
+        try { syncEngineInstance.close(); } catch (_) {}
+        syncEngineInstance = null;
+    }
     if (!gotTheLock) return;
     if (isQuittingForAppUpdate()) {
         isQuitBackupCompleted = true;

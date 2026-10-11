@@ -1,6 +1,6 @@
 {
   "name": "accounting-system-desktop",
-  "version": "9.1.7",
+  "version": "9.2.0",
   "description": "Professional Accounting System",
   "main": "src/main/main.js",
   "scripts": {
@@ -51,7 +51,6 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
-    "accounting-system-monorepo": "file:..",
     "better-sqlite3": "^12.5.0",
     "electron-updater": "^6.8.9",
     "pdf-lib": "^1.17.1"

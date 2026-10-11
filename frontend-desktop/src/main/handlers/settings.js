@@ -990,8 +990,8 @@ function register() {
             const treasuryBalance = treasuryIncome - treasuryExpense;
 
             // --- Receivables & Payables (Using standard balances calculation) ---
-            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE type IN ('customer', 'both') AND balance > 0").get().total;
-            const payables = db.prepare("SELECT COALESCE(SUM(ABS(balance)), 0) as total FROM parties WHERE type IN ('supplier', 'both') AND balance < 0").get().total;
+            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE balance > 0").get().total;
+            const payables = db.prepare("SELECT COALESCE(SUM(ABS(balance)), 0) as total FROM parties WHERE balance < 0").get().total;
 
             // --- Chart data (last 30 days) ---
             const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
