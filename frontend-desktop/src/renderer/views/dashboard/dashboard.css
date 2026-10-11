@@ -616,7 +616,7 @@
 /* Middle Grid: Recent Transactions + Top Items */
 .dashboard-middle-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1fr;
     gap: 24px;
     margin-bottom: 32px;
 }
@@ -664,23 +664,6 @@
 .type-purchase {
     background: rgba(255, 94, 98, 0.12);
     color: #ff5e62;
-}
-/* Top Items */
-.top-items-list {
-    min-height: 100px;
-}
-.top-item-rank {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: var(--bg-color);
-    color: var(--text-color);
-    font-weight: 800;
-    font-size: 0.8rem;
-    border: 1px solid var(--border-color);
 }
 /* Alerts List */
 .alerts-list {
@@ -957,4 +940,45 @@
     :where(.content, .sales-content, .reports-content) {
         padding: 16px;
     }
+}
+
+/* Dues Combined Card */
+.dues-combined-card .metric-header {
+    margin-bottom: 6px;
+    align-items: center;
+}
+.dues-card-title {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+.dues-combined-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: auto;
+}
+.due-sub-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: var(--bg-color);
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+}
+.due-sub-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.due-sub-value {
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+.due-receivables {
+    color: #10b981;
+}
+.due-payables {
+    color: #ef4444;
 }

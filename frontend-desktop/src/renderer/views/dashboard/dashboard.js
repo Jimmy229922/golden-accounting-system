@@ -334,7 +334,6 @@ async function loadDashboardStats(filters = currentFilters) {
         if (stats.chartData) renderChart(stats.chartData);
 
         dashboardRender.renderRecentTransactions({ transactions: stats.recentTransactions, t });
-        dashboardRender.renderTopItems({ topItems: stats.topItems, t });
 
         if (stats.alerts) {
             dashboardRender.renderAlerts({ alerts: stats.alerts, t, fmt });

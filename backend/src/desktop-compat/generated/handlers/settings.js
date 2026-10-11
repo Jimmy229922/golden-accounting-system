@@ -394,7 +394,7 @@ async function downloadFileFromUrlWithArabicErrors(downloadUrl, destinationPath,
                     totalBytes: 0,
                     percent: 0,
                     error: '',
-                    message: `\u0636\u0639\u0641 \u0641\u064a \u0627\u0644\u0627\u062a\u0635\u0627\u0644. \u062c\u0627\u0631\u064a \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629 ${attempt + 1} \u0645\u0646 ${APP_UPDATE_MAX_DOWNLOAD_RETRIES}...`,
+                    message: `ضعف في الاتصال. جاري إعادة المحاولة ${attempt + 1} من ${APP_UPDATE_MAX_DOWNLOAD_RETRIES}...`,
                     lastError: translatedError
                 });
             }
@@ -403,6 +403,36 @@ async function downloadFileFromUrlWithArabicErrors(downloadUrl, destinationPath,
         }
     }
 }
+
+let autoUpdaterInstance = null;
+function getAutoUpdater() {
+    if (autoUpdaterInstance !== null) {
+        return autoUpdaterInstance;
+    }
+    try {
+        if (app && typeof app.getVersion === 'function') {
+            const updaterPkg = require('electron-updater');
+            const instance = updaterPkg.autoUpdater || updaterPkg;
+            if (instance) {
+                instance.autoDownload = false;
+                instance.autoInstallOnAppQuit = false;
+                instance.allowDowngrade = false;
+                instance.allowPrerelease = false;
+                instance.setFeedURL({
+                    provider: 'github',
+                    owner: GITHUB_REPOSITORY_OWNER,
+                    repo: GITHUB_REPOSITORY_NAME
+                });
+                autoUpdaterInstance = instance;
+                return autoUpdaterInstance;
+            }
+        }
+    } catch (_) {
+    }
+    autoUpdaterInstance = false;
+    return null;
+}
+
 function register() {
     // --- Settings Handlers ---
     ipcMain.handle('get-settings', () => {
@@ -451,10 +481,143 @@ function register() {
     });
 
     ipcMain.handle('check-app-update', async () => {
+        const updater = getAutoUpdater();
+        if (updater) {
+            try {
+                const updateCheckResult = await updater.checkForUpdates();
+                if (updateCheckResult && updateCheckResult.updateInfo) {
+                    const info = updateCheckResult.updateInfo;
+                    const latestVersion = normalizeVersion(info.version);
+                    const currentVersion = getCurrentAppVersion();
+                    return {
+                        success: true,
+                        currentVersion,
+                        latestVersion,
+                        updateAvailable: compareVersions(latestVersion, currentVersion) > 0,
+                        releaseName: String(info.releaseName || latestVersion),
+                        publishedAt: info.releaseDate || '',
+                        releaseUrl: GITHUB_RELEASES_PAGE_URL,
+                        assetName: info.path || `Accounting System Setup ${latestVersion}.exe`,
+                        downloadUrl: ''
+                    };
+                }
+            } catch (_) {
+            }
+        }
         return fetchLatestReleaseDetails();
     });
 
     ipcMain.handle('download-app-update', async (event) => {
+        const updater = getAutoUpdater();
+        if (updater) {
+            try {
+                const updateCheckResult = await updater.checkForUpdates();
+                if (updateCheckResult && updateCheckResult.updateInfo) {
+                    const info = updateCheckResult.updateInfo;
+                    const latestVersion = normalizeVersion(info.version);
+                    const currentVersion = getCurrentAppVersion();
+                    if (compareVersions(latestVersion, currentVersion) <= 0) {
+                        return {
+                            success: true,
+                            updateAvailable: false,
+                            currentVersion,
+                            latestVersion
+                        };
+                    }
+
+                    const defaultAssetName = info.path || `Accounting System Setup ${latestVersion}.exe`;
+                    setAppUpdateProgressState({
+                        status: 'starting',
+                        latestVersion,
+                        assetName: defaultAssetName,
+                        downloadedBytes: 0,
+                        totalBytes: 0,
+                        percent: 0,
+                        error: '',
+                        message: 'جاري بدء تنزيل التحديث...',
+                        retryAttempt: 1,
+                        maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
+                    });
+                    emitAppUpdateProgress(event.sender, {
+                        status: 'starting',
+                        latestVersion,
+                        assetName: defaultAssetName,
+                        downloadedBytes: 0,
+                        totalBytes: 0,
+                        percent: 0,
+                        message: 'جاري بدء تنزيل التحديث...',
+                        retryAttempt: 1,
+                        maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
+                    });
+
+                    updater.removeAllListeners('download-progress');
+                    updater.removeAllListeners('update-downloaded');
+                    updater.removeAllListeners('error');
+
+                    const downloadedPath = await new Promise((resolve, reject) => {
+                        updater.on('download-progress', (progressObj) => {
+                            const percent = Math.max(0, Math.min(100, Math.round(progressObj.percent || 0)));
+                            const downloadedBytes = Math.round(progressObj.transferred || 0);
+                            const totalBytes = Math.round(progressObj.total || 0);
+                            const payload = {
+                                status: 'downloading',
+                                latestVersion,
+                                assetName: defaultAssetName,
+                                percent,
+                                downloadedBytes,
+                                totalBytes,
+                                error: '',
+                                message: ''
+                            };
+                            setAppUpdateProgressState(payload);
+                            emitAppUpdateProgress(event.sender, payload);
+                        });
+
+                        updater.once('update-downloaded', (downloadedInfo) => {
+                            const filePath = downloadedInfo?.downloadedFile || (Array.isArray(downloadedInfo?.files) ? downloadedInfo.files[0] : null);
+                            resolve(filePath);
+                        });
+
+                        updater.once('error', (err) => {
+                            reject(err);
+                        });
+
+                        updater.downloadUpdate().catch(reject);
+                    });
+
+                    setAppUpdateProgressState({
+                        status: 'completed',
+                        latestVersion,
+                        assetName: path.basename(downloadedPath || defaultAssetName),
+                        percent: 100,
+                        error: '',
+                        message: 'اكتمل تنزيل التحديث.',
+                        retryAttempt: 1,
+                        maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
+                    });
+                    emitAppUpdateProgress(event.sender, {
+                        status: 'completed',
+                        latestVersion,
+                        assetName: path.basename(downloadedPath || defaultAssetName),
+                        percent: 100,
+                        message: 'اكتمل تنزيل التحديث.',
+                        retryAttempt: 1,
+                        maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
+                    });
+
+                    return {
+                        success: true,
+                        updateAvailable: true,
+                        path: downloadedPath,
+                        assetName: path.basename(downloadedPath || defaultAssetName),
+                        latestVersion,
+                        closeForInstall: true
+                    };
+                }
+            } catch (_) {
+            }
+        }
+
         const releaseResult = await fetchLatestReleaseDetails();
         if (!releaseResult.success) {
             return releaseResult;
@@ -472,7 +635,7 @@ function register() {
         if (!releaseResult.downloadUrl || !releaseResult.assetName) {
             return {
                 success: false,
-                error: '\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0625\u0635\u062f\u0627\u0631 \u062c\u062f\u064a\u062f \u0644\u0643\u0646 \u0628\u062f\u0648\u0646 \u0645\u0644\u0641 \u062a\u062b\u0628\u064a\u062a \u0644\u0648\u064a\u0646\u062f\u0648\u0632 \u062f\u0627\u062e\u0644 GitHub Releases.',
+                error: 'تم العثور على إصدار جديد لكن بدون ملف تثبيت لويندوز داخل GitHub Releases.',
                 releaseUrl: releaseResult.releaseUrl,
                 openReleasePage: true
             };
@@ -491,7 +654,7 @@ function register() {
                 totalBytes: 0,
                 percent: 0,
                 error: '',
-                message: '\u062c\u0627\u0631\u064a \u0628\u062f\u0621 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b...',
+                message: 'جاري بدء تنزيل التحديث...',
                 retryAttempt: 1,
                 maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
             });
@@ -502,7 +665,7 @@ function register() {
                 downloadedBytes: 0,
                 totalBytes: 0,
                 percent: 0,
-                message: '\u062c\u0627\u0631\u064a \u0628\u062f\u0621 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b...',
+                message: 'جاري بدء تنزيل التحديث...',
                 retryAttempt: 1,
                 maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
             });
@@ -546,7 +709,7 @@ function register() {
                 assetName: releaseResult.assetName,
                 percent: 100,
                 error: '',
-                message: '\u0627\u0643\u062a\u0645\u0644 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b.',
+                message: 'اكتمل تنزيل التحديث.',
                 retryAttempt: downloadMeta.retryAttempt,
                 maxRetries: downloadMeta.maxRetries
             });
@@ -555,7 +718,7 @@ function register() {
                 latestVersion: releaseResult.latestVersion,
                 assetName: releaseResult.assetName,
                 percent: 100,
-                message: '\u0627\u0643\u062a\u0645\u0644 \u062a\u0646\u0632\u064a\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b.',
+                message: 'اكتمل تنزيل التحديث.',
                 retryAttempt: downloadMeta.retryAttempt,
                 maxRetries: downloadMeta.maxRetries
             });
@@ -594,30 +757,32 @@ function register() {
 
     ipcMain.handle('quit-and-install-app-update', async (event, installerPath) => {
         try {
-            const targetPath = String(installerPath || '').trim();
-            if (!targetPath) {
-                return { success: false, error: 'مسار ملف التثبيت غير صالح.' };
-            }
-
-            if (!fs.existsSync(targetPath)) {
-                return { success: false, error: 'Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Ù…Ù„Ù Ø§Ù„ØªØ«Ø¨ÙŠØª Ø¨Ø¹Ø¯ Ø§ÙƒØªÙ…Ø§Ù„ Ø§Ù„ØªØ­Ø¯ÙŠØ«.' };
-            }
-
-            app.isQuittingForAppUpdate = true;
-            app.appUpdateInstallerPath = targetPath;
             markMainWindowClosingForUpdate();
-
-            app.once('quit', () => {
-                const installerToOpen = String(app.appUpdateInstallerPath || targetPath).trim();
-                if (!installerToOpen) {
-                    return;
+            const updater = getAutoUpdater();
+            if (updater && typeof updater.quitAndInstall === 'function') {
+                try {
+                    updater.quitAndInstall(false, true);
+                    return { success: true };
+                } catch (_) {
                 }
-                shell.openPath(installerToOpen).catch(() => {});
-            });
+            }
 
-            app.quit();
+            const targetPath = String(installerPath || '').trim();
+            if (targetPath && fs.existsSync(targetPath)) {
+                app.isQuittingForAppUpdate = true;
+                app.appUpdateInstallerPath = targetPath;
+                app.once('quit', () => {
+                    const installerToOpen = String(app.appUpdateInstallerPath || targetPath).trim();
+                    if (!installerToOpen) {
+                        return;
+                    }
+                    shell.openPath(installerToOpen).catch(() => {});
+                });
+                app.quit();
+                return { success: true };
+            }
 
-            return { success: true };
+            return { success: false, error: 'مسار ملف التثبيت غير صالح.' };
         } catch (error) {
             return { success: false, error: error.message };
         }

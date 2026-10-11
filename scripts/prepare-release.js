@@ -93,6 +93,17 @@ function prepareArtifacts(version) {
     const portableInstallerPath = path.join(portableDir, installerName);
     fs.copyFileSync(installerPath, portableInstallerPath);
 
+    const blockmapName = `${installerName}.blockmap`;
+    const blockmapPath = path.join(distDir, blockmapName);
+    if (fs.existsSync(blockmapPath)) {
+        fs.copyFileSync(blockmapPath, path.join(portableDir, blockmapName));
+    }
+
+    const latestYmlPath = path.join(distDir, 'latest.yml');
+    if (fs.existsSync(latestYmlPath)) {
+        fs.copyFileSync(latestYmlPath, path.join(portableDir, 'latest.yml'));
+    }
+
     const zipPath = path.join(distDir, `APP_JS-${version}.zip`);
     if (fs.existsSync(zipPath)) {
         fs.rmSync(zipPath, { force: true });
@@ -103,11 +114,13 @@ function prepareArtifacts(version) {
     return {
         installerPath,
         portableInstallerPath,
-        zipPath
+        zipPath,
+        blockmapPath: fs.existsSync(blockmapPath) ? blockmapPath : null,
+        latestYmlPath: fs.existsSync(latestYmlPath) ? latestYmlPath : null
     };
 }
 
-function printSummary({ version, buildExecuted, installerPath, portableInstallerPath, zipPath }) {
+function printSummary({ version, buildExecuted, installerPath, portableInstallerPath, zipPath, blockmapPath, latestYmlPath }) {
     console.log('');
     console.log('========================================');
     console.log(`جاهز لتجهيز Release الإصدار ${version}`);
@@ -118,15 +131,19 @@ function printSummary({ version, buildExecuted, installerPath, portableInstaller
     console.log('ترتيب الخطوات:');
     console.log(`1. عدل رقم الإصدار في package.json الرئيسي إلى ${version}`);
     console.log('2. شغل أمر التجهيز المناسب');
-    console.log('3. ارفع ملف Setup على GitHub Release');
+    console.log('3. ارفع ملفات التحديث على GitHub Release');
     console.log('');
     console.log('الملفات النهائية:');
     console.log(`- Setup: ${path.relative(rootDir, installerPath)}`);
+    if (blockmapPath) console.log(`- Blockmap: ${path.relative(rootDir, blockmapPath)}`);
+    if (latestYmlPath) console.log(`- Latest YML: ${path.relative(rootDir, latestYmlPath)}`);
     console.log(`- APP_JS: ${path.relative(rootDir, portableInstallerPath)}`);
     console.log(`- APP_JS ZIP: ${path.relative(rootDir, zipPath)}`);
     console.log('');
-    console.log('الملف المطلوب رفعه على GitHub Release للتحديث داخل البرنامج:');
-    console.log(`- ${path.basename(installerPath)}`);
+    console.log('الملفات المطلوب رفعها على GitHub Release لتفعيل التحديثات الجزئية (Differential Updates):');
+    console.log(`- ${path.basename(installerPath)} (ملف التثبيت)`);
+    if (blockmapPath) console.log(`- ${path.basename(blockmapPath)} (خريطة البلوكات للتحديث الجزئي)`);
+    if (latestYmlPath) console.log(`- latest.yml (ميتاداتا التحديثات)`);
     console.log('');
     console.log('للتجهيز مع البناء: npm run release:build');
     console.log('للتجهيز بعد البناء فقط: npm run release:prepare');

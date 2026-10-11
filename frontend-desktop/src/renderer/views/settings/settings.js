@@ -499,9 +499,22 @@ function buildSystemUpdateStatus(progressState = {}) {
     const status = String(progressState?.status || 'idle');
     if (status === 'downloading') {
         const percent = Number(progressState?.percent);
+        const percentStr = Number.isFinite(percent) ? `${Math.max(0, Math.min(100, percent))}%` : 'يتم تنزيل الملف الآن';
+        if (progressState?.isFallback) {
+            return {
+                value: 'جارٍ التنزيل الكامل (بديل)',
+                meta: `تعذر التحديث الجزئي: جارٍ تنزيل الحزمة الكاملة (${percentStr})`
+            };
+        }
+        if (progressState?.isDifferential) {
+            return {
+                value: 'جارٍ التحديث الجزئي',
+                meta: `${percentStr} من الحزمة المتغيرة`
+            };
+        }
         return {
             value: 'جارٍ تنزيل التحديث',
-            meta: Number.isFinite(percent) ? `${Math.max(0, Math.min(100, percent))}%` : 'يتم تنزيل الملف الآن'
+            meta: percentStr
         };
     }
 
@@ -514,8 +527,8 @@ function buildSystemUpdateStatus(progressState = {}) {
 
     if (status === 'completed') {
         return {
-            value: 'تم تنزيل آخر تحديث',
-            meta: progressState?.latestVersion ? `الإصدار ${progressState.latestVersion}` : 'الملف جاهز للتثبيت'
+            value: 'جاهز للتثبيت',
+            meta: progressState?.latestVersion ? `تم تنزيل الإصدار ${progressState.latestVersion} بنجاح` : 'اكتمل تنزيل التحديث وجاهز للتثبيت'
         };
     }
 
@@ -930,7 +943,11 @@ function buildUpdateProgressMeta(progressPayload) {
     }
 
     if (hasPercent && totalBytes > 0) {
-        return `${percentValue}% - ${formatUpdateBytes(downloadedBytes)} / ${formatUpdateBytes(totalBytes)}`;
+        const isFallback = Boolean(progressPayload?.isFallback);
+        const isDifferential = Boolean(progressPayload?.isDifferential);
+        const typeLabel = isFallback ? 'حزمة كاملة بديلة' : (isDifferential ? 'تحديث جزئي' : '');
+        const sizeInfo = `${formatUpdateBytes(downloadedBytes)} / ${formatUpdateBytes(totalBytes)}`;
+        return typeLabel ? `${percentValue}% (${sizeInfo}) - ${typeLabel}` : `${percentValue}% - ${sizeInfo}`;
     }
 
     if (hasPercent) {
@@ -961,11 +978,11 @@ function handleAppUpdateProgress(progressPayload = {}) {
     if (progressPayload.status === 'downloading' || progressPayload.status === 'starting') {
         isAppUpdateDownloadRunning = true;
         setUpdateRetryButtonVisibility(false);
-        const statusText = safePercent > 0
-            ? `جاري تنزيل التحديث... ${safePercent}%`
-            : 'جاري تنزيل التحديث...';
+        const statusText = progressPayload.isFallback
+            ? 'تعذر إكمال التحديث الجزئي، جارٍ تنزيل الحزمة الكاملة لضمان سلامة التحديث'
+            : (progressPayload.message || (safePercent > 0 ? `جاري تنزيل التحديث... ${safePercent}%` : 'جاري تنزيل التحديث...'));
         setStatus(updateStatusEl, statusText);
-        setUpdateButtonState('loading', 'جاري تنزيل التحديث...');
+        setUpdateButtonState('loading', progressPayload.isFallback ? 'جارٍ التنزيل الكامل...' : 'جاري تنزيل التحديث...');
         const statusInfo = buildSystemUpdateStatus(progressPayload);
         setInfoText(appUpdateStatusValueEl, statusInfo.value);
         setInfoText(appUpdateStatusMetaEl, statusInfo.meta);
@@ -1187,9 +1204,9 @@ async function handleAppUpdate() {
             setUpdateProgressVisibility(true);
             setUpdateProgress(100, '100%');
             setUpdateRetryButtonVisibility(false);
-            const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} بنجاح. سيتم الآن إغلاق البرنامج وبدء التثبيت: ${downloadResult.path}`.trim();
+            const successMessage = `تم تنزيل التحديث ${downloadResult.latestVersion || ''} بنجاح وهو جاهز للتثبيت. سيتم إغلاق البرنامج وبدء التثبيت الآن.`.trim();
             setStatus(updateStatusEl, successMessage);
-            if (window.showToast) window.showToast('تم تنزيل التحديث. سيتم الآن إغلاق البرنامج وبدء التثبيت.', 'success');
+            if (window.showToast) window.showToast('اكتمل تنزيل التحديث بنجاح وهو جاهز للتثبيت.', 'success');
             if (downloadResult.closeForInstall && typeof window.electronAPI.quitAndInstallAppUpdate === 'function') {
                 await window.electronAPI.quitAndInstallAppUpdate(downloadResult.path);
             }

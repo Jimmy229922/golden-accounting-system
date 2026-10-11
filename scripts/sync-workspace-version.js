@@ -58,6 +58,10 @@ function main() {
             sync: () => syncPackageVersion(path.join(rootDir, 'frontend-desktop', 'package.json'), version)
         },
         {
+            label: 'package-lock.json',
+            sync: () => syncPackageLockVersion(path.join(rootDir, 'package-lock.json'), version)
+        },
+        {
             label: 'backend/package-lock.json',
             sync: () => syncPackageLockVersion(path.join(rootDir, 'backend', 'package-lock.json'), version)
         },

@@ -159,17 +159,26 @@
                 </div>
                 <div class="metric-card">
                     <div class="metric-header">
-                        <div class="metric-icon"><i class="fas fa-hand-holding-usd"></i></div>
+                        <div class="metric-icon"><i class="fas fa-cubes"></i></div>
                     </div>
-                    <h3 class="metric-value" id="receivables">—</h3>
-                    <p class="metric-label">${t('dashboard.receivables', 'المستحق على العملاء')}</p>
+                    <h3 class="metric-value" id="itemsCount">—</h3>
+                    <p class="metric-label">${t('dashboard.itemsCount', 'عدد الأصناف')}</p>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card dues-combined-card">
                     <div class="metric-header">
-                        <div class="metric-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                        <div class="metric-icon"><i class="fas fa-balance-scale"></i></div>
+                        <span class="dues-card-title">${t('dashboard.duesTitle', 'المستحقات')}</span>
                     </div>
-                    <h3 class="metric-value" id="payables">—</h3>
-                    <p class="metric-label">${t('dashboard.payables', 'المستحق للموردين')}</p>
+                    <div class="dues-combined-content">
+                        <div class="due-sub-row">
+                            <span class="due-sub-label">${t('dashboard.receivables', 'على العملاء')}</span>
+                            <span class="due-sub-value due-receivables" id="receivables">—</span>
+                        </div>
+                        <div class="due-sub-row">
+                            <span class="due-sub-label">${t('dashboard.payables', 'للموردين')}</span>
+                            <span class="due-sub-value due-payables" id="payables">—</span>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -208,12 +217,6 @@
                                 <tr><td colspan="5" style="text-align: center;">${t('dashboard.analyzingData', 'جاري تحليل البيانات...')}</td></tr>
                             </tbody>
                         </table>
-                    </div>
-                </section>
-                <section class="card">
-                    <h3 class="section-title" style="margin-top: 0;"><i class="fas fa-trophy"></i> ${t('dashboard.topItems', 'أكثر الأصناف مبيعاً')}</h3>
-                    <div id="topItemsList" class="top-items-list">
-                        <p style="text-align: center; color: var(--text-secondary);">${t('dashboard.analyzingData', 'جاري تحليل البيانات...')}</p>
                     </div>
                 </section>
             </div>
@@ -309,43 +312,9 @@
         }).join('');
     }
 
-    function renderTopItems({ topItems, t }) {
-        const container = document.getElementById('topItemsList');
-        if (!container) return;
-
-        if (!topItems || topItems.length === 0) {
-            container.innerHTML = `<p style="text-align: center; color: var(--text-secondary);">${t('dashboard.noSales', 'لا توجد مبيعات بعد')}</p>`;
-            return;
-        }
-
-        container.innerHTML = `
-        <table class="recent-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>${t('dashboard.itemName', 'الصنف')}</th>
-                    <th>${t('dashboard.qtySold', 'الكمية')}</th>
-                    <th>${t('dashboard.totalValue', 'القيمة')}</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${topItems.map((item, i) => `
-                    <tr>
-                        <td><span class="top-item-rank">${i + 1}</span></td>
-                        <td>${item.name}</td>
-                        <td>${item.total_qty}</td>
-                        <td><strong>${item.total_value.toFixed(2)}</strong></td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-    }
-
     window.dashboardPageRender = {
         renderPage,
         renderAlerts,
-        renderRecentTransactions,
-        renderTopItems
+        renderRecentTransactions
     };
 })();
