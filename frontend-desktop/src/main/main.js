@@ -223,25 +223,25 @@ try {
     console.error('[startup] portable root initialization failed:', error.message);
 }
 
-let initDB, setupIPC, db;
+let initDB, setupIPC, setupAuthIPC, setupFullIPC, db;
 
 try {
     // Load modules inside try-catch to handle initialization errors
     ({ initDB, db } = require('./db'));
-    ({ setupIPC } = require('./ipcHandlers'));
+    ({ setupIPC, setupAuthIPC, setupFullIPC } = require('./ipcHandlers'));
 
     // Initialize Database
     initDB();
 
     // Setup IPC Handlers
-    setupIPC();
+    setupAuthIPC();
 } catch (error) {
     dialog.showErrorBox('Startup Error', `Failed to initialize application:\n${error.message}`);
     process.exit(1);
 }
 
 const { runStartupChecks, handleQuitBackup, handleQuitBackupFallback } = require('./autoBackup');
-const { openAppFlow, getMainWindow } = require('./windowManager');
+const { openAppFlow, getMainWindow, showSplashWindow, updateSplashStatus, closeSplashWindow } = require('./windowManager');
 const { INVITE_CODE, INVITE_DURATION_DAYS } = require('./inviteConfig');
 
 let authSessionToken = null;
@@ -408,27 +408,43 @@ app.on('second-instance', () => {
     }
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     if (!gotTheLock) return;
 
     // Remove the default app menu so Alt does not reveal a menu bar on Windows.
     Menu.setApplicationMenu(null);
 
+    showSplashWindow();
+    updateSplashStatus('\u062c\u0627\u0631\u064d \u0641\u062d\u0635 \u0633\u0644\u0627\u0645\u0629 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a...', 30);
+
     // Run DB integrity check + startup backup
     const shouldContinue = runStartupChecks();
     if (!shouldContinue) {
+        closeSplashWindow();
         app.relaunch();
         app.quit();
         return;
     }
 
     if (handleCliActivationMode()) {
+        closeSplashWindow();
         return;
     }
 
+    updateSplashStatus('\u062c\u0627\u0631\u064d \u062a\u062c\u0647\u064a\u0632 \u062e\u062f\u0645\u0627\u062a \u0627\u0644\u0646\u0638\u0627\u0645...', 65);
     ensureAutoActivationForFreshInstall();
 
-    openAppFlow();
+    updateSplashStatus('\u062c\u0627\u0647\u0632 \u0644\u0644\u0627\u0633\u062a\u062e\u062f\u0627\u0645', 95);
+
+    setImmediate(() => {
+        try {
+            setupFullIPC();
+        } catch (e) {
+            console.error('[startup] background IPC registration error:', e);
+        }
+    });
+
+    await openAppFlow();
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {

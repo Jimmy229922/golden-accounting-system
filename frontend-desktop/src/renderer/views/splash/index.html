@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Golden Accounting System</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: #0a0f1a;
+            color: #f1f5f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            -webkit-app-region: drag;
+        }
+
+        .splash-card {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 28px 36px;
+            background: radial-gradient(circle at 50% 25%, #131c31 0%, #0a0f1a 80%);
+            border: 1px solid rgba(234, 179, 8, 0.22);
+            border-radius: 14px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), 0 0 30px rgba(234, 179, 8, 0.08);
+            position: relative;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .splash-card.fade-out {
+            opacity: 0;
+            transform: scale(0.97);
+        }
+
+        .logo-wrap {
+            position: relative;
+            width: 76px;
+            height: 76px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-glow {
+            position: absolute;
+            width: 84px;
+            height: 84px;
+            background: radial-gradient(circle, rgba(234, 179, 8, 0.3) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse-glow 2.5s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(0.95); opacity: 0.6; }
+            50% { transform: scale(1.12); opacity: 1; }
+        }
+
+        .splash-logo {
+            width: 70px;
+            height: 70px;
+            position: relative;
+            z-index: 1;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.45));
+        }
+
+        .brand-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: #ffffff;
+            margin-bottom: 4px;
+            text-align: center;
+            background: linear-gradient(135deg, #ffffff 40%, #fbbf24 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 0.86rem;
+            color: #94a3b8;
+            margin-bottom: 24px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .progress-box {
+            width: 100%;
+            max-width: 380px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #d97706, #fbbf24, #f59e0b);
+            border-radius: 999px;
+            transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: #cbd5e1;
+            direction: rtl;
+        }
+
+        .status-text {
+            color: #cbd5e1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
+        }
+
+        .percent-text {
+            color: #fbbf24;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            min-width: 36px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div id="splashCard" class="splash-card">
+        <div class="logo-wrap">
+            <div class="logo-glow"></div>
+            <img src="../../main/assets/icon.ico" class="splash-logo" alt="Logo">
+        </div>
+        <h1 class="brand-title">Golden Accounting System</h1>
+        <p class="brand-subtitle">نظام الإدارة والمحاسبة المتكامل</p>
+        <div class="progress-box">
+            <div class="progress-track">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div class="status-row">
+                <span id="statusText" class="status-text">جارٍ تهيئة النظام...</span>
+                <span id="percentText" class="percent-text">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const fillEl = document.getElementById('progressFill');
+            const statusEl = document.getElementById('statusText');
+            const percentEl = document.getElementById('percentText');
+            const cardEl = document.getElementById('splashCard');
+
+            let currentPercent = 0;
+
+            function updateProgress(status, percent) {
+                if (typeof percent === 'number') {
+                    currentPercent = Math.max(currentPercent, Math.min(100, Math.round(percent)));
+                    fillEl.style.width = currentPercent + '%';
+                    percentEl.textContent = currentPercent + '%';
+                }
+                if (status && typeof status === 'string') {
+                    statusEl.textContent = status;
+                }
+            }
+
+            if (window.electronAPI && typeof window.electronAPI.onSplashStatus === 'function') {
+                window.electronAPI.onSplashStatus(function(payload) {
+                    updateProgress(payload.status, payload.percent);
+                });
+            }
+
+            if (window.electronAPI && typeof window.electronAPI.onSplashFinish === 'function') {
+                window.electronAPI.onSplashFinish(function() {
+                    updateProgress('جاهز للاستخدام', 100);
+                    cardEl.classList.add('fade-out');
+                });
+            }
+
+            setTimeout(function() {
+                if (currentPercent < 100) {
+                    statusEl.textContent = 'جارٍ استكمال التجهيز والتحقق...';
+                }
+            }, 8000);
+        })();
+    </script>
+</body>
+</html>

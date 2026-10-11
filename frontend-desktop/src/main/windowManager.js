@@ -9,6 +9,7 @@ const appIconPath = (!app.isPackaged && fs.existsSync(customIconPath)) ? customI
 let mainWindow = null;
 let inviteWindow = null;
 let authWindow = null;
+let splashWindow = null;
 let inviteUnlocked = false;
 let authUnlocked = false;
 let isMainWindowClosingConfirmed = false;
@@ -57,6 +58,65 @@ function getDialogSize(baseWidth, baseHeight) {
     } catch (err) {
         return { width: baseWidth, height: baseHeight };
     }
+}
+
+function showSplashWindow() {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        return splashWindow;
+    }
+
+    splashWindow = new BrowserWindow({
+        width: 480,
+        height: 320,
+        frame: false,
+        resizable: false,
+        center: true,
+        show: false,
+        backgroundColor: '#0a0f1a',
+        icon: appIconPath,
+        alwaysOnTop: true,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+
+    const splashPath = path.join(__dirname, '../renderer/views/splash/index.html');
+    splashWindow.loadFile(splashPath).catch((err) => {
+        console.error('Failed to load splash view:', err);
+    });
+
+    splashWindow.once('ready-to-show', () => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.show();
+        }
+    });
+
+    return splashWindow;
+}
+
+function updateSplashStatus(status, percent) {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send('splash-status', { status, percent });
+    }
+}
+
+function closeSplashWindow() {
+    if (!splashWindow || splashWindow.isDestroyed()) {
+        return;
+    }
+
+    try {
+        splashWindow.webContents.send('splash-finish');
+    } catch (_) {}
+
+    setTimeout(() => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.destroy();
+            splashWindow = null;
+        }
+    }, 250);
 }
 
 function showInviteWindow() {
@@ -121,6 +181,8 @@ function showAuthWindow() {
             width,
             height,
             resizable: false,
+            show: false,
+            backgroundColor: '#f3f4f6',
             autoHideMenuBar: true,
             icon: appIconPath,
             webPreferences: {
@@ -130,8 +192,16 @@ function showAuthWindow() {
             }
         });
 
+        authWindow.once('ready-to-show', () => {
+            closeSplashWindow();
+            if (authWindow && !authWindow.isDestroyed()) {
+                authWindow.show();
+            }
+        });
+
         const authPath = path.join(__dirname, '../renderer/views/auth/index.html');
         authWindow.loadFile(authPath).catch((error) => {
+            closeSplashWindow();
             console.error('Failed to load auth view:', error);
             dialog.showErrorBox('Load Error', `Failed to load auth view:\n${authPath}\n${error.message}`);
         });
@@ -265,6 +335,10 @@ async function openAppFlow() {
     // }
     await showAuthWindow();
     if (!mainWindow) {
+        try {
+            const { setupFullIPC } = require('./ipcHandlers');
+            setupFullIPC();
+        } catch (_) {}
         createWindow();
     }
 }
@@ -283,5 +357,8 @@ function markMainWindowClosingForUpdate() {
 module.exports = {
     openAppFlow,
     getMainWindow,
-    markMainWindowClosingForUpdate
+    markMainWindowClosingForUpdate,
+    showSplashWindow,
+    updateSplashStatus,
+    closeSplashWindow
 };

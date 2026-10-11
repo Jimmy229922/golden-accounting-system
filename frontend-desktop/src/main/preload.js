@@ -228,6 +228,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     quitAndInstallAppUpdate: (installerPath) => invokeChannel('quit-and-install-app-update', installerPath),
     openAppReleasePage: () => invokeChannel('open-app-release-page'),
 
+    onSplashStatus: (callback) => {
+        if (typeof callback !== 'function') return () => {};
+        const listener = (_event, payload) => callback(payload || {});
+        ipcRenderer.on('splash-status', listener);
+        return () => ipcRenderer.removeListener('splash-status', listener);
+    },
+    onSplashFinish: (callback) => {
+        if (typeof callback !== 'function') return () => {};
+        const listener = (_event) => callback();
+        ipcRenderer.on('splash-finish', listener);
+        return () => ipcRenderer.removeListener('splash-finish', listener);
+    },
+
     // Invite Code API
     getMachineId: () => invokeChannel('get-machine-id'),
     checkInviteStatus: () => invokeChannel('get-invite-status'),

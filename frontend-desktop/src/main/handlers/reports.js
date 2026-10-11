@@ -3,7 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { db } = require('../db');
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+let pdfLibModule = null;
+function getPdfLib() {
+    if (!pdfLibModule) {
+        pdfLibModule = require('pdf-lib');
+    }
+    return pdfLibModule;
+}
 const { sanitizeSuggestedFileName } = require('./utils');
 
 function getCustomerStatementTransactionEffect(trans) {
@@ -639,6 +645,7 @@ function register() {
 
             // Set PDF metadata title to match the chosen filename (without extension)
             const title = path.basename(filePath, path.extname(filePath));
+            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
             const pdfDoc = await PDFDocument.load(pdfBuffer);
             pdfDoc.setTitle(title);
             pdfDoc.setCreator('Accounting System');
@@ -689,6 +696,7 @@ function register() {
 
             // Set PDF metadata title to match the chosen filename (without extension)
             const title = path.basename(filePath, path.extname(filePath));
+            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
             const pdfDoc = await PDFDocument.load(pdfBuffer);
             pdfDoc.setTitle(title);
             pdfDoc.setCreator('Accounting System');
@@ -759,6 +767,7 @@ function register() {
             });
 
             const title = path.basename(filePath, path.extname(filePath));
+            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
             const pdfDoc = await PDFDocument.load(pdfBuffer);
             pdfDoc.setTitle(title);
             pdfDoc.setCreator('Accounting System');
@@ -968,6 +977,7 @@ function register() {
             });
 
             const title = path.basename(filePath, path.extname(filePath));
+            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
             const pdfDoc = await PDFDocument.load(pdfBuffer);
             pdfDoc.setTitle(title);
             pdfDoc.setCreator('Accounting System');

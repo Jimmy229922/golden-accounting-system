@@ -14,22 +14,26 @@ function sanitizeSuggestedFileName(name) {
 
 const DEFAULT_WAREHOUSE_NAME_FALLBACK = '\u0627\u0644\u0645\u062e\u0632\u0646 \u0627\u0644\u0627\u0641\u062a\u0631\u0627\u0636\u064a';
 
+let defaultWarehouseNameCache = null;
 function getDefaultWarehouseName() {
+    if (defaultWarehouseNameCache !== null) {
+        return defaultWarehouseNameCache;
+    }
     try {
         const arPath = path.join(__dirname, '../../renderer/assets/i18n/ar.json');
         const dictionary = JSON.parse(fs.readFileSync(arPath, 'utf8'));
         const value = dictionary?.openingBalance?.defaultWarehouseName;
         if (typeof value === 'string' && value.trim()) {
-            return value.trim();
+            defaultWarehouseNameCache = value.trim();
+            return defaultWarehouseNameCache;
         }
     } catch (error) {
         console.warn('[i18n] Failed to load default warehouse name from ar.json:', error.message);
     }
 
-    return DEFAULT_WAREHOUSE_NAME_FALLBACK;
+    defaultWarehouseNameCache = DEFAULT_WAREHOUSE_NAME_FALLBACK;
+    return defaultWarehouseNameCache;
 }
-
-const DEFAULT_WAREHOUSE_NAME = getDefaultWarehouseName();
 
 function decodeArabicMojibake(value) {
     if (typeof value !== 'string' || !/[\u00D8\u00D9]/.test(value)) {
@@ -63,4 +67,11 @@ function repairWarehouseNamesEncoding() {
     }
 }
 
-module.exports = { sanitizeSuggestedFileName, decodeArabicMojibake, repairWarehouseNamesEncoding, DEFAULT_WAREHOUSE_NAME };
+module.exports = {
+    sanitizeSuggestedFileName,
+    decodeArabicMojibake,
+    repairWarehouseNamesEncoding,
+    get DEFAULT_WAREHOUSE_NAME() {
+        return getDefaultWarehouseName();
+    }
+};
