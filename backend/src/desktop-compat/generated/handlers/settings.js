@@ -1,4 +1,4 @@
-const { ipcMain, app, shell } = require('electron');
+const { ipcMain, app, shell, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { db } = require('../db');
@@ -404,6 +404,31 @@ async function downloadFileFromUrlWithArabicErrors(downloadUrl, destinationPath,
     }
 }
 
+function writeDiagnosticUpdaterLog(level, message) {
+    try {
+        if (!app || typeof app.getPath !== 'function') return;
+        const logDir = path.join(app.getPath('userData'), 'logs');
+        fs.mkdirSync(logDir, { recursive: true });
+        const logFile = path.join(logDir, 'updater.log');
+        const timestamp = new Date().toISOString();
+        const safeMessage = String(message || '')
+            .replace(/ghp_[a-zA-Z0-9]+/g, 'ghp_***')
+            .replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'bearer ***');
+        const line = `[${timestamp}] [${level}] ${safeMessage}\n`;
+        fs.appendFileSync(logFile, line, 'utf8');
+    } catch (_) {
+    }
+}
+
+function getUpdaterLogger() {
+    return {
+        info: (msg) => writeDiagnosticUpdaterLog('INFO', msg),
+        warn: (msg) => writeDiagnosticUpdaterLog('WARN', msg),
+        error: (msg) => writeDiagnosticUpdaterLog('ERROR', msg),
+        debug: (msg) => writeDiagnosticUpdaterLog('DEBUG', msg)
+    };
+}
+
 let autoUpdaterInstance = null;
 function getAutoUpdater() {
     if (autoUpdaterInstance !== null) {
@@ -414,6 +439,7 @@ function getAutoUpdater() {
             const updaterPkg = require('electron-updater');
             const instance = updaterPkg.autoUpdater || updaterPkg;
             if (instance) {
+                instance.logger = getUpdaterLogger();
                 instance.autoDownload = false;
                 instance.autoInstallOnAppQuit = false;
                 instance.allowDowngrade = false;
@@ -526,6 +552,11 @@ function register() {
                     }
 
                     const defaultAssetName = info.path || `Accounting System Setup ${latestVersion}.exe`;
+                    let isDifferential = null;
+                    let isFallback = false;
+                    let fallbackReason = '';
+                    let previousTotal = 0;
+
                     setAppUpdateProgressState({
                         status: 'starting',
                         latestVersion,
@@ -533,6 +564,8 @@ function register() {
                         downloadedBytes: 0,
                         totalBytes: 0,
                         percent: 0,
+                        isDifferential: false,
+                        isFallback: false,
                         error: '',
                         message: 'جاري بدء تنزيل التحديث...',
                         retryAttempt: 1,
@@ -545,6 +578,8 @@ function register() {
                         downloadedBytes: 0,
                         totalBytes: 0,
                         percent: 0,
+                        isDifferential: false,
+                        isFallback: false,
                         message: 'جاري بدء تنزيل التحديث...',
                         retryAttempt: 1,
                         maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
@@ -559,6 +594,23 @@ function register() {
                             const percent = Math.max(0, Math.min(100, Math.round(progressObj.percent || 0)));
                             const downloadedBytes = Math.round(progressObj.transferred || 0);
                             const totalBytes = Math.round(progressObj.total || 0);
+
+                            if (isDifferential === null && totalBytes > 0) {
+                                isDifferential = totalBytes < 50 * 1024 * 1024;
+                            }
+
+                            if (isDifferential && !isFallback && totalBytes > 60 * 1024 * 1024 && previousTotal > 0 && previousTotal < 50 * 1024 * 1024) {
+                                isFallback = true;
+                                fallbackReason = 'checksum_or_chunk_mismatch';
+                                writeDiagnosticUpdaterLog('WARN', `Differential update fallback to full download triggered. Previous total: ${previousTotal}, New total: ${totalBytes}`);
+                            }
+
+                            previousTotal = totalBytes;
+
+                            const message = isFallback
+                                ? 'تعذر إكمال التحديث الجزئي، جارٍ تنزيل الحزمة الكاملة لضمان سلامة التحديث'
+                                : (isDifferential ? 'جارٍ تنزيل التحديث الجزئي...' : 'جارٍ تنزيل ملف التحديث...');
+
                             const payload = {
                                 status: 'downloading',
                                 latestVersion,
@@ -566,8 +618,11 @@ function register() {
                                 percent,
                                 downloadedBytes,
                                 totalBytes,
+                                isDifferential: Boolean(isDifferential && !isFallback),
+                                isFallback,
+                                fallbackReason,
                                 error: '',
-                                message: ''
+                                message
                             };
                             setAppUpdateProgressState(payload);
                             emitAppUpdateProgress(event.sender, payload);
@@ -590,8 +645,10 @@ function register() {
                         latestVersion,
                         assetName: path.basename(downloadedPath || defaultAssetName),
                         percent: 100,
+                        isDifferential: Boolean(isDifferential && !isFallback),
+                        isFallback,
                         error: '',
-                        message: 'اكتمل تنزيل التحديث.',
+                        message: 'اكتمل تنزيل التحديث وجاهز للتثبيت.',
                         retryAttempt: 1,
                         maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
                     });
@@ -600,7 +657,9 @@ function register() {
                         latestVersion,
                         assetName: path.basename(downloadedPath || defaultAssetName),
                         percent: 100,
-                        message: 'اكتمل تنزيل التحديث.',
+                        isDifferential: Boolean(isDifferential && !isFallback),
+                        isFallback,
+                        message: 'اكتمل تنزيل التحديث وجاهز للتثبيت.',
                         retryAttempt: 1,
                         maxRetries: APP_UPDATE_MAX_DOWNLOAD_RETRIES
                     });
@@ -614,7 +673,22 @@ function register() {
                         closeForInstall: true
                     };
                 }
-            } catch (_) {
+            } catch (error) {
+                const translatedError = translateAppUpdateError(error?.message, { context: 'download' });
+                writeDiagnosticUpdaterLog('ERROR', `Auto-updater download failed: ${error?.message || error}`);
+                const errorPayload = {
+                    status: 'error',
+                    latestVersion: '',
+                    percent: 0,
+                    error: translatedError,
+                    message: translatedError
+                };
+                setAppUpdateProgressState(errorPayload);
+                emitAppUpdateProgress(event.sender, errorPayload);
+                return {
+                    success: false,
+                    error: translatedError
+                };
             }
         }
 
@@ -758,12 +832,26 @@ function register() {
     ipcMain.handle('quit-and-install-app-update', async (event, installerPath) => {
         try {
             markMainWindowClosingForUpdate();
+            if (typeof app.prepareForUpdateShutdown === 'function') {
+                app.prepareForUpdateShutdown();
+            } else {
+                app.isQuittingForAppUpdate = true;
+            }
+
+            BrowserWindow.getAllWindows().forEach((win) => {
+                try { win.destroy(); } catch (_) {}
+            });
+
             const updater = getAutoUpdater();
             if (updater && typeof updater.quitAndInstall === 'function') {
                 try {
                     updater.quitAndInstall(false, true);
+                    setTimeout(() => {
+                        app.exit(0);
+                    }, 1200);
                     return { success: true };
-                } catch (_) {
+                } catch (updaterErr) {
+                    writeDiagnosticUpdaterLog('ERROR', `updater.quitAndInstall failed: ${updaterErr.message}`);
                 }
             }
 
@@ -779,6 +867,9 @@ function register() {
                     shell.openPath(installerToOpen).catch(() => {});
                 });
                 app.quit();
+                setTimeout(() => {
+                    app.exit(0);
+                }, 1200);
                 return { success: true };
             }
 
@@ -916,8 +1007,8 @@ function register() {
             const treasuryBalance = treasuryIncome - treasuryExpense;
 
             // --- Receivables & Payables (Using standard balances calculation) ---
-            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE type IN ('customer', 'both') AND balance > 0").get().total;
-            const payables = db.prepare("SELECT COALESCE(SUM(ABS(balance)), 0) as total FROM parties WHERE type IN ('supplier', 'both') AND balance < 0").get().total;
+            const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE balance > 0").get().total;
+            const payables = db.prepare("SELECT COALESCE(SUM(ABS(balance)), 0) as total FROM parties WHERE balance < 0").get().total;
 
             // --- Chart data (last 30 days) ---
             const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);

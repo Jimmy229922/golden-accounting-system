@@ -193,7 +193,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Dashboard API
     getDashboardStats: (filters = {}) => invokeChannel('get-dashboard-stats', filters),
-    triggerManualSync: () => invokeChannel('trigger-manual-sync'),
+    triggerManualSync: () => ipcRenderer.invoke('trigger-manual-sync'),
 
     // Helper API
     getNextInvoiceNumber: (type) => invokeChannel('get-next-invoice-number', type),

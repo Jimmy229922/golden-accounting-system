@@ -15,6 +15,8 @@ if (!gotTheLock) {
     app.quit();
 }
 
+let isAppStarting = true;
+
 const PORTABLE_ROOT_FOLDER = 'APP_JS';
 const PORTABLE_MARKER_FILE = 'app_root_path.txt';
 const PORTABLE_SHORTCUT_NAME = 'تشغيل نظام الحسابات.lnk';
@@ -431,26 +433,33 @@ app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
 
     showSplashWindow();
-    updateSplashStatus('\u062c\u0627\u0631\u064d \u0641\u062d\u0635 \u0633\u0644\u0627\u0645\u0629 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a...', 30);
+    updateSplashStatus('\u062c\u0627\u0631\u064d \u0641\u062d\u0635 \u0633\u0644\u0627\u0645\u0629 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a...', 25);
 
     // Run DB integrity check + startup backup
     const shouldContinue = runStartupChecks();
     if (!shouldContinue) {
-        closeSplashWindow();
+        isAppStarting = false;
+        await closeSplashWindow();
         app.relaunch();
         app.quit();
         return;
     }
 
     if (handleCliActivationMode()) {
-        closeSplashWindow();
+        isAppStarting = false;
+        await closeSplashWindow();
         return;
     }
 
-    updateSplashStatus('\u062c\u0627\u0631\u064d \u062a\u062c\u0647\u064a\u0632 \u062e\u062f\u0645\u0627\u062a \u0627\u0644\u0646\u0638\u0627\u0645...', 65);
+    await new Promise((r) => setTimeout(r, 350));
+    updateSplashStatus('\u062c\u0627\u0631\u064d \u062a\u062c\u0647\u064a\u0632 \u062e\u062f\u0645\u0627\u062a \u0627\u0644\u0646\u0638\u0627\u0645...', 60);
     ensureAutoActivationForFreshInstall();
 
-    updateSplashStatus('\u062c\u0627\u0647\u0632 \u0644\u0644\u0627\u0633\u062a\u062e\u062f\u0627\u0645', 95);
+    await new Promise((r) => setTimeout(r, 400));
+    updateSplashStatus('\u062c\u0627\u0631\u064d \u062a\u062d\u0645\u064a\u0644 \u0648\u0627\u062c\u0647\u0629 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645...', 85);
+
+    await new Promise((r) => setTimeout(r, 350));
+    updateSplashStatus('\u062c\u0627\u0647\u0632 \u0644\u0644\u0627\u0633\u062a\u062e\u062f\u0627\u0645', 100);
 
     setImmediate(() => {
         try {
@@ -460,7 +469,10 @@ app.whenReady().then(async () => {
         }
     });
 
+    await new Promise((r) => setTimeout(r, 300));
+
     await openAppFlow();
+    isAppStarting = false;
     startBackgroundSyncEngine();
 
     app.on('activate', () => {
@@ -498,11 +510,15 @@ function startBackgroundSyncEngine() {
         });
 
         if (!guard.allowed) {
+            ipcMain.removeHandler('trigger-manual-sync');
+            ipcMain.handle('trigger-manual-sync', async () => ({ success: false, disabled: true, reason: guard.summary || 'المزامنة معطلة' }));
             return;
         }
 
         const identity = loadOrCreateDeviceIdentity(storageDir);
         if (!identity) {
+            ipcMain.removeHandler('trigger-manual-sync');
+            ipcMain.handle('trigger-manual-sync', async () => ({ success: false, disabled: true, reason: 'تعذر تحميل هوية الجهاز' }));
             return;
         }
 
@@ -524,8 +540,10 @@ function startBackgroundSyncEngine() {
         syncEngineInstance.dispatchOutbox().catch(() => {});
 
         let isSyncInProgress = false;
+        let lastSyncStatus = { success: true, lastSyncAt: null };
         const triggerSyncNow = async () => {
-            if (!syncEngineInstance || isSyncInProgress) return { success: false, reason: 'busy_or_unavailable' };
+            if (!syncEngineInstance) return { success: false, disabled: true, reason: 'المزامنة غير مفعلة' };
+            if (isSyncInProgress) return { success: true, inProgress: true, ...lastSyncStatus };
             isSyncInProgress = true;
             try {
                 if (syncEngineInstance.hasPendingOutbox()) {
@@ -537,9 +555,11 @@ function startBackgroundSyncEngine() {
                     syncEngineInstance.queueDeltaBatch(nextSeq, delta.events, delta.projection);
                     await syncEngineInstance.dispatchOutbox();
                 }
-                return { success: true };
+                lastSyncStatus = { success: true, lastSyncAt: new Date().toISOString() };
+                return lastSyncStatus;
             } catch (err) {
-                return { success: false, error: err.message };
+                lastSyncStatus = { success: false, error: err.message, lastSyncAt: new Date().toISOString() };
+                return lastSyncStatus;
             } finally {
                 isSyncInProgress = false;
             }
@@ -550,7 +570,7 @@ function startBackgroundSyncEngine() {
             return await triggerSyncNow();
         });
 
-        syncTimer = setInterval(triggerSyncNow, 10000);
+        syncTimer = setInterval(triggerSyncNow, 30000);
         triggerSyncNow();
 
         heartbeatTimer = setInterval(async () => {
@@ -622,6 +642,7 @@ app.on('before-quit', (event) => {
 });
 
 app.on('window-all-closed', () => {
+    if (isAppStarting) return;
     if (process.platform !== 'darwin') {
         app.quit();
     }

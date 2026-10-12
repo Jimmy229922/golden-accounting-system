@@ -283,6 +283,29 @@ function drawRoundRect(ctx, x, y, w, h, r) {
     ctx.fill();
 }
 
+function updateSyncStatusUI(syncResult) {
+    const badge = document.getElementById('syncStatusBadge');
+    if (!badge) return;
+
+    if (!syncResult || syncResult.disabled) {
+        badge.className = 'sync-status is-disabled';
+        badge.innerHTML = '<i class="fas fa-cloud"></i> <span>المزامنة: غير مفعلة</span>';
+        badge.title = syncResult?.reason || 'المزامنة معطلة';
+        return;
+    }
+
+    if (syncResult.success) {
+        badge.className = 'sync-status is-synced';
+        badge.innerHTML = '<i class="fas fa-check-circle"></i> <span>المزامنة السحابية: متصلة</span>';
+        badge.title = syncResult.lastSyncAt ? `آخر مزامنة: ${new Date(syncResult.lastSyncAt).toLocaleTimeString('ar-EG')}` : 'متصلة ومحدثة';
+    } else {
+        badge.className = 'sync-status is-error';
+        const errMsg = syncResult.error || syncResult.reason || 'تعذر الاتصال';
+        badge.innerHTML = '<i class="fas fa-exclamation-circle"></i> <span>المزامنة: تعذر الاتصال</span>';
+        badge.title = `خطأ: ${errMsg}`;
+    }
+}
+
 async function loadDashboardStats(filters = currentFilters) {
     let icon;
     try {
@@ -293,12 +316,19 @@ async function loadDashboardStats(filters = currentFilters) {
         }
 
         updatePeriodLabel(filters);
-        const [stats] = await Promise.all([
+        const syncBadge = document.getElementById('syncStatusBadge');
+        if (syncBadge) {
+            syncBadge.className = 'sync-status is-syncing';
+            syncBadge.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> <span>جاري المزامنة...</span>';
+        }
+
+        const [stats, syncResult] = await Promise.all([
             window.electronAPI.getDashboardStats(filters),
             (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function')
-                ? window.electronAPI.triggerManualSync().catch(() => ({}))
-                : Promise.resolve({})
+                ? window.electronAPI.triggerManualSync().catch((err) => ({ success: false, error: err.message }))
+                : Promise.resolve({ success: false, disabled: true })
         ]);
+        updateSyncStatusUI(syncResult);
         lastStats = stats;
 
         const ts = stats.todaySummary || {};

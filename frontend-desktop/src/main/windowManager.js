@@ -71,7 +71,7 @@ function showSplashWindow() {
         frame: false,
         resizable: false,
         center: true,
-        show: false,
+        show: true,
         backgroundColor: '#0a0f1a',
         icon: appIconPath,
         alwaysOnTop: true,
@@ -87,12 +87,6 @@ function showSplashWindow() {
         console.error('Failed to load splash view:', err);
     });
 
-    splashWindow.once('ready-to-show', () => {
-        if (splashWindow && !splashWindow.isDestroyed()) {
-            splashWindow.show();
-        }
-    });
-
     return splashWindow;
 }
 
@@ -103,20 +97,25 @@ function updateSplashStatus(status, percent) {
 }
 
 function closeSplashWindow() {
-    if (!splashWindow || splashWindow.isDestroyed()) {
-        return;
-    }
-
-    try {
-        splashWindow.webContents.send('splash-finish');
-    } catch (_) {}
-
-    setTimeout(() => {
-        if (splashWindow && !splashWindow.isDestroyed()) {
-            splashWindow.destroy();
+    return new Promise((resolve) => {
+        if (!splashWindow || splashWindow.isDestroyed()) {
             splashWindow = null;
+            resolve();
+            return;
         }
-    }, 250);
+
+        try {
+            splashWindow.webContents.send('splash-finish');
+        } catch (_) {}
+
+        setTimeout(() => {
+            if (splashWindow && !splashWindow.isDestroyed()) {
+                splashWindow.destroy();
+                splashWindow = null;
+            }
+            resolve();
+        }, 280);
+    });
 }
 
 function showInviteWindow() {
@@ -192,16 +191,16 @@ function showAuthWindow() {
             }
         });
 
-        authWindow.once('ready-to-show', () => {
-            closeSplashWindow();
+        authWindow.once('ready-to-show', async () => {
+            await closeSplashWindow();
             if (authWindow && !authWindow.isDestroyed()) {
                 authWindow.show();
             }
         });
 
         const authPath = path.join(__dirname, '../renderer/views/auth/index.html');
-        authWindow.loadFile(authPath).catch((error) => {
-            closeSplashWindow();
+        authWindow.loadFile(authPath).catch(async (error) => {
+            await closeSplashWindow();
             console.error('Failed to load auth view:', error);
             dialog.showErrorBox('Load Error', `Failed to load auth view:\n${authPath}\n${error.message}`);
         });

@@ -17,6 +17,19 @@ function normalizeCanonicalPath(p) {
     }
 }
 
+function isApprovedProductionDbPath(normalizedDb) {
+    if (!normalizedDb) return false;
+    const targetSubpath = path.join('app_js', 'data', 'accounting.db').toLowerCase();
+    const posixSubpath = 'app_js/data/accounting.db';
+    return normalizedDb.endsWith(targetSubpath) || normalizedDb.endsWith(posixSubpath);
+}
+
+function isApprovedProductionRoot(normalizedRoot) {
+    if (!normalizedRoot) return false;
+    const expectedSuffix = path.sep + 'app_js';
+    return normalizedRoot.endsWith(expectedSuffix) || normalizedRoot.endsWith('/app_js') || path.basename(normalizedRoot).toLowerCase() === 'app_js';
+}
+
 function evaluateSyncGuard(options = {}) {
     const {
         isPackaged = false,
@@ -47,21 +60,19 @@ function evaluateSyncGuard(options = {}) {
     // 3. التحقق من مسار قاعدة البيانات الحقيقي المعتمد (Canonical Path)
     const normalizedDb = normalizeCanonicalPath(dbPath);
     const normalizedRepo = normalizeCanonicalPath(repoRoot);
-    const expectedCanonicalDb = normalizeCanonicalPath(path.join(DEFAULT_PROD_ROOT, DEFAULT_PROD_DB_SUBPATH));
 
     if (!normalizedDb) {
         reasons.push('مسار قاعدة البيانات فارغ أو غير محدد.');
     } else if (!allowDevMode && normalizedDb.startsWith(normalizedRepo)) {
         reasons.push('مسار قاعدة البيانات يقع داخل مستودع التطوير (Workspace Repo).');
-    } else if (!allowDevMode && normalizedDb !== expectedCanonicalDb) {
+    } else if (!allowDevMode && !isApprovedProductionDbPath(normalizedDb)) {
         reasons.push(`قاعدة البيانات (${path.basename(normalizedDb)}) ليست في المسار الإنتاجي المعتمد.`);
     }
 
     // 4. حماية متغير البيئة ACCOUNTING_SYSTEM_ROOT من التحويل غير المصرح
     if (configuredRootEnv && configuredRootEnv.trim()) {
         const normalizedRootEnv = normalizeCanonicalPath(configuredRootEnv);
-        const expectedProdRoot = normalizeCanonicalPath(DEFAULT_PROD_ROOT);
-        if (normalizedRootEnv !== expectedProdRoot) {
+        if (!isApprovedProductionRoot(normalizedRootEnv)) {
             reasons.push('تم رصد متغير بيئة خارجي (ACCOUNTING_SYSTEM_ROOT) يوجّه لمسار غير معتمد.');
         }
     }
@@ -102,8 +113,7 @@ function validateProductionActivation(activationConfig = null, isPackaged = fals
     }
 
     const normalizedDb = normalizeCanonicalPath(dbPath);
-    const expectedCanonicalDb = normalizeCanonicalPath(path.join(DEFAULT_PROD_ROOT, DEFAULT_PROD_DB_SUBPATH));
-    if (normalizedDb !== expectedCanonicalDb) {
+    if (!isApprovedProductionDbPath(normalizedDb)) {
         return { valid: false, code: 'ACTIVATION_WRONG_DB_PATH', reason: 'ملف التفعيل لا يطابق المسار الإنتاجي المعتمد للقاعدة.' };
     }
 

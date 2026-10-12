@@ -43,6 +43,18 @@ function normalizeWeekStart(value) {
     return parsed.text;
 }
 
+function getCurrentSaturday() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const dayOfMonth = String(now.getDate()).padStart(2, '0');
+    const localDate = new Date(`${year}-${month}-${dayOfMonth}T00:00:00Z`);
+    const day = localDate.getUTCDay();
+    const diff = (day === 6) ? 0 : -(day + 1);
+    localDate.setUTCDate(localDate.getUTCDate() + diff);
+    return localDate.toISOString().slice(0, 10);
+}
+
 function getWeekEnd(weekStart) {
     const parsed = parseIsoDate(weekStart);
     const date = parsed.date;
@@ -344,6 +356,15 @@ function register() {
                 return { success: false, error: 'العامل غير موجود' };
             }
 
+            let effectiveFromWeek = null;
+            if (data.effective_from_week) {
+                effectiveFromWeek = normalizeWeekStart(data.effective_from_week);
+            } else if (data.week_start_date) {
+                effectiveFromWeek = normalizeWeekStart(data.week_start_date);
+            } else {
+                effectiveFromWeek = getCurrentSaturday();
+            }
+
             const payload = normalizeWorkerPayload(data);
             const updateTransaction = db.transaction(() => {
                 db.prepare(`
@@ -361,8 +382,8 @@ function register() {
                     UPDATE worker_weekly_attendance
                     SET daily_wage = @daily_wage
                     WHERE worker_id = @id
-                      AND week_start_date >= '2026-07-11'
-                `).run({ daily_wage: payload.daily_wage, id });
+                      AND week_start_date >= @effective_from_week
+                `).run({ daily_wage: payload.daily_wage, id, effective_from_week: effectiveFromWeek });
             });
 
             updateTransaction();

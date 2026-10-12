@@ -4,5 +4,6 @@
   "get-auth-session-token",
   "get-printers",
   "invite-unlocked",
-  "print-current-window"
+  "print-current-window",
+  "trigger-manual-sync"
 ]

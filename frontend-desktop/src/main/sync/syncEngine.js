@@ -251,8 +251,41 @@ class SyncEngine {
         return { parties, ledger: enrichedLedger };
     }
 
+    computeFastDatabaseSignature() {
+        try {
+            const stats = this.accountingDb.prepare(`
+                SELECT
+                    (SELECT COUNT(*) FROM party_ledger) AS pl_cnt,
+                    (SELECT MAX(id) FROM party_ledger) AS pl_max,
+                    (SELECT COALESCE(SUM(amount), 0) FROM party_ledger) AS pl_sum,
+                    (SELECT COUNT(*) FROM parties) AS p_cnt,
+                    (SELECT MAX(id) FROM parties) AS p_max,
+                    (SELECT COUNT(*) FROM sales_invoices) AS si_cnt,
+                    (SELECT MAX(id) FROM sales_invoices) AS si_max,
+                    (SELECT COALESCE(SUM(total_amount + paid_amount), 0) FROM sales_invoices) AS si_sum,
+                    (SELECT COUNT(*) FROM purchase_invoices) AS pi_cnt,
+                    (SELECT MAX(id) FROM purchase_invoices) AS pi_max,
+                    (SELECT COALESCE(SUM(total_amount + paid_amount), 0) FROM purchase_invoices) AS pi_sum,
+                    (SELECT COUNT(*) FROM treasury_transactions) AS tt_cnt,
+                    (SELECT MAX(id) FROM treasury_transactions) AS tt_max
+            `).get();
+
+            return `${stats.pl_cnt}_${stats.pl_max}_${stats.pl_sum}_${stats.p_cnt}_${stats.p_max}_${stats.si_cnt}_${stats.si_max}_${stats.si_sum}_${stats.pi_cnt}_${stats.pi_max}_${stats.pi_sum}_${stats.tt_cnt}_${stats.tt_max}`;
+        } catch (_) {
+            return null;
+        }
+    }
+
     // رصد التغييرات التفاضلية (Delta) بمقارنة الحالة الحالية مع جدول الظل
-    detectDeltaEvents(seqNo) {
+    detectDeltaEvents(seqNo, force = false) {
+        const currentSig = this.computeFastDatabaseSignature();
+        if (!force && currentSig) {
+            const metaRow = this.stateDb.prepare("SELECT value FROM sync_meta WHERE key = 'last_data_signature'").get();
+            if (metaRow && metaRow.value === currentSig) {
+                return { events: [], projection: null };
+            }
+        }
+
         const { parties, ledger } = this.extractCurrentProjection();
         const partyUpserts = [];
         const partyDeletes = [];
@@ -341,6 +374,12 @@ class SyncEngine {
         }
 
         const events = [...partyUpserts, ...ledgerUpserts, ...ledgerDeletes, ...partyDeletes];
+        if (events.length === 0 && currentSig) {
+            this.stateDb.prepare(`
+                INSERT INTO sync_meta (key, value) VALUES ('last_data_signature', ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            `).run(currentSig);
+        }
         return { events, projection: { parties, ledger } };
     }
 
@@ -418,6 +457,13 @@ class SyncEngine {
                 }
             }
             this.setLastSeqNo(seqNo);
+            const currentSig = this.computeFastDatabaseSignature();
+            if (currentSig) {
+                this.stateDb.prepare(`
+                    INSERT INTO sync_meta (key, value) VALUES ('last_data_signature', ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                `).run(currentSig);
+            }
         })();
     }
 
@@ -504,6 +550,13 @@ class SyncEngine {
             }
 
             this.setLastSeqNo(seqNo);
+            const currentSig = this.computeFastDatabaseSignature();
+            if (currentSig) {
+                this.stateDb.prepare(`
+                    INSERT INTO sync_meta (key, value) VALUES ('last_data_signature', ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                `).run(currentSig);
+            }
         })();
     }
 
@@ -589,11 +642,17 @@ class SyncEngine {
                     processedCount++;
                 } else {
                     const errText = resJson ? JSON.stringify(resJson) : (await res.text().catch(() => 'HTTP Error'));
-                    this.stateDb.prepare("UPDATE outbox_queue SET retry_count = retry_count + 1, last_error = ? WHERE seq_no = ?").run(errText, item.seq_no);
+                    const newRetryCount = Number(item.retry_count || 0) + 1;
+                    if (newRetryCount >= 5) {
+                        this.stateDb.prepare("UPDATE outbox_queue SET status = 'failed', retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, errText, item.seq_no);
+                        continue;
+                    }
+                    this.stateDb.prepare("UPDATE outbox_queue SET retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, errText, item.seq_no);
                     break;
                 }
             } catch (netErr) {
-                this.stateDb.prepare("UPDATE outbox_queue SET retry_count = retry_count + 1, last_error = ? WHERE seq_no = ?").run(netErr.message, item.seq_no);
+                const newRetryCount = Number(item.retry_count || 0) + 1;
+                this.stateDb.prepare("UPDATE outbox_queue SET retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, netErr.message, item.seq_no);
                 break;
             }
         }

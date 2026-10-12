@@ -21,6 +21,9 @@
                     <div class="last-updated" id="lastUpdated">
                         <i class="fas fa-clock"></i> ${t('dashboard.lastUpdate', 'آخر تحديث: —')}
                     </div>
+                    <div class="sync-status is-syncing" id="syncStatusBadge">
+                        <i class="fas fa-cloud"></i> <span id="syncStatusText">${t('dashboard.syncStatus', 'المزامنة السحابية: جاري التحقق...')}</span>
+                    </div>
                     <div class="dashboard-actions">
                         <button id="refreshBtn" class="btn-refresh">
                             <i class="fas fa-sync-alt"></i> ${t('dashboard.refreshData', 'تحديث البيانات')}

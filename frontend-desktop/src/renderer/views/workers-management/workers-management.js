@@ -1086,7 +1086,7 @@ async function saveWorker(event) {
 
     try {
         const result = isEditing
-            ? await window.electronAPI.updateWorker({ ...payload, id: state.editingWorkerId })
+            ? await window.electronAPI.updateWorker({ ...payload, id: state.editingWorkerId, effective_from_week: state.weekStart })
             : await window.electronAPI.saveWorker(payload);
 
         if (!result || !result.success) {
