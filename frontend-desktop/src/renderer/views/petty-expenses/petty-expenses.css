@@ -675,6 +675,15 @@ body.petty-pdf-mode .petty-table th {
     background: rgba(255, 255, 255, 0.04) !important;
 }
 
+[data-theme="dark"] .petty-hero {
+    background:
+        radial-gradient(140px 140px at 8% 18%, rgba(20, 184, 166, 0.15), transparent 60%),
+        radial-gradient(220px 180px at 92% 0%, rgba(245, 158, 11, 0.12), transparent 65%),
+        linear-gradient(135deg, #042f2e 0%, #115e59 50%, #0f172a 100%);
+    border: 1px solid rgba(20, 184, 166, 0.3);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
 .petty-modal-footer {
     padding: 16px 26px 20px;
     display: flex;

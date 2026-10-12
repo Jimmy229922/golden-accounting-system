@@ -73,6 +73,18 @@
     box-shadow: 0 0 40px rgba(5, 150, 105, 0.1), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
+[data-theme="dark"] .preset-btn:hover {
+    border-color: #34d399;
+    color: #34d399;
+}
+
+[data-theme="dark"] .preset-btn.active {
+    background: #059669;
+    color: #ffffff;
+    border-color: #34d399;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
 .dr-presets {
     display: flex;
     gap: 8px;

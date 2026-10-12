@@ -529,7 +529,7 @@ function startBackgroundSyncEngine() {
             accountingDb: db,
             storageDir,
             companyId: COMPANY_ID,
-            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.9'),
+            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.10'),
             edgeFunctionUrl: EDGE_URL,
             keyStore: {
                 deviceId: identity.deviceId,
@@ -578,7 +578,7 @@ function startBackgroundSyncEngine() {
             try {
                 const payload = {
                     mode: 'heartbeat',
-                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.9')
+                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.10')
                 };
                 const bodyStr = JSON.stringify(payload);
                 const signed = signPayload(identity.privateKeyBase64, COMPANY_ID, bodyStr);

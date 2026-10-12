@@ -1779,3 +1779,40 @@ body.attendance-is-dragging .attendance-day-cell {
     background: rgba(239, 68, 68, 0.22);
     color: #fca5a5;
 }
+
+[data-theme="dark"] .workers-btn-prev,
+[data-theme="dark"] .workers-btn-next {
+    color: #e2e8f0;
+    border-color: #263859;
+    background: #17233d;
+}
+
+[data-theme="dark"] .workers-btn-prev:hover,
+[data-theme="dark"] .workers-btn-next:hover {
+    color: #ffffff;
+    border-color: #3b82f6;
+    background: #203152;
+}
+
+[data-theme="dark"] .workers-btn-next:disabled {
+    color: #64748b !important;
+    border-color: #1e2e4a !important;
+    background: #0e172a !important;
+}
+
+[data-theme="dark"] .workers-btn-light {
+    color: #34d399;
+    background: #17233d;
+    border: 1px solid #263859;
+}
+
+[data-theme="dark"] .pill-suggestion-btn {
+    background: #17233d;
+    border-color: #ef4444;
+    color: #fca5a5;
+}
+
+[data-theme="dark"] .pill-suggestion-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ffffff;
+}

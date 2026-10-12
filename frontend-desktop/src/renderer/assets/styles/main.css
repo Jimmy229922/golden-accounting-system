@@ -6,6 +6,9 @@ html {
     overflow-y: scroll; /* Prevent layout shift (shaking) when scrollbar appears/disappears */
     background-color: var(--bg-color, #f4f6fb); /* Fallback prevents white flash before theme vars load */
     direction: ltr; /* Force scrollbar to the right */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
 body {
@@ -16,6 +19,9 @@ body {
     color: var(--text-color);
     min-height: 100vh;
     direction: ltr; /* Keep viewport scrollbar on the right */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
 body > * {

@@ -11,7 +11,47 @@
 }
 
 [data-theme="dark"] .export-revenues-page .petty-hero {
-    background: linear-gradient(135deg, #082f49 0%, #0f2a33 48%, #10291c 100%);
+    background: linear-gradient(135deg, #042f2e 0%, #0b1f2a 48%, #064e3b 100%);
+    border: 1px solid rgba(20, 184, 166, 0.3);
+    box-shadow: 0 0 40px rgba(20, 184, 166, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .export-revenues-page .petty-hero .hero-shape {
+    opacity: 0;
+}
+
+[data-theme="dark"] .export-revenues-page .petty-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 300px 200px at 15% 20%, rgba(20, 184, 166, 0.18), transparent),
+        radial-gradient(ellipse 250px 180px at 85% 80%, rgba(52, 211, 153, 0.14), transparent);
+    pointer-events: none;
+    z-index: 0;
+}
+
+[data-theme="dark"] .export-revenues-page .petty-hero::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(45, 212, 191, 0.7), rgba(52, 211, 153, 0.6), transparent);
+    pointer-events: none;
+    z-index: 1;
+}
+
+[data-theme="dark"] .export-revenues-page .petty-hero h1 {
+    color: transparent;
+    background: linear-gradient(135deg, #f8fafc, #ffffff, #99f6e4);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+[data-theme="dark"] .export-revenues-page .petty-hero p {
+    color: #94a3b8;
 }
 
 .export-revenues-page .stat-amount .stat-icon { background: rgba(14, 165, 233, 0.12); color: #0ea5e9; }

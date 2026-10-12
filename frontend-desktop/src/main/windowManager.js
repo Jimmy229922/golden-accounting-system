@@ -181,7 +181,7 @@ function showAuthWindow() {
             height,
             resizable: false,
             show: false,
-            backgroundColor: '#f3f4f6',
+            backgroundColor: '#0a0f1a',
             autoHideMenuBar: true,
             icon: appIconPath,
             webPreferences: {

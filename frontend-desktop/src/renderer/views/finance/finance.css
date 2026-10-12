@@ -59,9 +59,9 @@
         }
 
         [data-theme="dark"] .finance-hero {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e293b 100%);
-            border: 1px solid rgba(100, 116, 139, 0.3);
-            box-shadow: 0 0 40px rgba(102, 126, 234, 0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 48%, #1e1b4b 100%);
+            border: 1px solid rgba(129, 140, 248, 0.32);
+            box-shadow: 0 15px 45px rgba(79, 70, 229, 0.18), inset 0 1px 0 rgba(255,255,255,0.06);
         }
         [data-theme="dark"] .hero-shape { opacity: 0; }
         [data-theme="dark"] .finance-hero::before {
@@ -69,8 +69,8 @@
             position: absolute;
             inset: 0;
             background:
-                radial-gradient(ellipse 300px 200px at 15% 20%, rgba(102, 126, 234, 0.15), transparent),
-                radial-gradient(ellipse 250px 180px at 85% 80%, rgba(139, 92, 246, 0.12), transparent);
+                radial-gradient(ellipse 320px 220px at 15% 20%, rgba(99, 102, 241, 0.22), transparent),
+                radial-gradient(ellipse 260px 190px at 85% 80%, rgba(139, 92, 246, 0.18), transparent);
             pointer-events: none;
             z-index: 0;
         }
@@ -81,14 +81,14 @@
             left: 20%;
             right: 20%;
             height: 2px;
-            background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.6), rgba(139, 92, 246, 0.6), transparent);
+            background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.8), rgba(167, 139, 250, 0.8), transparent);
             pointer-events: none;
             z-index: 1;
         }
         [data-theme="dark"] .finance-hero h1 {
             -webkit-text-fill-color: unset;
             color: transparent;
-            background: linear-gradient(135deg, #e2e8f0, #ffffff, #c7d2fe);
+            background: linear-gradient(135deg, #f8fafc, #ffffff, #c7d2fe);
             -webkit-background-clip: text;
             background-clip: text;
         }

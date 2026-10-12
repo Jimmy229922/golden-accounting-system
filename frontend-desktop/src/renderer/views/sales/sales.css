@@ -8,6 +8,26 @@
     margin-bottom: 24px;
 }
 
+[data-theme="dark"] .sales-page-header {
+    position: relative;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, rgba(6, 78, 59, 0.35) 0%, rgba(15, 23, 42, 0.6) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px rgba(5, 150, 105, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .sales-page-header::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 15%;
+    right: 15%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.7), transparent);
+    pointer-events: none;
+}
+
 .sales-title-wrap {
     display: flex;
     align-items: center;
@@ -27,8 +47,10 @@
 }
 
 [data-theme="dark"] .page-title-icon {
-    background: rgba(37, 99, 235, 0.2);
-    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+    background: linear-gradient(135deg, rgba(5, 150, 105, 0.25), rgba(16, 185, 129, 0.15));
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    box-shadow: 0 4px 18px rgba(5, 150, 105, 0.3);
 }
 
 .sales-title-text {
@@ -45,11 +67,23 @@
     letter-spacing: -0.5px;
 }
 
+[data-theme="dark"] .page-title {
+    color: #f8fafc;
+    background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 40%, #6ee7b7 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
 .sales-subtitle {
     margin: 0;
     color: var(--text-muted);
     font-size: 1rem;
     font-weight: 500;
+}
+
+[data-theme="dark"] .sales-subtitle {
+    color: #94a3b8;
 }
 
 .invoice-form-container {
