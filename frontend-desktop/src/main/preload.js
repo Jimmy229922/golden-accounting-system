@@ -193,7 +193,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Dashboard API
     getDashboardStats: (filters = {}) => invokeChannel('get-dashboard-stats', filters),
-    triggerManualSync: () => ipcRenderer.invoke('trigger-manual-sync'),
+    triggerManualSync: (options) => ipcRenderer.invoke('trigger-manual-sync', options),
+    onCloudSyncStatus: (callback) => {
+        if (typeof callback !== 'function') return () => {};
+        const listener = (_event, payload) => callback(payload || {});
+        ipcRenderer.on('cloud-sync-status', listener);
+        return () => ipcRenderer.removeListener('cloud-sync-status', listener);
+    },
 
     // Helper API
     getNextInvoiceNumber: (type) => invokeChannel('get-next-invoice-number', type),

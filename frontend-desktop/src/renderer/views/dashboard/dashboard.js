@@ -7,6 +7,7 @@ let clearFilterBtn;
 let periodLabelEl;
 let appVersionEl;
 let lastStats = null;
+let cachedLastSyncAt = localStorage.getItem('golden_last_cloud_sync_at') || null;
 let chartPeriod = '7';
 let ar = {};
 let currentFilters = { startDate: '', endDate: '' };
@@ -21,7 +22,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     dashboardRender.renderPage({ t, getNavHTML });
     bindEvents();
-    loadDashboardStats();
+    if (window.electronAPI && typeof window.electronAPI.onCloudSyncStatus === 'function') {
+        window.electronAPI.onCloudSyncStatus((status) => {
+            if (status && status.success && status.lastSyncAt) {
+                cachedLastSyncAt = status.lastSyncAt;
+                try { localStorage.setItem('golden_last_cloud_sync_at', cachedLastSyncAt); } catch (_) {}
+                updateSyncStatusUI(status);
+            }
+        });
+    }
+    loadDashboardStats(currentFilters, false);
     } catch (error) {
         console.error('Initialization Error:', error);
         if (window.toast && typeof window.toast.error === 'function') {
@@ -86,14 +96,14 @@ function getFilterValues() {
 
 function applyDashboardFilters() {
     currentFilters = getFilterValues();
-    loadDashboardStats(currentFilters);
+    loadDashboardStats(currentFilters, false);
 }
 
 function clearDashboardFilters() {
     if (startDateInput) startDateInput.value = '';
     if (endDateInput) endDateInput.value = '';
     currentFilters = { startDate: '', endDate: '' };
-    loadDashboardStats(currentFilters);
+    loadDashboardStats(currentFilters, false);
 }
 
 function bindEvents() {
@@ -107,7 +117,7 @@ function bindEvents() {
     appVersionEl = document.getElementById('dashboardAppVersion');
 
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => loadDashboardStats(currentFilters));
+        refreshBtn.addEventListener('click', () => loadDashboardStats(currentFilters, true));
     }
 
     if (applyFilterBtn) {
@@ -283,30 +293,75 @@ function drawRoundRect(ctx, x, y, w, h, r) {
     ctx.fill();
 }
 
+function formatSyncTime(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+}
+
 function updateSyncStatusUI(syncResult) {
     const badge = document.getElementById('syncStatusBadge');
     if (!badge) return;
 
-    if (!syncResult || syncResult.disabled) {
+    if (!syncResult) {
+        const timeText = cachedLastSyncAt ? `آخر مزامنة: ${formatSyncTime(cachedLastSyncAt)}` : 'المزامنة التلقائية كل 30 ثانية';
+        badge.className = 'sync-status is-synced';
+        badge.innerHTML = `
+            <i class="fas fa-check-circle sync-icon"></i>
+            <div class="sync-status-details">
+                <span class="sync-status-main">المزامنة السحابية: متصلة</span>
+                <span class="sync-status-time" id="syncStatusTime">${timeText}</span>
+            </div>
+        `;
+        badge.title = cachedLastSyncAt ? `آخر مزامنة: ${formatSyncTime(cachedLastSyncAt)} (تعمل تلقائياً كل 30 ثانية)` : 'متصلة وتعمل تلقائياً كل 30 ثانية';
+        return;
+    }
+
+    if (syncResult.disabled) {
         badge.className = 'sync-status is-disabled';
-        badge.innerHTML = '<i class="fas fa-cloud"></i> <span>المزامنة: غير مفعلة</span>';
+        badge.innerHTML = `
+            <i class="fas fa-cloud-slash sync-icon"></i>
+            <div class="sync-status-details">
+                <span class="sync-status-main">المزامنة: غير مفعلة</span>
+                <span class="sync-status-time">${syncResult?.reason || 'المزامنة معطلة'}</span>
+            </div>
+        `;
         badge.title = syncResult?.reason || 'المزامنة معطلة';
         return;
     }
 
     if (syncResult.success) {
+        if (syncResult.lastSyncAt) {
+            cachedLastSyncAt = syncResult.lastSyncAt;
+            try { localStorage.setItem('golden_last_cloud_sync_at', cachedLastSyncAt); } catch (_) {}
+        }
+        const timeText = cachedLastSyncAt ? `آخر مزامنة: ${formatSyncTime(cachedLastSyncAt)}` : 'متصلة ومحدثة';
         badge.className = 'sync-status is-synced';
-        badge.innerHTML = '<i class="fas fa-check-circle"></i> <span>المزامنة السحابية: متصلة</span>';
-        badge.title = syncResult.lastSyncAt ? `آخر مزامنة: ${new Date(syncResult.lastSyncAt).toLocaleTimeString('ar-EG')}` : 'متصلة ومحدثة';
+        badge.innerHTML = `
+            <i class="fas fa-check-circle sync-icon"></i>
+            <div class="sync-status-details">
+                <span class="sync-status-main">المزامنة السحابية: متصلة</span>
+                <span class="sync-status-time" id="syncStatusTime">${timeText}</span>
+            </div>
+        `;
+        badge.title = cachedLastSyncAt ? `آخر مزامنة: ${formatSyncTime(cachedLastSyncAt)}` : 'متصلة ومحدثة';
     } else {
         badge.className = 'sync-status is-error';
         const errMsg = syncResult.error || syncResult.reason || 'تعذر الاتصال';
-        badge.innerHTML = '<i class="fas fa-exclamation-circle"></i> <span>المزامنة: تعذر الاتصال</span>';
+        const timeText = cachedLastSyncAt ? `آخر مزامنة: ${formatSyncTime(cachedLastSyncAt)}` : 'تعذر الاتصال بالسحابة';
+        badge.innerHTML = `
+            <i class="fas fa-exclamation-circle sync-icon"></i>
+            <div class="sync-status-details">
+                <span class="sync-status-main">المزامنة: تعذر الاتصال</span>
+                <span class="sync-status-time">${timeText}</span>
+            </div>
+        `;
         badge.title = `خطأ: ${errMsg}`;
     }
 }
 
-async function loadDashboardStats(filters = currentFilters) {
+async function loadDashboardStats(filters = currentFilters, triggerSync = false) {
     let icon;
     try {
         if (refreshBtn) {
@@ -317,18 +372,41 @@ async function loadDashboardStats(filters = currentFilters) {
 
         updatePeriodLabel(filters);
         const syncBadge = document.getElementById('syncStatusBadge');
-        if (syncBadge) {
+        if (triggerSync && syncBadge) {
             syncBadge.className = 'sync-status is-syncing';
-            syncBadge.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> <span>جاري المزامنة...</span>';
+            syncBadge.innerHTML = `
+                <i class="fas fa-sync-alt fa-spin sync-icon"></i>
+                <div class="sync-status-details">
+                    <span class="sync-status-main">جاري المزامنة...</span>
+                    <span class="sync-status-time">جاري تحديث البيانات مع السحابة</span>
+                </div>
+            `;
+        } else if (!triggerSync) {
+            updateSyncStatusUI();
+            if (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function') {
+                window.electronAPI.triggerManualSync({ statusOnly: true }).then((status) => {
+                    if (status && status.lastSyncAt) {
+                        cachedLastSyncAt = status.lastSyncAt;
+                        try { localStorage.setItem('golden_last_cloud_sync_at', cachedLastSyncAt); } catch (_) {}
+                        updateSyncStatusUI(status);
+                    }
+                }).catch(() => {});
+            }
         }
 
-        const [stats, syncResult] = await Promise.all([
-            window.electronAPI.getDashboardStats(filters),
-            (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function')
-                ? window.electronAPI.triggerManualSync().catch((err) => ({ success: false, error: err.message }))
-                : Promise.resolve({ success: false, disabled: true })
-        ]);
-        updateSyncStatusUI(syncResult);
+        let stats;
+        let syncResult;
+        if (triggerSync) {
+            [stats, syncResult] = await Promise.all([
+                window.electronAPI.getDashboardStats(filters),
+                (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function')
+                    ? window.electronAPI.triggerManualSync().catch((err) => ({ success: false, error: err.message }))
+                    : Promise.resolve({ success: false, disabled: true })
+            ]);
+            updateSyncStatusUI(syncResult);
+        } else {
+            stats = await window.electronAPI.getDashboardStats(filters);
+        }
         lastStats = stats;
 
         const ts = stats.todaySummary || {};

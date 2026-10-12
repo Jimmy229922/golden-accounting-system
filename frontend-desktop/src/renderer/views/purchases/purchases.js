@@ -1885,32 +1885,32 @@ async function confirmAndGetCustomRemaining(financials) {
         const diffStr = formatMoneyWithCommas(Math.abs(diff));
 
         const isPositive = diff > 0;
-        const diffColor = isPositive ? '#15803d' : '#b91c1c';
-        const diffBg = isPositive ? '#f0fdf4' : '#fef2f2';
-        const diffBorder = isPositive ? '#bbf7d0' : '#fecaca';
+        const diffColor = isPositive ? '#10b981' : '#ef4444';
+        const diffBg = isPositive ? 'rgba(16, 185, 129, 0.14)' : 'rgba(239, 68, 68, 0.14)';
+        const diffBorder = isPositive ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)';
         const diffSign = isPositive ? '+' : '-';
         const changeLabel = isPositive ? 'بالزيادة' : 'بالنقصان';
 
         const htmlMsg = `
             <div style="font-family: inherit; font-size: 0.95rem; line-height: 1.6;">
-                <div style="margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; color: #b45309; font-weight: 700; font-size: 0.95rem;">
+                <div style="margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); color: #fbbf24; font-weight: 700; font-size: 0.95rem;">
                     ⚠️ تنبيه: لقد قمت بتعديل مبلغ "المتبقي على المورد" يدوياً (${changeLabel}).
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; color: #1e293b;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 8px; background: var(--secondary-bg, rgba(15, 23, 42, 0.6)); border: 1px solid var(--card-border, #e2e8f0); color: var(--text-color, #f8fafc);">
                         <span style="font-weight: 600;">• المبلغ المحسوب تلقائياً:</span>
-                        <strong style="font-size: 1.05rem; color: #0f172a;">${autoStr} ج.م</strong>
+                        <strong style="font-size: 1.05rem; color: var(--text-color, #f8fafc);">${autoStr} ج.م</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; color: #1e293b;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 8px; background: var(--secondary-bg, rgba(15, 23, 42, 0.6)); border: 1px solid var(--card-border, #e2e8f0); color: var(--text-color, #f8fafc);">
                         <span style="font-weight: 600;">• المبلغ المعدل يدوياً:</span>
-                        <strong style="font-size: 1.05rem; color: #0f172a;">${enteredStr} ج.م</strong>
+                        <strong style="font-size: 1.05rem; color: var(--text-color, #f8fafc);">${enteredStr} ج.م</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; background: ${diffBg}; border: 1px solid ${diffBorder}; color: ${diffColor};">
                         <span style="font-weight: 700;">• قيمة الفرق (${changeLabel}):</span>
                         <strong style="font-size: 1.2rem; color: ${diffColor}; font-weight: 800;">${diffSign}${diffStr} ج.م</strong>
                     </div>
                 </div>
-                <div style="text-align: center; font-weight: 700; font-size: 1rem; color: #1e293b; margin-top: 12px;">
+                <div style="text-align: center; font-weight: 700; font-size: 1rem; color: var(--text-color, #f8fafc); margin-top: 12px;">
                     هل تريد الحفظ بهذا المبلغ المعدل؟
                 </div>
             </div>

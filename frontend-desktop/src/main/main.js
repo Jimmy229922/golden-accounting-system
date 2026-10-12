@@ -556,9 +556,19 @@ function startBackgroundSyncEngine() {
                     await syncEngineInstance.dispatchOutbox();
                 }
                 lastSyncStatus = { success: true, lastSyncAt: new Date().toISOString() };
+                BrowserWindow.getAllWindows().forEach((win) => {
+                    if (win && !win.isDestroyed() && win.webContents) {
+                        win.webContents.send('cloud-sync-status', lastSyncStatus);
+                    }
+                });
                 return lastSyncStatus;
             } catch (err) {
                 lastSyncStatus = { success: false, error: err.message, lastSyncAt: new Date().toISOString() };
+                BrowserWindow.getAllWindows().forEach((win) => {
+                    if (win && !win.isDestroyed() && win.webContents) {
+                        win.webContents.send('cloud-sync-status', lastSyncStatus);
+                    }
+                });
                 return lastSyncStatus;
             } finally {
                 isSyncInProgress = false;
@@ -566,7 +576,10 @@ function startBackgroundSyncEngine() {
         };
 
         ipcMain.removeHandler('trigger-manual-sync');
-        ipcMain.handle('trigger-manual-sync', async () => {
+        ipcMain.handle('trigger-manual-sync', async (_event, options) => {
+            if (options && options.statusOnly) {
+                return lastSyncStatus;
+            }
             return await triggerSyncNow();
         });
 

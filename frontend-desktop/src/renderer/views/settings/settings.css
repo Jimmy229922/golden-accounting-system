@@ -512,6 +512,10 @@
         }
         .status-text.error { color: #ef4444; }
         .status-text.success { color: #10b981; }
+        [data-theme="dark"] .status-text { color: #94a3b8; }
+        [data-theme="dark"] .status-text.success { color: #34d399; }
+        [data-theme="dark"] .status-text.error { color: #f87171; }
+        [data-theme="dark"] .action-card-desc { color: #cbd5e1; }
 
         /* ===== System Info Section ===== */
         .system-info-grid {
@@ -581,6 +585,22 @@
         [data-theme="dark"] .settings-subsection,
         [data-theme="dark"] .info-item {
             background: rgba(15,23,42,0.72);
+        }
+        [data-theme="dark"] .action-card-header h3 {
+            color: #ffffff;
+        }
+        [data-theme="dark"] .action-card-desc {
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+        [data-theme="dark"] .info-item-label {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .info-item-value {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .info-item-meta {
+            color: #cbd5e1;
         }
         [data-theme="dark"] .change-log-row {
             border-color: rgba(148,163,184,0.4);
@@ -875,7 +895,42 @@
     border-top: 1px solid var(--card-border, #e2e8f0);
     display: flex;
     justify-content: flex-end;
-    background: var(--background-secondary, #f8fafc);
+    background: var(--secondary-bg, var(--card-bg, #f8fafc));
+}
+
+[data-theme="dark"] .changelog-modal {
+    background: var(--card-bg, #121d33);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .workers-modal-header {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .workers-modal-header h2 {
+    color: var(--text-color, #f8fafc);
+}
+
+[data-theme="dark"] .workers-modal-footer {
+    background: var(--secondary-bg, #0e172a);
+    border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .changelog-welcome {
+    background: rgba(13, 148, 136, 0.15);
+    border-right-color: #14b8a6;
+}
+
+[data-theme="dark"] .changelog-welcome p {
+    color: #5eead4;
+}
+
+[data-theme="dark"] .changelog-list li strong {
+    color: var(--text-color, #f8fafc);
+}
+
+[data-theme="dark"] .changelog-list li p {
+    color: #94a3b8;
 }
 
 .changelog-welcome {

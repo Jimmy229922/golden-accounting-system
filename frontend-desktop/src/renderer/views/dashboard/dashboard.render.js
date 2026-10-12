@@ -21,8 +21,12 @@
                     <div class="last-updated" id="lastUpdated">
                         <i class="fas fa-clock"></i> ${t('dashboard.lastUpdate', 'آخر تحديث: —')}
                     </div>
-                    <div class="sync-status is-syncing" id="syncStatusBadge">
-                        <i class="fas fa-cloud"></i> <span id="syncStatusText">${t('dashboard.syncStatus', 'المزامنة السحابية: جاري التحقق...')}</span>
+                    <div class="sync-status is-synced" id="syncStatusBadge" title="المزامنة السحابية متصلة وتعمل تلقائياً كل 30 ثانية">
+                        <i class="fas fa-check-circle sync-icon"></i>
+                        <div class="sync-status-details">
+                            <span class="sync-status-main" id="syncStatusText">${t('dashboard.syncStatus', 'المزامنة السحابية: متصلة')}</span>
+                            <span class="sync-status-time" id="syncStatusTime">جاري الفحص...</span>
+                        </div>
                     </div>
                     <div class="dashboard-actions">
                         <button id="refreshBtn" class="btn-refresh">

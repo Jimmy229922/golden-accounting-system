@@ -19,21 +19,25 @@ const SETTINGS_TRACKING_FIELDS = [
     { key: 'profileImage', label: 'الشعار' }
 ];
 const CURRENT_CHANGELOG = {
-    version: '9.2.10',
+    version: '9.2.13',
     title: 'ما الجديد في التحديث الجديد',
     intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار الأحدث بنجاح. إليك أهم الميزات والتعديلات المضافة في هذا الإصدار:',
     items: [
         {
-            title: 'ترقية نظام الدارك مود اللوني الفاخر',
-            desc: 'تخصيص هوية لونية مستقلة ومميزة لكل قسم وهيدر (المبيعات، المشتريات، التعاملات المالية، والنثريات) لمنع الرتابة البصرية.'
+            title: 'تحسين كفاءة المزامنة السحابية للوحة التحكم',
+            desc: 'فصل المزامنة السحابية عن التنقل المباشر لتسريع فتح اللوحة، مع تحديث المؤشرات تلقائياً كل 30 ثانية وعرض توقيت التحديث الأخير.'
         },
         {
-            title: 'معالجة بطاقات إدارة الأصناف وقيمة المخزون',
-            desc: 'ضبط استيعاب وتجاوب أرقام إجمالي قيمة المخزون بالكامل ومنع أي اقتطاع أو تجاوز لحدود البطاقات.'
+            title: 'تحسين وضوح أزرار التأكيد في الوضع الليلي',
+            desc: 'ترقية تباين أزرار الإلغاء والنوافذ الحوارية لتكون واضحة ومقروءة تماماً في وضع الدارك مود.'
         },
         {
-            title: 'تحسينات الأداء وتناسق الواجهات',
-            desc: 'رفع سلاسة التنقل ودقة استجابة الأزرار والحقول في بيئة سطح المكتب.'
+            title: 'إعادة التشغيل التلقائي الفوري للتحديثات',
+            desc: 'إعادة فتح وتشغيل البرنامج تلقائياً بعد اكتمال تثبيت التحديثات السحابية والجزئية بنجاح.'
+        },
+        {
+            title: 'تحسين شاشة البداية وشريط التحميل',
+            desc: 'ضمان سلاسة ظهور واكتمال شريط تحميل النظام وإغلاقه فور الانتقال لشاشة الدخول بأمان.'
         }
     ]
 };
@@ -828,7 +832,14 @@ async function resolveModifiedBy() {
 function setStatus(element, message, isError = false) {
     if (!element) return;
     element.textContent = message || '';
-    element.style.color = isError ? '#b91c1c' : '#111827';
+    element.classList.toggle('error', Boolean(isError));
+    element.classList.toggle('success', !isError && Boolean(message));
+    if (!message) {
+        element.style.color = '';
+        return;
+    }
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.getAttribute('data-theme') === 'dark';
+    element.style.color = isError ? (isDark ? '#f87171' : '#dc2626') : (isDark ? '#34d399' : '#059669');
 }
 
 function setUpdateButtonState(state, buttonText = '') {

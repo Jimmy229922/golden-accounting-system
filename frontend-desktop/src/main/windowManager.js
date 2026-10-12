@@ -71,7 +71,7 @@ function showSplashWindow() {
         frame: false,
         resizable: false,
         center: true,
-        show: true,
+        show: false,
         backgroundColor: '#0a0f1a',
         icon: appIconPath,
         alwaysOnTop: true,
@@ -81,6 +81,18 @@ function showSplashWindow() {
             contextIsolation: true
         }
     });
+
+    splashWindow.once('ready-to-show', () => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.show();
+        }
+    });
+
+    setTimeout(() => {
+        if (splashWindow && !splashWindow.isDestroyed() && !splashWindow.isVisible()) {
+            splashWindow.show();
+        }
+    }, 1000);
 
     const splashPath = path.join(__dirname, '../renderer/views/splash/index.html');
     splashWindow.loadFile(splashPath).catch((err) => {

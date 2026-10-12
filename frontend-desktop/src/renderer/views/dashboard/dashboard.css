@@ -144,29 +144,57 @@
 .sync-status {
     font-size: 0.9rem;
     color: #e2e8f0;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 8px 16px;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.22);
+    padding: 6px 16px;
     border-radius: 20px;
     width: fit-content;
     backdrop-filter: blur(5px);
-    font-weight: 600;
     border: 1px solid rgba(255, 255, 255, 0.2);
     transition: all 0.3s ease;
+}
+.sync-status .sync-icon {
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+.sync-status-details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.25;
+}
+.sync-status-main {
+    font-weight: 700;
+    font-size: 0.88rem;
+}
+.sync-status-time {
+    font-size: 0.74rem;
+    font-weight: 500;
+    opacity: 0.9;
+    color: #cbd5e1;
 }
 .sync-status.is-synced {
     color: #4ade80;
     border-color: rgba(74, 222, 128, 0.4);
 }
+.sync-status.is-synced .sync-status-time {
+    color: #86efac;
+}
 .sync-status.is-syncing {
     color: #60a5fa;
     border-color: rgba(96, 165, 250, 0.4);
 }
+.sync-status.is-syncing .sync-status-time {
+    color: #93c5fd;
+}
 .sync-status.is-error {
     color: #f87171;
     border-color: rgba(248, 113, 113, 0.4);
+}
+.sync-status.is-error .sync-status-time {
+    color: #fca5a5;
 }
 .sync-status.is-disabled {
     color: #cbd5e1;
