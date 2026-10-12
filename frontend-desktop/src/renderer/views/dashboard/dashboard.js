@@ -293,7 +293,12 @@ async function loadDashboardStats(filters = currentFilters) {
         }
 
         updatePeriodLabel(filters);
-        const stats = await window.electronAPI.getDashboardStats(filters);
+        const [stats] = await Promise.all([
+            window.electronAPI.getDashboardStats(filters),
+            (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function')
+                ? window.electronAPI.triggerManualSync().catch(() => ({}))
+                : Promise.resolve({})
+        ]);
         lastStats = stats;
 
         const ts = stats.todaySummary || {};

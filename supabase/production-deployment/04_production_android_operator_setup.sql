@@ -14,7 +14,7 @@
 DO $$
 DECLARE
     v_user_id UUID := '<ANDROID_OPERATOR_USER_UUID>'::uuid;
-    v_company_id UUID := '<PRODUCTION_COMPANY_ID>'::uuid;
+    v_company_id UUID := '715526d2-f05a-458f-8cf7-179ee172a7a1'::uuid;
     v_user_email TEXT;
 BEGIN
     -- التحقق من وجود المستخدم في جدول المصادقة auth.users

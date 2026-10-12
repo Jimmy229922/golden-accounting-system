@@ -43,7 +43,7 @@ class SyncEngine {
         this.accountingDb = options.accountingDb;
         this.storageDir = options.storageDir || path.resolve(__dirname, '../../../..');
         this.companyId = options.companyId;
-        this.desktopVersion = options.desktopVersion || '9.2.2';
+        this.desktopVersion = options.desktopVersion || '9.2.9';
         this.edgeFunctionUrl = options.edgeFunctionUrl;
         this.keyStore = options.keyStore;
         
@@ -150,7 +150,7 @@ class SyncEngine {
     getNextSeqNo() {
         const outboxMax = this.stateDb.prepare("SELECT MAX(seq_no) as max_seq FROM outbox_queue").get();
         const metaRow = this.stateDb.prepare("SELECT value FROM sync_meta WHERE key = 'last_seq_no'").get();
-        const metaSeq = metaRow ? Number(metaRow.value) : 100;
+        const metaSeq = metaRow ? Number(metaRow.value) : 0;
         const currentMax = Math.max(metaSeq, (outboxMax && outboxMax.max_seq) ? Number(outboxMax.max_seq) : 0);
         return currentMax + 1;
     }
@@ -177,8 +177,13 @@ class SyncEngine {
                 p.phone,
                 p.address,
                 p.type,
-                COALESCE((SELECT SUM(amount) FROM party_ledger WHERE party_id = p.id), 0) AS balance
+                COALESCE(b.balance, 0) AS balance
             FROM parties p
+            LEFT JOIN (
+                SELECT party_id, SUM(amount) AS balance
+                FROM party_ledger
+                GROUP BY party_id
+            ) b ON b.party_id = p.id
             ORDER BY p.id ASC;
         `;
         let parties;
@@ -192,7 +197,7 @@ class SyncEngine {
                 pl.transaction_type,
                 COALESCE(si.invoice_number, pi.invoice_number, tt.voucher_number, ls.document_number, 'OB-' || pl.party_id) AS doc_number,
                 CASE 
-                    WHEN pl.transaction_type = 'sales_invoice' THEN 'sales_invoice'
+                    WHEN pl.transaction_type IN ('sales_invoice', 'local_sale') THEN 'sales_invoice'
                     WHEN pl.transaction_type = 'purchase_invoice' THEN 'purchase_invoice'
                     WHEN pl.transaction_type = 'treasury_income' THEN 'voucher_receipt'
                     WHEN pl.transaction_type = 'treasury_expense' THEN 'voucher_payment'
@@ -202,6 +207,7 @@ class SyncEngine {
                 CASE 
                     WHEN pl.transaction_type = 'sales_invoice' THEN COALESCE(si.total_amount, 0)
                     WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.total_amount, 0)
+                    WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
                     ELSE 0
                 END AS total_amount,
                 CASE 
@@ -213,6 +219,7 @@ class SyncEngine {
                 CASE 
                     WHEN pl.transaction_type = 'sales_invoice' THEN COALESCE(si.remaining_amount, si.total_amount - si.paid_amount, 0)
                     WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.remaining_amount, pi.total_amount - pi.paid_amount, 0)
+                    WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
                     ELSE 0
                 END AS remaining_amount,
                 COALESCE(NULLIF(pl.notes, ''), NULLIF(si.notes, ''), NULLIF(pi.notes, ''), NULLIF(tt.description, ''), NULLIF(ls.statement, ''), CASE WHEN pl.transaction_type = 'opening_balance' THEN 'رصيد افتتاحي' ELSE NULL END) AS notes

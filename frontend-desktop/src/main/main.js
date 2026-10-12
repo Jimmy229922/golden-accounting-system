@@ -487,6 +487,7 @@ function startBackgroundSyncEngine() {
 
         const guard = evaluateSyncGuard({
             isPackaged: app.isPackaged,
+            allowDevMode: !app.isPackaged,
             dbPath,
             syncConfig: {
                 enabled: true,
@@ -512,7 +513,7 @@ function startBackgroundSyncEngine() {
             accountingDb: db,
             storageDir,
             companyId: COMPANY_ID,
-            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.2'),
+            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.9'),
             edgeFunctionUrl: EDGE_URL,
             keyStore: {
                 deviceId: identity.deviceId,
@@ -523,32 +524,41 @@ function startBackgroundSyncEngine() {
         syncEngineInstance.dispatchOutbox().catch(() => {});
 
         let isSyncInProgress = false;
-        syncTimer = setInterval(async () => {
-            if (!syncEngineInstance || isSyncInProgress) return;
+        const triggerSyncNow = async () => {
+            if (!syncEngineInstance || isSyncInProgress) return { success: false, reason: 'busy_or_unavailable' };
             isSyncInProgress = true;
             try {
                 if (syncEngineInstance.hasPendingOutbox()) {
                     await syncEngineInstance.dispatchOutbox();
-                    return;
                 }
                 const nextSeq = syncEngineInstance.getNextSeqNo();
                 const delta = syncEngineInstance.detectDeltaEvents(nextSeq);
                 if (delta.events && delta.events.length > 0) {
                     syncEngineInstance.queueDeltaBatch(nextSeq, delta.events, delta.projection);
+                    await syncEngineInstance.dispatchOutbox();
                 }
-                await syncEngineInstance.dispatchOutbox();
-            } catch (_) {
+                return { success: true };
+            } catch (err) {
+                return { success: false, error: err.message };
             } finally {
                 isSyncInProgress = false;
             }
-        }, 15000);
+        };
+
+        ipcMain.removeHandler('trigger-manual-sync');
+        ipcMain.handle('trigger-manual-sync', async () => {
+            return await triggerSyncNow();
+        });
+
+        syncTimer = setInterval(triggerSyncNow, 10000);
+        triggerSyncNow();
 
         heartbeatTimer = setInterval(async () => {
             if (!syncEngineInstance) return;
             try {
                 const payload = {
                     mode: 'heartbeat',
-                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.2')
+                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.9')
                 };
                 const bodyStr = JSON.stringify(payload);
                 const signed = signPayload(identity.privateKeyBase64, COMPANY_ID, bodyStr);

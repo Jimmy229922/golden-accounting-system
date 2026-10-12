@@ -20,6 +20,7 @@ function normalizeCanonicalPath(p) {
 function evaluateSyncGuard(options = {}) {
     const {
         isPackaged = false,
+        allowDevMode = false,
         dbPath = '',
         syncConfig = null,
         environment = process.env.NODE_ENV || 'production',
@@ -39,7 +40,7 @@ function evaluateSyncGuard(options = {}) {
     }
 
     // 2. فحص وضع التطوير (Development Mode)
-    if (!isPackaged || environment === 'development' || environment === 'test') {
+    if (!allowDevMode && (!isPackaged || environment === 'development' || environment === 'test')) {
         reasons.push('التطبيق يعمل في بيئة تطوير أو اختبار (Non-Packaged / Development).');
     }
 
@@ -50,9 +51,9 @@ function evaluateSyncGuard(options = {}) {
 
     if (!normalizedDb) {
         reasons.push('مسار قاعدة البيانات فارغ أو غير محدد.');
-    } else if (normalizedDb.startsWith(normalizedRepo)) {
+    } else if (!allowDevMode && normalizedDb.startsWith(normalizedRepo)) {
         reasons.push('مسار قاعدة البيانات يقع داخل مستودع التطوير (Workspace Repo).');
-    } else if (normalizedDb !== expectedCanonicalDb) {
+    } else if (!allowDevMode && normalizedDb !== expectedCanonicalDb) {
         reasons.push(`قاعدة البيانات (${path.basename(normalizedDb)}) ليست في المسار الإنتاجي المعتمد.`);
     }
 
@@ -60,7 +61,7 @@ function evaluateSyncGuard(options = {}) {
     if (configuredRootEnv && configuredRootEnv.trim()) {
         const normalizedRootEnv = normalizeCanonicalPath(configuredRootEnv);
         const expectedProdRoot = normalizeCanonicalPath(DEFAULT_PROD_ROOT);
-        if (normalizedRootEnv !== expectedRootEnv) {
+        if (normalizedRootEnv !== expectedProdRoot) {
             reasons.push('تم رصد متغير بيئة خارجي (ACCOUNTING_SYSTEM_ROOT) يوجّه لمسار غير معتمد.');
         }
     }
