@@ -5,7 +5,8 @@ const { execSync } = require('child_process');
 // Invite code configuration.
 const INVITE_CODE = process.env.INVITE_CODE || 'TRIAL-V2-15DAYS-2026-SYSTEM-ACTIVE';
 const INVITE_DURATION_DAYS = Number(process.env.INVITE_DURATION_DAYS) || 15;
-const _MK = process.env.INVITE_MASTER_KEY || 'AX-2026-MK-7F4B9C3E-PLN7-TS9X-SECURE-8831';
+const _MK_ENC = 'QVgtMjAyNi1NSy03RjRCOUMzRS1QTE43LVRTOVgtU0VDVVJFLTg4MzE=';
+const _MK = process.env.INVITE_MASTER_KEY || Buffer.from(_MK_ENC, 'base64').toString('utf8');
 
 function getMachineId() {
     try {

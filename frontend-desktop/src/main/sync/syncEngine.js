@@ -38,6 +38,47 @@ function computePartyHash(p) {
     return `${code}_${name}_${phone}_${address}_${type}_${balance}`;
 }
 
+function formatSyncEventsSummary(events) {
+    if (!Array.isArray(events) || events.length === 0) {
+        return 'تحديثات محاسبية تفاضلية';
+    }
+
+    const DOC_LABELS = {
+        'purchase_invoice': 'فاتورة مشتريات',
+        'sales_invoice': 'فاتورة مبيعات',
+        'voucher_payment': 'سند صرف',
+        'voucher_receipt': 'سند قبض',
+        'opening_balance': 'رصيد افتتاحي',
+        'local_sale': 'مبيعات نقدية'
+    };
+
+    const docTypes = [];
+    const partyNames = [];
+
+    for (const ev of events) {
+        if (ev.entity_type === 'party' && ev.data && ev.data.name) {
+            if (!partyNames.includes(ev.data.name)) partyNames.push(ev.data.name);
+        } else if (ev.entity_type === 'party_ledger' && ev.data && ev.data.doc_type) {
+            const label = DOC_LABELS[ev.data.doc_type] || ev.data.doc_type;
+            if (!docTypes.includes(label)) docTypes.push(label);
+        }
+    }
+
+    if (docTypes.length > 0 && partyNames.length > 0) {
+        return `${docTypes.join('، ')}: ${partyNames.join('، ')}`;
+    }
+
+    if (docTypes.length > 0) {
+        return docTypes.join('، ');
+    }
+
+    if (partyNames.length > 0) {
+        return `تحديث بيانات: ${partyNames.join('، ')}`;
+    }
+
+    return 'تحديثات محاسبية تفاضلية';
+}
+
 class SyncEngine {
     constructor(options = {}) {
         this.accountingDb = options.accountingDb;
@@ -154,6 +195,16 @@ class SyncEngine {
         } catch (_) {}
 
         try {
+            this.stateDb.exec(`
+                UPDATE sync_history SET summary = REPLACE(summary, 'purchase_invoice', 'فاتورة مشتريات') WHERE summary LIKE '%purchase_invoice%';
+                UPDATE sync_history SET summary = REPLACE(summary, 'sales_invoice', 'فاتورة مبيعات') WHERE summary LIKE '%sales_invoice%';
+                UPDATE sync_history SET summary = REPLACE(summary, 'voucher_payment', 'سند صرف') WHERE summary LIKE '%voucher_payment%';
+                UPDATE sync_history SET summary = REPLACE(summary, 'voucher_receipt', 'سند قبض') WHERE summary LIKE '%voucher_receipt%';
+                UPDATE sync_history SET summary = REPLACE(summary, 'opening_balance', 'رصيد افتتاحي') WHERE summary LIKE '%opening_balance%';
+            `);
+        } catch (_) {}
+
+        try {
             const histRow = this.stateDb.prepare("SELECT count(*) as cnt FROM sync_history").get();
             if (!histRow || histRow.cnt === 0) {
                 const existingOutbox = this.stateDb.prepare("SELECT seq_no, status, retry_count, last_error, created_at, payload_json FROM outbox_queue ORDER BY seq_no ASC").all();
@@ -168,7 +219,7 @@ class SyncEngine {
                         const p = JSON.parse(row.payload_json);
                         if (Array.isArray(p.events)) {
                             eventsCount = p.events.length;
-                            sampleInfo = p.events.slice(0, 2).map(e => e.entity_type === 'party' ? (e.data && e.data.name ? e.data.name : 'طرف') : (e.data && e.data.doc_type ? e.data.doc_type : 'حركة')).join('، ');
+                            sampleInfo = formatSyncEventsSummary(p.events);
                         }
                     } catch (_) {}
                     insertHist.run(row.seq_no, row.status, eventsCount, sampleInfo || 'دفعة بيانات تفاضلية', row.last_error, row.created_at);
@@ -683,7 +734,7 @@ class SyncEngine {
                     }
 
                     const sampleInfo = (payload.events && Array.isArray(payload.events))
-                        ? payload.events.slice(0, 2).map(e => e.entity_type === 'party' ? (e.data && e.data.name ? e.data.name : 'طرف') : (e.data && e.data.doc_type ? e.data.doc_type : 'حركة')).join('، ')
+                        ? formatSyncEventsSummary(payload.events)
                         : 'تم رفع الدفعة بنجاح';
                     this.logSyncHistory({
                         seq_no: item.seq_no,
@@ -843,7 +894,7 @@ class SyncEngine {
                         const p = JSON.parse(r.payload_json);
                         if (p.events && Array.isArray(p.events)) {
                             evCount = p.events.length;
-                            summaryText = p.events.slice(0, 2).map(e => e.entity_type === 'party' ? (e.data && e.data.name ? e.data.name : 'طرف') : (e.data && e.data.doc_type ? e.data.doc_type : 'حركة')).join('، ');
+                            summaryText = formatSyncEventsSummary(p.events);
                         }
                     } catch (_) {}
                     return {

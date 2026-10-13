@@ -245,6 +245,7 @@ try {
 const { runStartupChecks, handleQuitBackup, handleQuitBackupFallback } = require('./autoBackup');
 const { openAppFlow, getMainWindow, showSplashWindow, updateSplashStatus, closeSplashWindow } = require('./windowManager');
 const { INVITE_CODE, INVITE_DURATION_DAYS } = require('./inviteConfig');
+const licenseService = require('./licenseService');
 
 let authSessionToken = null;
 let isQuitBackupRunning = false;
@@ -453,6 +454,7 @@ app.whenReady().then(async () => {
 
     await new Promise((r) => setTimeout(r, 350));
     updateSplashStatus('\u062c\u0627\u0631\u064d \u062a\u062c\u0647\u064a\u0632 \u062e\u062f\u0645\u0627\u062a \u0627\u0644\u0646\u0638\u0627\u0645...', 60);
+    licenseService.initLicenseForDatabase(db);
     ensureAutoActivationForFreshInstall();
 
     await new Promise((r) => setTimeout(r, 400));
@@ -486,6 +488,25 @@ app.whenReady().then(async () => {
 let syncEngineInstance = null;
 let syncTimer = null;
 let heartbeatTimer = null;
+
+function getOrInitializeCompanyId(accountingDb) {
+    try {
+        const saved = accountingDb.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
+        if (saved && saved.value && String(saved.value).trim()) {
+            return String(saved.value).trim();
+        }
+
+        const hasExistingData = accountingDb.prepare("SELECT count(*) as cnt FROM sales_invoices").get()?.cnt > 0;
+        const targetCompanyId = hasExistingData 
+            ? '715526d2-f05a-458f-8cf7-179ee172a7a1' 
+            : require('crypto').randomUUID();
+
+        accountingDb.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('company_id', ?)").run(targetCompanyId);
+        return targetCompanyId;
+    } catch (_) {
+        return '715526d2-f05a-458f-8cf7-179ee172a7a1';
+    }
+}
 
 function startBackgroundSyncEngine() {
     try {
@@ -522,7 +543,7 @@ function startBackgroundSyncEngine() {
             return;
         }
 
-        const COMPANY_ID = '715526d2-f05a-458f-8cf7-179ee172a7a1';
+        const COMPANY_ID = getOrInitializeCompanyId(db);
         const EDGE_URL = 'https://ryoqhtsdhfbydmejmaby.supabase.co/functions/v1/sync-ingest';
 
         syncEngineInstance = new SyncEngine({

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { db } = require('./db');
 const { INVITE_CODE, getMachineId, generateActivationCode } = require('./inviteConfig');
+const licenseService = require('./licenseService');
 const customIconPath = path.join(__dirname, 'assets/icon.ico');
 const appIconPath = (!app.isPackaged && fs.existsSync(customIconPath)) ? customIconPath : process.execPath;
 
@@ -17,26 +18,8 @@ let isMainWindowClosingForUpdate = false;
 
 function isInviteValid() {
     try {
-        const rows = db.prepare("SELECT key, value FROM settings WHERE key IN ('invite_code', 'invite_expiry', 'renew_count')").all();
-        const map = {};
-        rows.forEach(r => { map[r.key] = r.value; });
-        
-        const machineId = getMachineId();
-        const renewCount = parseInt(map.renew_count || '0', 10);
-        
-        let codeMatches = false;
-        if (map.invite_code === INVITE_CODE) {
-            codeMatches = true;
-        } else {
-            const expectedDynamicCode = generateActivationCode(`${machineId}-${renewCount}`);
-            codeMatches = (map.invite_code === expectedDynamicCode);
-        }
-
-        const expiry = map.invite_expiry ? new Date(map.invite_expiry) : null;
-        const withinRange = expiry ? expiry > new Date() : false;
-        return codeMatches && withinRange;
+        return licenseService.isLicenseCurrentlyValid(db);
     } catch (err) {
-        console.error('[invite] validation error:', err);
         return false;
     }
 }
@@ -142,12 +125,21 @@ function showInviteWindow() {
             width,
             height,
             resizable: false,
+            show: false,
+            backgroundColor: '#0a0f1a',
             autoHideMenuBar: true,
             icon: appIconPath,
             webPreferences: {
                 preload: path.join(__dirname, 'preload.js'),
                 nodeIntegration: false,
                 contextIsolation: true
+            }
+        });
+
+        inviteWindow.once('ready-to-show', async () => {
+            await closeSplashWindow();
+            if (inviteWindow && !inviteWindow.isDestroyed()) {
+                inviteWindow.show();
             }
         });
 
@@ -339,11 +331,10 @@ function createWindow() {
 async function openAppFlow() {
     inviteUnlocked = false;
     authUnlocked = false;
-    // Invite screen is completely disabled - skip validation
-    // const valid = isInviteValid();
-    // if (!valid) {
-    //     await showInviteWindow();
-    // }
+    const license = await licenseService.getLicenseStatus(db);
+    if (!license.valid) {
+        await showInviteWindow();
+    }
     await showAuthWindow();
     if (!mainWindow) {
         try {

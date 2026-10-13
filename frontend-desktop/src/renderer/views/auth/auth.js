@@ -132,6 +132,17 @@ async function submitLogin({ username, password }) {
         return;
     }
 
+    if (loginResult.requiresPasswordChange) {
+        authUi.applyMode(authState, 'setup', t);
+        authState.dom.titleText.textContent = 'تعيين كلمة مرور المدير';
+        authState.dom.subtitleText.textContent = 'أول تسجيل دخول: يرجى كتابة كلمة مرور جديدة خاصة بك وتأكيدها.';
+        authState.dom.submitBtn.textContent = 'حفظ وتأمين الحساب';
+        authState.dom.usernameInput.value = loginResult.username;
+        authState.dom.usernameInput.disabled = true;
+        authUi.setStatus(authState, 'يرجى إدخال كلمة المرور الجديدة وتأكيدها لحساب المدير.', 'info');
+        return;
+    }
+
     authApi.storeSessionToken(authState.authSessionKey, loginResult.sessionToken);
     try {
         sessionStorage.removeItem('user_permissions_cache');

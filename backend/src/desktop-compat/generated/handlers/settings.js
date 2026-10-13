@@ -846,9 +846,6 @@ function register() {
             if (updater && typeof updater.quitAndInstall === 'function') {
                 try {
                     updater.quitAndInstall(false, true);
-                    setTimeout(() => {
-                        app.exit(0);
-                    }, 1200);
                     return { success: true };
                 } catch (updaterErr) {
                     writeDiagnosticUpdaterLog('ERROR', `updater.quitAndInstall failed: ${updaterErr.message}`);

@@ -1,6 +1,6 @@
 {
   "name": "accounting-system-desktop",
-  "version": "9.2.14",
+  "version": "9.2.16",
   "description": "Professional Accounting System",
   "main": "src/main/main.js",
   "scripts": {
@@ -36,7 +36,6 @@
     },
     "files": [
       "src/**/*",
-      "SUPABASE_LOCAL_CREDENTIALS.md",
       "package.json",
       "node_modules/**/*",
       "!node_modules/accounting-system-monorepo",

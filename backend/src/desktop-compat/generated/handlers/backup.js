@@ -283,6 +283,11 @@ function getCustomerCodeSegment(preferredValue) {
     }
 
     try {
+        const companyIdRow = db.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
+        if (companyIdRow && companyIdRow.value && String(companyIdRow.value).trim()) {
+            return safePathSegment(String(companyIdRow.value).trim(), '');
+        }
+
         const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('companyName');
         const fromSettings = safePathSegment(row && row.value ? row.value : '', '');
         if (fromSettings) {
@@ -393,43 +398,60 @@ async function listCloudBackups(options = {}) {
         const prefix = normalizeCloudPrefix(options.prefix || `${config.cloudPrefix}/${customerCode}`);
 
         const listUrl = `${config.storageBaseUrl}/object/list/${encodeURIComponent(config.bucketName)}`;
-        const response = await fetch(listUrl, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${config.serviceKey}`,
-                apikey: config.serviceKey,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                prefix,
-                limit,
-                offset: 0,
-                sortBy: {
-                    column: 'created_at',
-                    order: 'desc'
-                }
-            })
-        });
+        const fetchFilesForPrefix = async (searchPrefix) => {
+            try {
+                const response = await fetch(listUrl, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${config.serviceKey}`,
+                        apikey: config.serviceKey,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prefix: searchPrefix,
+                        limit,
+                        offset: 0,
+                        sortBy: {
+                            column: 'created_at',
+                            order: 'desc'
+                        }
+                    })
+                });
 
-        const rawBody = await response.text();
-        let payload = [];
-        try {
-            payload = rawBody ? JSON.parse(rawBody) : [];
-        } catch (_) {
-            payload = [];
+                if (!response.ok) return null;
+                const rawBody = await response.text();
+                return rawBody ? JSON.parse(rawBody) : [];
+            } catch (_) {
+                return null;
+            }
+        };
+
+        let activePrefix = prefix;
+        let payload = await fetchFilesForPrefix(prefix);
+        if ((!payload || payload.length === 0) && !options.prefix) {
+            let legacyName = '';
+            try {
+                const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('companyName');
+                legacyName = safePathSegment(row && row.value ? row.value : '', '');
+            } catch (_) {}
+            const legacyPrefix = normalizeCloudPrefix(`${config.cloudPrefix}/${legacyName || 'default-client'}`);
+            if (legacyPrefix !== prefix) {
+                const legacyPayload = await fetchFilesForPrefix(legacyPrefix);
+                if (legacyPayload && legacyPayload.length > 0) {
+                    payload = legacyPayload;
+                    activePrefix = legacyPrefix;
+                }
+            }
         }
 
-        if (!response.ok) {
-            return {
-                success: false,
-                error: `Supabase list failed (${response.status}): ${rawBody || response.statusText}`
-            };
+        if (payload === null) {
+            payload = [];
         }
 
         const files = Array.isArray(payload)
             ? payload.map((item) => {
                 const fileName = String(item && item.name ? item.name : '');
-                const objectPath = prefix ? `${prefix}/${fileName}` : fileName;
+                const objectPath = activePrefix ? `${activePrefix}/${fileName}` : fileName;
                 const metadataSize = item && item.metadata && Number.isFinite(Number(item.metadata.size))
                     ? Number(item.metadata.size)
                     : null;
