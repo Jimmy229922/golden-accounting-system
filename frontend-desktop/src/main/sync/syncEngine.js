@@ -137,7 +137,44 @@ class SyncEngine {
                 last_error TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS sync_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seq_no INTEGER,
+                sync_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                events_count INTEGER DEFAULT 0,
+                summary TEXT,
+                error_text TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
         `);
+        try {
+            this.stateDb.prepare("UPDATE outbox_queue SET status = 'pending' WHERE status = 'failed'").run();
+        } catch (_) {}
+
+        try {
+            const histRow = this.stateDb.prepare("SELECT count(*) as cnt FROM sync_history").get();
+            if (!histRow || histRow.cnt === 0) {
+                const existingOutbox = this.stateDb.prepare("SELECT seq_no, status, retry_count, last_error, created_at, payload_json FROM outbox_queue ORDER BY seq_no ASC").all();
+                const insertHist = this.stateDb.prepare(`
+                    INSERT INTO sync_history (seq_no, sync_type, status, events_count, summary, error_text, created_at)
+                    VALUES (?, 'delta_batch', ?, ?, ?, ?, ?)
+                `);
+                existingOutbox.forEach(row => {
+                    let eventsCount = 0;
+                    let sampleInfo = '';
+                    try {
+                        const p = JSON.parse(row.payload_json);
+                        if (Array.isArray(p.events)) {
+                            eventsCount = p.events.length;
+                            sampleInfo = p.events.slice(0, 2).map(e => e.entity_type === 'party' ? (e.data && e.data.name ? e.data.name : 'طرف') : (e.data && e.data.doc_type ? e.data.doc_type : 'حركة')).join('، ');
+                        }
+                    } catch (_) {}
+                    insertHist.run(row.seq_no, row.status, eventsCount, sampleInfo || 'دفعة بيانات تفاضلية', row.last_error, row.created_at);
+                });
+            }
+        } catch (_) {}
     }
 
     close() {
@@ -260,6 +297,7 @@ class SyncEngine {
                     (SELECT COALESCE(SUM(amount), 0) FROM party_ledger) AS pl_sum,
                     (SELECT COUNT(*) FROM parties) AS p_cnt,
                     (SELECT MAX(id) FROM parties) AS p_max,
+                    (SELECT COALESCE(SUM(LENGTH(name) + LENGTH(COALESCE(phone, '')) + LENGTH(COALESCE(address, '')) + COALESCE(code, 0) + COALESCE(balance, 0)), 0) FROM parties) AS p_content_sum,
                     (SELECT COUNT(*) FROM sales_invoices) AS si_cnt,
                     (SELECT MAX(id) FROM sales_invoices) AS si_max,
                     (SELECT COALESCE(SUM(total_amount + paid_amount), 0) FROM sales_invoices) AS si_sum,
@@ -267,10 +305,13 @@ class SyncEngine {
                     (SELECT MAX(id) FROM purchase_invoices) AS pi_max,
                     (SELECT COALESCE(SUM(total_amount + paid_amount), 0) FROM purchase_invoices) AS pi_sum,
                     (SELECT COUNT(*) FROM treasury_transactions) AS tt_cnt,
-                    (SELECT MAX(id) FROM treasury_transactions) AS tt_max
+                    (SELECT MAX(id) FROM treasury_transactions) AS tt_max,
+                    (SELECT COUNT(*) FROM local_sales) AS ls_cnt,
+                    (SELECT MAX(id) FROM local_sales) AS ls_max,
+                    (SELECT COALESCE(SUM(total), 0) FROM local_sales) AS ls_sum
             `).get();
 
-            return `${stats.pl_cnt}_${stats.pl_max}_${stats.pl_sum}_${stats.p_cnt}_${stats.p_max}_${stats.si_cnt}_${stats.si_max}_${stats.si_sum}_${stats.pi_cnt}_${stats.pi_max}_${stats.pi_sum}_${stats.tt_cnt}_${stats.tt_max}`;
+            return `${stats.pl_cnt}_${stats.pl_max}_${stats.pl_sum}_${stats.p_cnt}_${stats.p_max}_${stats.p_content_sum}_${stats.si_cnt}_${stats.si_max}_${stats.si_sum}_${stats.pi_cnt}_${stats.pi_max}_${stats.pi_sum}_${stats.tt_cnt}_${stats.tt_max}_${stats.ls_cnt}_${stats.ls_max}_${stats.ls_sum}`;
         } catch (_) {
             return null;
         }
@@ -596,10 +637,11 @@ class SyncEngine {
 
     async dispatchOutbox(transportFetch = null) {
         const pending = this.stateDb.prepare("SELECT seq_no, payload_json, retry_count FROM outbox_queue WHERE status = 'pending' ORDER BY seq_no ASC").all();
-        if (pending.length === 0) return { processed: 0, pending: 0 };
+        if (pending.length === 0) return { processed: 0, pending: 0, lastError: null };
 
         const fetchFn = transportFetch || fetch;
         let processedCount = 0;
+        let lastError = null;
 
         for (const item of pending) {
             try {
@@ -639,26 +681,210 @@ class SyncEngine {
                     } else {
                         this.setLastSeqNo(item.seq_no);
                     }
+
+                    const sampleInfo = (payload.events && Array.isArray(payload.events))
+                        ? payload.events.slice(0, 2).map(e => e.entity_type === 'party' ? (e.data && e.data.name ? e.data.name : 'طرف') : (e.data && e.data.doc_type ? e.data.doc_type : 'حركة')).join('، ')
+                        : 'تم رفع الدفعة بنجاح';
+                    this.logSyncHistory({
+                        seq_no: item.seq_no,
+                        sync_type: 'delta_batch',
+                        status: 'synced',
+                        events_count: (payload.events && Array.isArray(payload.events)) ? payload.events.length : 0,
+                        summary: sampleInfo
+                    });
+
                     processedCount++;
                 } else {
-                    const errText = resJson ? JSON.stringify(resJson) : (await res.text().catch(() => 'HTTP Error'));
+                    const errText = resJson ? (resJson.error || JSON.stringify(resJson)) : (await res.text().catch(() => 'HTTP Error ' + res.status));
+                    lastError = errText;
                     const newRetryCount = Number(item.retry_count || 0) + 1;
-                    if (newRetryCount >= 5) {
-                        this.stateDb.prepare("UPDATE outbox_queue SET status = 'failed', retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, errText, item.seq_no);
-                        continue;
+
+                    this.logSyncHistory({
+                        seq_no: item.seq_no,
+                        sync_type: 'delta_batch',
+                        status: 'failed',
+                        events_count: (payload.events && Array.isArray(payload.events)) ? payload.events.length : 0,
+                        summary: 'تعثر إرسال الدفعة للسحابة',
+                        error_text: errText
+                    });
+
+                    if (typeof errText === 'string' && errText.includes('Sequence conflict: Expected')) {
+                        const match = errText.match(/Expected\s+(\d+)/i);
+                        if (match && match[1]) {
+                            const expectedSeq = Number(match[1]);
+                            this.stateDb.prepare("DELETE FROM outbox_queue WHERE seq_no >= ?").run(expectedSeq);
+                            this.setLastSeqNo(expectedSeq - 1);
+                            this.stateDb.prepare("DELETE FROM shadow_parties").run();
+                            this.stateDb.prepare("DELETE FROM shadow_ledger").run();
+                            this.stateDb.prepare("DELETE FROM sync_meta WHERE key = 'last_data_signature'").run();
+                            break;
+                        }
                     }
+
                     this.stateDb.prepare("UPDATE outbox_queue SET retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, errText, item.seq_no);
                     break;
                 }
             } catch (netErr) {
+                lastError = netErr.message;
                 const newRetryCount = Number(item.retry_count || 0) + 1;
                 this.stateDb.prepare("UPDATE outbox_queue SET retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, netErr.message, item.seq_no);
+                let evCount = 0;
+                try {
+                    const p = JSON.parse(item.payload_json);
+                    if (p.events && Array.isArray(p.events)) evCount = p.events.length;
+                } catch (_) {}
+                this.logSyncHistory({
+                    seq_no: item.seq_no,
+                    sync_type: 'delta_batch',
+                    status: 'failed',
+                    events_count: evCount,
+                    summary: 'تعثر إرسال الدفعة (انقطاع الاتصال بالسحابة)',
+                    error_text: netErr.message
+                });
                 break;
             }
         }
 
         const remaining = this.stateDb.prepare("SELECT count(*) as cnt FROM outbox_queue WHERE status = 'pending'").get().cnt;
-        return { processed: processedCount, pending: remaining };
+        return { processed: processedCount, pending: remaining, lastError };
+    }
+
+    logSyncHistory(entry) {
+        try {
+            this.stateDb.prepare(`
+                INSERT INTO sync_history (seq_no, sync_type, status, events_count, summary, error_text, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+            `).run(
+                entry.seq_no || null,
+                entry.sync_type || 'auto',
+                entry.status || 'synced',
+                Number(entry.events_count || 0),
+                entry.summary || null,
+                entry.error_text || null
+            );
+            this.stateDb.prepare(`
+                DELETE FROM sync_history WHERE id NOT IN (
+                    SELECT id FROM sync_history ORDER BY id DESC LIMIT 100
+                )
+            `).run();
+        } catch (_) {}
+    }
+
+    logPeriodicSyncCheck(isManual = false, success = true, errorText = null) {
+        try {
+            const nextSeq = this.getNextSeqNo();
+            this.logSyncHistory({
+                seq_no: nextSeq > 1 ? nextSeq - 1 : 1,
+                sync_type: isManual ? 'manual_check' : 'auto_idle',
+                status: isManual ? (success ? 'synced' : 'failed') : (success ? 'idle' : 'failed'),
+                events_count: 0,
+                summary: isManual
+                    ? (success ? 'مزامنة فورية: تم فحص وتأكيد مطابقة البيانات مع السحابة' : 'مزامنة فورية: تعذر الاتصال بالسحابة')
+                    : (success ? 'فحص دوري: لم يتم الرفع لعدم وجود تغييرات في البرنامج' : 'مزامنة دورية: تعذر الاتصال بالسحابة'),
+                error_text: errorText
+            });
+        } catch (_) {}
+    }
+
+    logManualSyncCheck(success = true, errorText = null) {
+        return this.logPeriodicSyncCheck(true, success, errorText);
+    }
+
+    async pingHeartbeat() {
+        if (!this.keyStore || !this.edgeFunctionUrl) return { ok: true };
+        const payload = {
+            mode: 'heartbeat',
+            desktop_version: this.desktopVersion
+        };
+        const bodyStr = JSON.stringify(payload);
+        const signed = this.keyStore.sign(bodyStr);
+        const res = await fetch(this.edgeFunctionUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Device-Id': this.keyStore.deviceId,
+                'X-Timestamp': signed.timestamp,
+                'X-Nonce': signed.nonce,
+                'X-Signature': signed.signatureBase64
+            },
+            body: bodyStr,
+            signal: AbortSignal.timeout(6000)
+        });
+        if (!res.ok) {
+            const errText = await res.text().catch(() => 'HTTP Error ' + res.status);
+            throw new Error(errText || ('HTTP ' + res.status));
+        }
+        return await res.json().catch(() => ({ status: 'ok' }));
+    }
+
+    getSyncDiagnostics() {
+        try {
+            const countsRows = this.stateDb.prepare("SELECT status, count(*) as cnt FROM outbox_queue GROUP BY status").all();
+            const counts = { synced: 0, pending: 0, failed: 0, total: 0 };
+            countsRows.forEach(r => {
+                counts[r.status] = r.cnt;
+                counts.total += r.cnt;
+            });
+
+            const shadowParties = this.stateDb.prepare("SELECT count(*) as cnt FROM shadow_parties").get().cnt;
+            const shadowLedger = this.stateDb.prepare("SELECT count(*) as cnt FROM shadow_ledger").get().cnt;
+
+            const metaRows = this.stateDb.prepare("SELECT key, value FROM sync_meta").all();
+            const meta = {};
+            metaRows.forEach(r => { meta[r.key] = r.value; });
+
+            let recentRows = this.stateDb.prepare("SELECT id, seq_no, sync_type, status, events_count, summary, error_text, created_at FROM sync_history ORDER BY id DESC LIMIT 30").all();
+            if (recentRows.length === 0) {
+                const outboxRows = this.stateDb.prepare("SELECT seq_no, payload_json, status, retry_count, last_error, created_at FROM outbox_queue ORDER BY seq_no DESC LIMIT 30").all();
+                recentRows = outboxRows.map(r => {
+                    let evCount = 0;
+                    let summaryText = 'تحديثات محاسبية تفاضلية';
+                    try {
+                        const p = JSON.parse(r.payload_json);
+                        if (p.events && Array.isArray(p.events)) {
+                            evCount = p.events.length;
+                            summaryText = p.events.slice(0, 2).map(e => e.entity_type === 'party' ? (e.data && e.data.name ? e.data.name : 'طرف') : (e.data && e.data.doc_type ? e.data.doc_type : 'حركة')).join('، ');
+                        }
+                    } catch (_) {}
+                    return {
+                        id: r.seq_no,
+                        seq_no: r.seq_no,
+                        sync_type: 'delta_batch',
+                        status: r.status,
+                        events_count: evCount,
+                        summary: summaryText,
+                        error_text: r.last_error,
+                        created_at: r.created_at
+                    };
+                });
+            }
+            const recentBatches = recentRows.map(r => ({
+                id: r.id,
+                seq_no: r.seq_no,
+                sync_type: r.sync_type,
+                status: r.status,
+                retry_count: 0,
+                last_error: r.error_text,
+                created_at: r.created_at,
+                events_count: r.events_count,
+                sample_info: r.summary
+            }));
+
+            return {
+                deviceId: this.keyStore ? this.keyStore.deviceId : null,
+                companyId: this.companyId,
+                desktopVersion: this.desktopVersion,
+                counts,
+                shadowCounts: {
+                    parties: shadowParties,
+                    ledger: shadowLedger
+                },
+                meta,
+                recentBatches
+            };
+        } catch (e) {
+            return { error: e.message };
+        }
     }
 }
 

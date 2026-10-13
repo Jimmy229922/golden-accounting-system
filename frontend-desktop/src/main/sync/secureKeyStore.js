@@ -75,6 +75,22 @@ function loadOrCreateDeviceIdentity(storageDir, safeStorage = null) {
         }
     }
 
+    const fallbackProdPath = 'C:\\APP_JS\\DATA\\device_sync_identity.json';
+    if (fs.existsSync(fallbackProdPath)) {
+        try {
+            const raw = JSON.parse(fs.readFileSync(fallbackProdPath, 'utf8'));
+            const privateKeyBase64 = unprotectPrivateKey(raw.protectedPrivateKey, safeStorage);
+            fs.mkdirSync(storageDir, { recursive: true });
+            fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), 'utf8');
+            return {
+                deviceId: raw.deviceId,
+                publicKeyBase64: raw.publicKeyBase64,
+                privateKeyBase64,
+                isNew: false
+            };
+        } catch (_) {}
+    }
+
     const keyPair = generateDeviceKeyPair();
     const deviceId = crypto.randomUUID();
     const protectedKey = protectPrivateKey(keyPair.privateKeyBase64, safeStorage);

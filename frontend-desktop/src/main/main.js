@@ -541,21 +541,45 @@ function startBackgroundSyncEngine() {
 
         let isSyncInProgress = false;
         let lastSyncStatus = { success: true, lastSyncAt: null };
-        const triggerSyncNow = async () => {
+        const triggerSyncNow = async (isManual = false) => {
             if (!syncEngineInstance) return { success: false, disabled: true, reason: 'المزامنة غير مفعلة' };
             if (isSyncInProgress) return { success: true, inProgress: true, ...lastSyncStatus };
             isSyncInProgress = true;
             try {
+                let dispatchResult = null;
                 if (syncEngineInstance.hasPendingOutbox()) {
-                    await syncEngineInstance.dispatchOutbox();
+                    dispatchResult = await syncEngineInstance.dispatchOutbox();
                 }
-                const nextSeq = syncEngineInstance.getNextSeqNo();
-                const delta = syncEngineInstance.detectDeltaEvents(nextSeq);
-                if (delta.events && delta.events.length > 0) {
-                    syncEngineInstance.queueDeltaBatch(nextSeq, delta.events, delta.projection);
-                    await syncEngineInstance.dispatchOutbox();
+
+                let generatedDelta = false;
+                if (!syncEngineInstance.hasPendingOutbox()) {
+                    const nextSeq = syncEngineInstance.getNextSeqNo();
+                    const delta = syncEngineInstance.detectDeltaEvents(nextSeq);
+                    if (delta.events && delta.events.length > 0) {
+                        generatedDelta = true;
+                        syncEngineInstance.queueDeltaBatch(nextSeq, delta.events, delta.projection);
+                        dispatchResult = await syncEngineInstance.dispatchOutbox();
+                    }
                 }
-                lastSyncStatus = { success: true, lastSyncAt: new Date().toISOString() };
+
+                const stillPending = syncEngineInstance.hasPendingOutbox();
+                if (stillPending) {
+                    const errReason = (dispatchResult && dispatchResult.lastError) ? dispatchResult.lastError : 'توجد حزم معلقة قيد إعادة المحاولة';
+                    lastSyncStatus = { success: false, inProgress: false, pending: true, error: errReason, lastSyncAt: lastSyncStatus.lastSyncAt };
+                    syncEngineInstance.logPeriodicSyncCheck(isManual, false, errReason);
+                } else {
+                    const didWork = generatedDelta || (dispatchResult && dispatchResult.processed > 0);
+                    if (!didWork) {
+                        if (isManual) {
+                            await syncEngineInstance.pingHeartbeat();
+                            syncEngineInstance.logManualSyncCheck(true, null);
+                        } else {
+                            syncEngineInstance.logPeriodicSyncCheck(false, true, null);
+                        }
+                    }
+                    lastSyncStatus = { success: true, inProgress: false, lastSyncAt: new Date().toISOString() };
+                }
+
                 BrowserWindow.getAllWindows().forEach((win) => {
                     if (win && !win.isDestroyed() && win.webContents) {
                         win.webContents.send('cloud-sync-status', lastSyncStatus);
@@ -563,7 +587,10 @@ function startBackgroundSyncEngine() {
                 });
                 return lastSyncStatus;
             } catch (err) {
-                lastSyncStatus = { success: false, error: err.message, lastSyncAt: new Date().toISOString() };
+                lastSyncStatus = { success: false, inProgress: false, error: err.message, lastSyncAt: lastSyncStatus.lastSyncAt };
+                if (syncEngineInstance) {
+                    syncEngineInstance.logPeriodicSyncCheck(isManual, false, err.message);
+                }
                 BrowserWindow.getAllWindows().forEach((win) => {
                     if (win && !win.isDestroyed() && win.webContents) {
                         win.webContents.send('cloud-sync-status', lastSyncStatus);
@@ -577,10 +604,22 @@ function startBackgroundSyncEngine() {
 
         ipcMain.removeHandler('trigger-manual-sync');
         ipcMain.handle('trigger-manual-sync', async (_event, options) => {
+            if (options && options.getDiagnostics) {
+                const diagnostics = syncEngineInstance ? syncEngineInstance.getSyncDiagnostics() : null;
+                return {
+                    ...lastSyncStatus,
+                    diagnostics
+                };
+            }
             if (options && options.statusOnly) {
                 return lastSyncStatus;
             }
-            return await triggerSyncNow();
+            const syncRes = await triggerSyncNow(true);
+            const diagnostics = syncEngineInstance ? syncEngineInstance.getSyncDiagnostics() : null;
+            return {
+                ...syncRes,
+                diagnostics
+            };
         });
 
         syncTimer = setInterval(triggerSyncNow, 30000);
@@ -589,23 +628,7 @@ function startBackgroundSyncEngine() {
         heartbeatTimer = setInterval(async () => {
             if (!syncEngineInstance) return;
             try {
-                const payload = {
-                    mode: 'heartbeat',
-                    desktop_version: (app.getVersion ? app.getVersion() : '9.2.10')
-                };
-                const bodyStr = JSON.stringify(payload);
-                const signed = signPayload(identity.privateKeyBase64, COMPANY_ID, bodyStr);
-                await fetch(EDGE_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Device-Id': identity.deviceId,
-                        'X-Timestamp': signed.timestamp,
-                        'X-Nonce': signed.nonce,
-                        'X-Signature': signed.signatureBase64
-                    },
-                    body: bodyStr
-                });
+                await syncEngineInstance.pingHeartbeat();
             } catch (_) {}
         }, 60000);
     } catch (_) {}

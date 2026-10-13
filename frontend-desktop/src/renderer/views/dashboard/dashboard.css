@@ -153,7 +153,15 @@
     width: fit-content;
     backdrop-filter: blur(5px);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
+    cursor: pointer;
+    user-select: none;
+}
+.sync-status:hover {
+    transform: translateY(-2px);
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    border-color: rgba(255, 255, 255, 0.35);
 }
 .sync-status .sync-icon {
     font-size: 1.15rem;

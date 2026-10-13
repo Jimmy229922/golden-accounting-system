@@ -24,10 +24,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindEvents();
     if (window.electronAPI && typeof window.electronAPI.onCloudSyncStatus === 'function') {
         window.electronAPI.onCloudSyncStatus((status) => {
-            if (status && status.success && status.lastSyncAt) {
-                cachedLastSyncAt = status.lastSyncAt;
-                try { localStorage.setItem('golden_last_cloud_sync_at', cachedLastSyncAt); } catch (_) {}
+            if (status) {
+                if (status.success && status.lastSyncAt) {
+                    cachedLastSyncAt = status.lastSyncAt;
+                    try { localStorage.setItem('golden_last_cloud_sync_at', cachedLastSyncAt); } catch (_) {}
+                }
                 updateSyncStatusUI(status);
+
+                const modal = document.getElementById('syncLogModal');
+                if (modal && typeof window.refreshSyncLogModalData === 'function') {
+                    window.refreshSyncLogModalData();
+                }
             }
         });
     }
@@ -126,6 +133,15 @@ function bindEvents() {
 
     if (clearFilterBtn) {
         clearFilterBtn.addEventListener('click', clearDashboardFilters);
+    }
+
+    const syncStatusBadgeEl = document.getElementById('syncStatusBadge');
+    if (syncStatusBadgeEl) {
+        syncStatusBadgeEl.addEventListener('click', () => {
+            if (typeof window.showSyncLogModal === 'function') {
+                window.showSyncLogModal();
+            }
+        });
     }
 
     updatePeriodLabel();
@@ -675,6 +691,308 @@ window.showRevenuesDetails = function() {
         if(e.target === modal) modal.remove();
     });
 };
+
+window.showSyncLogModal = async function() {
+    let modal = document.getElementById('syncLogModal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'syncLogModal';
+    modal.className = 'confirm-dialog-overlay';
+    modal.style.zIndex = '999999';
+
+    modal.innerHTML = `
+        <div class="confirm-dialog-card" style="width: min(880px, 94%); max-height: 88vh; padding: 0; display: flex; flex-direction: column;">
+            <div class="confirm-dialog-header" style="background: var(--nav-bg, #0f172a); border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08)); display: flex; justify-content: space-between; align-items: center; padding: 16px 22px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-cloud-arrow-up" style="color: #38bdf8; font-size: 1.3rem;"></i>
+                    <div>
+                        <div style="font-size: 1.15rem; font-weight: 700; color: #f8fafc;">سجل وتشخيص المزامنة السحابية</div>
+                        <div style="font-size: 0.8rem; color: #94a3b8;">متابعة حالة الربط اللحظي بين البرنامج وتطبيق الموبايل</div>
+                    </div>
+                </div>
+                <button id="syncModalCloseTopBtn" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 1.25rem; padding: 4px 8px; border-radius: 6px;"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div id="syncLogModalContent" style="padding: 20px; overflow-y: auto; flex: 1;">
+                <div style="text-align: center; padding: 50px 20px; color: #94a3b8;">
+                    <i class="fas fa-circle-notch fa-spin" style="font-size: 2.2rem; color: #38bdf8; margin-bottom: 14px;"></i>
+                    <div style="font-size: 0.95rem;">جاري قراءة سجلات المزامنة وفحص حالة الخادم السحابي...</div>
+                </div>
+            </div>
+
+            <div class="confirm-dialog-actions" style="border-top: 1px solid var(--border-color, rgba(255,255,255,0.08)); padding: 12px 22px; display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.4);">
+                <div style="font-size: 0.8rem; color: #64748b;" id="syncModalFooterInfo">
+                    تعمل المزامنة التلقائية كل 30 ثانية
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="syncModalTriggerBtn" class="confirm-dialog-btn confirm" style="background: #0284c7; color: #fff; padding: 8px 18px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-rotate"></i> مزامنة فورية الآن
+                    </button>
+                    <button id="syncModalCloseBottomBtn" class="confirm-dialog-btn" style="background: rgba(255,255,255,0.06); color: #cbd5e1; padding: 8px 16px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);">
+                        إغلاق
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => modal.classList.add('show'));
+
+    let syncLiveTimer = setInterval(() => {
+        const m = document.getElementById('syncLogModal');
+        if (!m) {
+            clearInterval(syncLiveTimer);
+            return;
+        }
+        loadData(false);
+    }, 4000);
+
+    const closeModal = () => {
+        if (syncLiveTimer) clearInterval(syncLiveTimer);
+        window.refreshSyncLogModalData = null;
+        modal.remove();
+    };
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+
+    const closeTopBtn = modal.querySelector('#syncModalCloseTopBtn');
+    if (closeTopBtn) closeTopBtn.addEventListener('click', closeModal);
+
+    const closeBottomBtn = modal.querySelector('#syncModalCloseBottomBtn');
+    if (closeBottomBtn) closeBottomBtn.addEventListener('click', closeModal);
+
+    const loadData = async (isManualTrigger = false) => {
+        const contentEl = document.getElementById('syncLogModalContent');
+        const triggerBtn = document.getElementById('syncModalTriggerBtn');
+        if (!contentEl) return;
+
+        if (isManualTrigger && triggerBtn) {
+            triggerBtn.disabled = true;
+            triggerBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> جاري المزامنة...';
+        }
+
+        try {
+            let res = null;
+            if (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function') {
+                if (isManualTrigger) {
+                    res = await window.electronAPI.triggerManualSync();
+                } else {
+                    res = await window.electronAPI.triggerManualSync({ getDiagnostics: true });
+                }
+            }
+
+            renderSyncDiagnostics(res);
+        } catch (err) {
+            if (contentEl) {
+                contentEl.innerHTML = `
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 18px; color: #fca5a5; text-align: center;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 1.6rem; margin-bottom: 8px;"></i>
+                        <div>تعذر قراءة بيانات المزامنة: ${err.message || 'خطأ غير متوقع'}</div>
+                    </div>
+                `;
+            }
+        } finally {
+            if (triggerBtn) {
+                triggerBtn.disabled = false;
+                triggerBtn.innerHTML = '<i class="fas fa-rotate"></i> مزامنة فورية الآن';
+            }
+        }
+    };
+
+    window.refreshSyncLogModalData = () => loadData(false);
+
+    const triggerBtn = modal.querySelector('#syncModalTriggerBtn');
+    if (triggerBtn) {
+        triggerBtn.addEventListener('click', () => loadData(true));
+    }
+
+    await loadData(false);
+};
+
+function renderSyncDiagnostics(res) {
+    const contentEl = document.getElementById('syncLogModalContent');
+    const footerInfoEl = document.getElementById('syncModalFooterInfo');
+    if (!contentEl) return;
+
+    const diag = res?.diagnostics || {};
+    const counts = diag.counts || { synced: 0, pending: 0, failed: 0, total: 0 };
+    const shadowCounts = diag.shadowCounts || { parties: 0, ledger: 0 };
+    const batches = diag.recentBatches || [];
+    const lastSyncStr = res?.lastSyncAt ? formatSyncTime(res.lastSyncAt) : 'لا يوجد بعد';
+    const isHealthy = res?.success && counts.pending === 0 && counts.failed === 0;
+
+    let bannerHTML = '';
+    if (res?.disabled) {
+        bannerHTML = `
+            <div style="background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
+                <i class="fas fa-cloud-slash" style="color: #94a3b8; font-size: 1.5rem;"></i>
+                <div>
+                    <div style="font-weight: 700; color: #cbd5e1; font-size: 0.95rem;">المزامنة السحابية غير مفعلة حالياً</div>
+                    <div style="font-size: 0.82rem; color: #94a3b8;">${res.reason || 'المزامنة معطلة من إعدادات النظام'}</div>
+                </div>
+            </div>
+        `;
+    } else if (!isHealthy) {
+        const errorDetail = res?.error || (batches[0] && batches[0].last_error) || 'توجد حزم بانتظار اكتمال الاتصال بالإنترنت والسحابة';
+        let humanReason = 'جاري محاولة الاتصال بخادم المزامنة وإرسال الحزم المعلقة.';
+        if (typeof errorDetail === 'string') {
+            if (errorDetail.includes('unauthorized') || errorDetail.includes('revoked')) {
+                humanReason = 'هوية الجهاز غير مصرح لها على الخادم السحابي. يرجى مراجعة ترخيص الجهاز.';
+            } else if (errorDetail.includes('clock') || errorDetail.includes('drift')) {
+                humanReason = 'توقيت ساعة الكمبيوتر غير متطابق مع توقيت السيرفر العالمي (أكثر من 5 دقائق). اضبط ساعة الويندوز.';
+            } else if (errorDetail.includes('Sequence conflict')) {
+                humanReason = 'تم رصد اختلاف في تسلسل الدفعات ويقوم النظام بالاسترداد الذاتي التلقائي.';
+            } else if (errorDetail.includes('fetch') || errorDetail.includes('network') || errorDetail.includes('ENOTFOUND') || errorDetail.includes('ETIMEDOUT') || errorDetail.includes('ECONNREFUSED') || errorDetail.includes('ECONNRESET') || errorDetail.includes('timeout') || errorDetail.includes('AbortError')) {
+                humanReason = 'انقطاع في الاتصال بالإنترنت أو تعذر الوصول لخادم المزامنة السحابي حالياً.';
+            } else if (errorDetail.includes('500') || errorDetail.includes('502') || errorDetail.includes('503') || errorDetail.includes('504')) {
+                humanReason = 'خادم المزامنة السحابي يمر بصيانة مؤقتة وسيعاود النظام المحاولة تلقائياً.';
+            }
+        }
+
+        bannerHTML = `
+            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+                    <i class="fas fa-circle-exclamation" style="color: #f87171; font-size: 1.4rem;"></i>
+                    <div style="font-weight: 700; color: #f87171; font-size: 0.95rem;">تنبيه: تعثر في الاتصال بالسحابة أو توجد حزم معلقة</div>
+                </div>
+                <div style="font-size: 0.85rem; color: #fca5a5; line-height: 1.6; margin-inline-start: 32px;">
+                    <div>${humanReason}</div>
+                    <div style="font-size: 0.78rem; color: #f87171; margin-top: 4px; opacity: 0.9;"><strong>التفاصيل الفنية:</strong> ${errorDetail}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        bannerHTML = `
+            <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
+                <i class="fas fa-circle-check" style="color: #22c55e; font-size: 1.5rem;"></i>
+                <div>
+                    <div style="font-weight: 700; color: #4ade80; font-size: 0.95rem;">المزامنة السحابية متصلة ومستقرة تماماً</div>
+                    <div style="font-size: 0.82rem; color: #86efac;">كافة حركات كشف الحساب وأرصدة العملاء والموردين مطابقة بنسبة 100% مع تطبيق الموبايل.</div>
+                </div>
+            </div>
+        `;
+    }
+
+    const cardsHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-clock" style="color: #38bdf8;"></i> آخر مزامنة</div>
+                <div style="font-size: 0.92rem; font-weight: 700; color: #f8fafc;">${lastSyncStr}</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-check-double" style="color: #22c55e;"></i> دفعات ناجحة</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #22c55e;">${counts.synced}</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-hourglass-half" style="color: #f59e0b;"></i> دفعات معلقة</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: ${counts.pending > 0 ? '#f59e0b' : '#94a3b8'};">${counts.pending}</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-users" style="color: #a855f7;"></i> أطراف متزامنة</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #c084fc;">${shadowCounts.parties}</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-file-invoice-dollar" style="color: #38bdf8;"></i> حركات أستاذ</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #38bdf8;">${shadowCounts.ledger}</div>
+            </div>
+        </div>
+    `;
+
+    let tableRows = '';
+    if (batches.length === 0) {
+        tableRows = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: #64748b;">لا توجد عمليات مسجلة في السجل حالياً</td></tr>`;
+    } else {
+        tableRows = batches.map(b => {
+            let statusBadge = '';
+            if (b.status === 'synced') {
+                statusBadge = `<span style="background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-check"></i> ناجحة</span>`;
+            } else if (b.status === 'idle') {
+                statusBadge = `<span style="background: rgba(148, 163, 184, 0.12); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-minus"></i> لا توجد تغييرات</span>`;
+            } else if (b.status === 'pending') {
+                statusBadge = `<span style="background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-clock"></i> قيد الإرسال</span>`;
+            } else {
+                statusBadge = `<span style="background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-times"></i> متعثرة</span>`;
+            }
+
+            const timeStr = b.created_at ? new Date(b.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—';
+            let detailText = b.last_error
+                ? `<span style="color: #f87171;" title="${b.last_error}"><i class="fas fa-triangle-exclamation" style="margin-inline-end: 4px;"></i>${b.sample_info ? b.sample_info + ' — ' : ''}${b.last_error.length > 45 ? b.last_error.slice(0, 45) + '...' : b.last_error}</span>`
+                : (b.sample_info ? `<span style="color: #cbd5e1;">${b.sample_info}</span>` : '<span style="color: #64748b;">تحديثات محاسبية تفاضلية</span>');
+
+            let seqBadge = '';
+            if (b.sync_type === 'manual_check') {
+                seqBadge = `<span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.76rem;"><i class="fas fa-hand-pointer"></i> فحص فوري</span>`;
+            } else if (b.sync_type === 'auto_idle' || b.sync_type === 'auto_check') {
+                seqBadge = `<span style="background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.76rem;"><i class="fas fa-clock-rotate-left"></i> فحص دوري</span>`;
+            } else {
+                seqBadge = `<span style="font-weight: 700; color: #38bdf8;">#${b.seq_no || '—'}</span>`;
+            }
+
+            const sizeText = (b.sync_type === 'auto_idle' || b.status === 'idle')
+                ? `<span style="color: #64748b; font-size: 0.78rem;">لا توجد بيانات</span>`
+                : (b.sync_type === 'manual_check'
+                    ? `<span style="color: #94a3b8; font-size: 0.78rem;">مطابقة تامة</span>`
+                    : `<span style="color: #cbd5e1; font-weight: 600;">${b.events_count} حدث</span>`);
+
+            return `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.85rem;">
+                    <td style="padding: 10px 12px;">${seqBadge}</td>
+                    <td style="padding: 10px 12px;">${statusBadge}</td>
+                    <td style="padding: 10px 12px;">${sizeText}</td>
+                    <td style="padding: 10px 12px; color: #94a3b8;">${timeStr}</td>
+                    <td style="padding: 10px 12px;">${detailText}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    const tableHTML = `
+        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; overflow: hidden;">
+            <div style="padding: 12px 16px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 700; color: #cbd5e1; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center;">
+                <span><i class="fas fa-list-check" style="color: #38bdf8; margin-inline-end: 6px;"></i> سجل آخر عمليات ودفعات المزامنة اللحظية</span>
+                <span style="font-size: 0.78rem; color: #64748b;">يعرض آخر ${batches.length} عملية</span>
+            </div>
+            <div id="syncHistoryTableWrapper" style="max-height: 280px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: start;">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.03); color: #94a3b8; font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                            <th style="padding: 8px 12px;">رقم العملية</th>
+                            <th style="padding: 8px 12px;">الحالة</th>
+                            <th style="padding: 8px 12px;">الحجم</th>
+                            <th style="padding: 8px 12px;">التوقيت</th>
+                            <th style="padding: 8px 12px;">البيان والملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    const prevScroll = contentEl.scrollTop;
+    const oldTableWrapper = document.getElementById('syncHistoryTableWrapper');
+    const prevTableScroll = oldTableWrapper ? oldTableWrapper.scrollTop : 0;
+
+    contentEl.innerHTML = bannerHTML + cardsHTML + tableHTML;
+
+    contentEl.scrollTop = prevScroll;
+    const newTableWrapper = document.getElementById('syncHistoryTableWrapper');
+    if (newTableWrapper && prevTableScroll > 0) {
+        newTableWrapper.scrollTop = prevTableScroll;
+    }
+
+    if (footerInfoEl && diag.deviceId) {
+        footerInfoEl.innerHTML = `
+            <span>جهاز: <code>${diag.deviceId.slice(0, 8)}...</code> | إصدار: ${diag.desktopVersion || '9.2.10'} | التسلسل: #${diag.meta?.last_seq_no || '0'}</span>
+        `;
+    }
+}
 
 (function() {
     if (!document.getElementById('profitDetailsModalStyle')) {
