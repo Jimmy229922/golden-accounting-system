@@ -14,6 +14,15 @@ const GITHUB_RELEASES_PAGE_URL = `https://github.com/${GITHUB_REPOSITORY_OWNER}/
 const APP_UPDATE_PROGRESS_CHANNEL = 'app-update-download-progress';
 const APP_UPDATE_MAX_DOWNLOAD_RETRIES = 3;
 const APP_UPDATE_RETRY_DELAY_MS = 2000;
+const PROTECTED_SETTINGS_KEYS = new Set([
+    'company_id',
+    'license_status',
+    'invite_expiry',
+    'invite_code',
+    'bound_machine_id',
+    'renew_count',
+    'last_used_recovery_challenge'
+]);
 let appUpdateProgressState = {
     status: 'idle',
     latestVersion: '',
@@ -482,6 +491,9 @@ function register() {
             const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)');
             const transaction = db.transaction((data) => {
                 for (const [key, value] of Object.entries(data)) {
+                    if (PROTECTED_SETTINGS_KEYS.has(key)) {
+                        continue;
+                    }
                     stmt.run({ key, value });
                 }
             });
@@ -853,7 +865,7 @@ function register() {
             }
 
             const targetPath = String(installerPath || '').trim();
-            if (targetPath && fs.existsSync(targetPath)) {
+            if (targetPath && targetPath.toLowerCase().endsWith('.exe') && fs.existsSync(targetPath)) {
                 app.isQuittingForAppUpdate = true;
                 app.appUpdateInstallerPath = targetPath;
                 app.once('quit', () => {

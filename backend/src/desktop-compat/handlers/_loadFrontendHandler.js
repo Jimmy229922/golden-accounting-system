@@ -18,6 +18,11 @@ const backendWindowManagerModule = {
     markMainWindowClosingForUpdate: () => {}
 };
 
+const backendLicenseServiceModule = {
+    getLicenseStatus: () => Promise.resolve({ valid: true, status: 'lifetime', remainingDays: 99999 }),
+    activateLicenseWithCode: () => Promise.resolve({ success: true })
+};
+
 function loadFrontendHandler(handlerName) {
     const backendDbModule = require('../db');
     const backendInviteConfigModule = require('../inviteConfig');
@@ -42,6 +47,10 @@ function loadFrontendHandler(handlerName) {
 
         if ((request === '../windowManager' || request === '../windowManager.js') && isGeneratedCompatModule(parent)) {
             return backendWindowManagerModule;
+        }
+
+        if ((request === '../licenseService' || request === '../licenseService.js') && isGeneratedCompatModule(parent)) {
+            return backendLicenseServiceModule;
         }
 
         return originalLoad.call(this, request, parent, isMain);

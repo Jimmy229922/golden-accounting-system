@@ -38,6 +38,14 @@ function setupIPC() {
         };
     });
 
+    ipcMain.handle('check-initial-onboarding', async () => {
+        return { needed: false };
+    });
+
+    ipcMain.handle('complete-initial-onboarding', async () => {
+        return { success: true };
+    });
+
     auth.register();
     units.register();
     warehouses.register();

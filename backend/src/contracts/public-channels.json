@@ -80,6 +80,7 @@
   "get-petty-expenses",
   "get-purchase-invoice-details",
   "get-purchase-invoices",
+  "get-recovery-challenge",
   "get-remaining-under-collection-records",
   "get-sales-invoice-details",
   "get-sales-invoices",
@@ -165,5 +166,6 @@
   "update-unit",
   "update-user-permissions",
   "update-worker",
-  "update-worker-advance"
+  "update-worker-advance",
+  "verify-recovery-code"
 ]

