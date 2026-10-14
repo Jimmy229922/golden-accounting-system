@@ -1194,7 +1194,7 @@ function renderSyncDiagnostics(res) {
 
     if (footerInfoEl && diag.deviceId) {
         footerInfoEl.innerHTML = `
-            <span>جهاز: <code>${diag.deviceId.slice(0, 8)}...</code> | إصدار: ${diag.desktopVersion || '9.2.10'} | التسلسل: #${diag.meta?.last_seq_no || '0'}</span>
+            <span>جهاز: <code>${diag.deviceId.slice(0, 8)}...</code> | إصدار: ${diag.desktopVersion || '10.1.0'} | التسلسل: #${diag.meta?.last_seq_no || '0'}</span>
         `;
     }
 }

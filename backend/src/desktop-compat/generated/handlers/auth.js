@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const crypto = require('crypto');
 const { db } = require('../db');
 const { INVITE_CODE, INVITE_DURATION_DAYS, getMachineId, generateActivationCode } = require('../inviteConfig');
+const licenseService = require('../licenseService');
 
 function normalizeUsername(username) {
     return String(username || '').trim();
@@ -944,44 +945,12 @@ function register() {
         return `${machineId}-${renewCount + 1}`;
     });
 
-    ipcMain.handle('get-invite-status', () => {
-        return {
-            valid: true,
-            expiry: '2099-12-31T23:59:59.000Z',
-            requiresCode: false
-        };
+    ipcMain.handle('get-invite-status', async () => {
+        return await licenseService.getLicenseStatus(db);
     });
 
-    ipcMain.handle('submit-invite-code', (event, code) => {
-        if (!code) {
-            return { success: false, error: 'كود الدعوة غير صحيح.' };
-        }
-        
-        const machineId = getMachineId();
-        const renewCount = getRenewCount();
-        const nextCycle = renewCount + 1;
-        const dynamicCode = generateActivationCode(`${machineId}-${nextCycle}`);
-        
-        if (code.trim() !== dynamicCode) {
-            return { success: false, error: 'كود الدعوة غير صحيح أو غير متطابق مع شهر التجديد الحالي.' };
-        }
-
-        // Active duration is exactly 30 days essentially for monthly subscription
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30);
-
-        try {
-            const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)');
-            const tx = db.transaction(() => {
-                stmt.run({ key: 'invite_code', value: code.trim() });
-                stmt.run({ key: 'invite_expiry', value: expiresAt.toISOString() });
-                stmt.run({ key: 'renew_count', value: nextCycle.toString() });
-            });
-            tx();
-            return { success: true, expiresAt: expiresAt.toISOString() };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
+    ipcMain.handle('submit-invite-code', async (event, code) => {
+        return await licenseService.activateLicenseWithCode(db, code);
     });
 }
 

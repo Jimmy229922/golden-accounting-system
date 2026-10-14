@@ -524,7 +524,7 @@ async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceI
                 p_device_id: deviceId,
                 p_device_name: process.env.COMPUTERNAME || 'Windows-Desktop-POS',
                 p_public_key: publicKeyBase64,
-                p_desktop_version: desktopVersion || '10.0.0'
+                p_desktop_version: desktopVersion || '10.1.0'
             }),
             signal: AbortSignal.timeout(6000)
         });
@@ -549,7 +549,7 @@ async function reportClientErrorToCloud(payload = {}) {
                 p_company_id: payload.companyId || null,
                 p_device_id: payload.deviceId || null,
                 p_company_name: payload.companyName || null,
-                p_desktop_version: payload.desktopVersion || '10.0.0',
+                p_desktop_version: payload.desktopVersion || '10.1.0',
                 p_severity: payload.severity || 'error',
                 p_module: payload.module || 'sync',
                 p_error_message: String(payload.errorMessage || 'Unknown error'),
@@ -611,7 +611,7 @@ ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
                 data.companyName,
                 identity.deviceId,
                 identity.publicKeyBase64,
-                app.getVersion ? app.getVersion() : '10.0.0'
+                app.getVersion ? app.getVersion() : '10.1.0'
             ).catch(() => {});
         }
         return { success: true };
@@ -662,7 +662,7 @@ function startBackgroundSyncEngine() {
             accountingDb: db,
             storageDir,
             companyId: COMPANY_ID,
-            desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
+            desktopVersion: (app.getVersion ? app.getVersion() : '10.1.0'),
             edgeFunctionUrl: EDGE_URL,
             keyStore: {
                 deviceId: identity.deviceId,
@@ -681,7 +681,7 @@ function startBackgroundSyncEngine() {
             compName,
             identity.deviceId,
             identity.publicKeyBase64,
-            app.getVersion ? app.getVersion() : '10.0.0'
+            app.getVersion ? app.getVersion() : '10.1.0'
         ).catch(() => {});
 
         syncEngineInstance.dispatchOutbox().catch(() => {});
@@ -718,7 +718,7 @@ function startBackgroundSyncEngine() {
                         companyId: COMPANY_ID,
                         deviceId: identity.deviceId,
                         companyName: compName,
-                        desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
+                        desktopVersion: (app.getVersion ? app.getVersion() : '10.1.0'),
                         severity: 'warn',
                         module: 'sync_dispatch',
                         errorMessage: errReason,
@@ -752,7 +752,7 @@ function startBackgroundSyncEngine() {
                     companyId: COMPANY_ID,
                     deviceId: identity.deviceId,
                     companyName: compName,
-                    desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
+                    desktopVersion: (app.getVersion ? app.getVersion() : '10.1.0'),
                     severity: 'error',
                     module: 'sync_runtime',
                     errorMessage: err.message,
@@ -806,7 +806,7 @@ function startBackgroundSyncEngine() {
                 companyId: COMPANY_ID,
                 deviceId: identity.deviceId,
                 companyName: compName,
-                desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
+                desktopVersion: (app.getVersion ? app.getVersion() : '10.1.0'),
                 severity: 'error',
                 module: 'diagnostic_report',
                 errorMessage: lastSyncStatus.error || 'تقرير فني لوجود تعثر في المزامنة',

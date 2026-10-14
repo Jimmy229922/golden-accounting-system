@@ -10,6 +10,8 @@
   "backup-database",
   "backup-database-to-cloud",
   "check-app-update",
+  "check-initial-onboarding",
+  "complete-initial-onboarding",
   "create-auth-user",
   "create-sales-shift-closing",
   "delete-bags-expense",

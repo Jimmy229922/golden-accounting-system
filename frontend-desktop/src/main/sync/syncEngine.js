@@ -84,7 +84,7 @@ class SyncEngine {
         this.accountingDb = options.accountingDb;
         this.storageDir = options.storageDir || path.resolve(__dirname, '../../../..');
         this.companyId = options.companyId;
-        this.desktopVersion = options.desktopVersion || '9.2.10';
+        this.desktopVersion = options.desktopVersion || '10.1.0';
         this.edgeFunctionUrl = options.edgeFunctionUrl;
         this.keyStore = options.keyStore;
         
