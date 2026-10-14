@@ -1,4 +1,4 @@
-const { ipcMain, dialog, app } = require('electron');
+const { ipcMain, dialog, app, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const BetterSqlite3 = require('better-sqlite3');
@@ -38,6 +38,27 @@ function getProgramRootPath() {
     }
 
     return path.resolve(__dirname, '../../../..', PORTABLE_ROOT_FOLDER);
+}
+
+function getBackupDeviceIdentity() {
+    try {
+        const { loadOrCreateDeviceIdentity } = require('../sync/secureKeyStore');
+        const storageDir = path.join(getProgramRootPath(), 'DATA');
+        return loadOrCreateDeviceIdentity(storageDir, safeStorage);
+    } catch (_) {
+        return null;
+    }
+}
+
+function getBackupCompanyId() {
+    let companyId = process.env.COMPANY_ID;
+    if (!companyId) {
+        try {
+            const row = db.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
+            if (row && row.value) companyId = String(row.value).trim();
+        } catch (_) {}
+    }
+    return companyId || '715526d2-f05a-458f-8cf7-179ee172a7a1';
 }
 
 function getSharedBackupRootPath() {
@@ -338,10 +359,10 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
 
         let fileBuffer = null;
         try {
-            const { loadOrCreateDeviceIdentity, signPayload } = require('../sync/secureKeyStore');
-            const identity = loadOrCreateDeviceIdentity();
+            const { signPayload } = require('../sync/secureKeyStore');
+            const identity = getBackupDeviceIdentity();
             if (identity && identity.privateKeyBase64) {
-                const companyId = process.env.COMPANY_ID || '715526d2-f05a-458f-8cf7-179ee172a7a1';
+                const companyId = getBackupCompanyId();
                 const gwPayload = JSON.stringify({ action: 'get_upload_url', file_name: fileName });
                 const signed = signPayload(identity.privateKeyBase64, companyId, gwPayload);
                 const gwUrl = `${config.projectUrl}/functions/v1/backup-gateway`;
@@ -553,10 +574,10 @@ async function downloadCloudBackupToTempFile(objectPath) {
         };
 
         try {
-            const { loadOrCreateDeviceIdentity, signPayload } = require('../sync/secureKeyStore');
-            const identity = loadOrCreateDeviceIdentity();
+            const { signPayload } = require('../sync/secureKeyStore');
+            const identity = getBackupDeviceIdentity();
             if (identity && identity.privateKeyBase64 && cleanObjectPath.startsWith('clients/')) {
-                const companyId = process.env.COMPANY_ID || '715526d2-f05a-458f-8cf7-179ee172a7a1';
+                const companyId = getBackupCompanyId();
                 const gwPayload = JSON.stringify({ action: 'get_download_url', path: cleanObjectPath });
                 const signed = signPayload(identity.privateKeyBase64, companyId, gwPayload);
                 const gwUrl = `${config.projectUrl}/functions/v1/backup-gateway`;

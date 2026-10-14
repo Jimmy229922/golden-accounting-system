@@ -56,8 +56,9 @@ function unprotectPrivateKey(protectedPayload, safeStorage = null) {
     return dec;
 }
 
-function loadOrCreateDeviceIdentity(storageDir, safeStorage = null) {
-    const filePath = path.join(storageDir, 'device_sync_identity.json');
+function loadOrCreateDeviceIdentity(storageDir = null, safeStorage = null) {
+    const resolvedDir = storageDir || (process.env.ACCOUNTING_SYSTEM_ROOT ? path.join(process.env.ACCOUNTING_SYSTEM_ROOT, 'DATA') : 'C:\\APP_JS\\DATA');
+    const filePath = path.join(resolvedDir, 'device_sync_identity.json');
 
     if (fs.existsSync(filePath)) {
         try {
@@ -88,7 +89,7 @@ function loadOrCreateDeviceIdentity(storageDir, safeStorage = null) {
         try {
             const raw = JSON.parse(fs.readFileSync(fallbackProdPath, 'utf8'));
             const privateKeyBase64 = unprotectPrivateKey(raw.protectedPrivateKey, safeStorage);
-            fs.mkdirSync(storageDir, { recursive: true });
+            fs.mkdirSync(resolvedDir, { recursive: true });
             fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), 'utf8');
             return {
                 deviceId: raw.deviceId,
@@ -103,7 +104,7 @@ function loadOrCreateDeviceIdentity(storageDir, safeStorage = null) {
     const deviceId = crypto.randomUUID();
     const protectedKey = protectPrivateKey(keyPair.privateKeyBase64, safeStorage);
 
-    fs.mkdirSync(storageDir, { recursive: true });
+    fs.mkdirSync(resolvedDir, { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify({
         deviceId,
         publicKeyBase64: keyPair.publicKeyBase64,
