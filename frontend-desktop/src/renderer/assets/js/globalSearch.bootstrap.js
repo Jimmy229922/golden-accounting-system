@@ -4,6 +4,16 @@
  * الستايلات مُدمجة مباشرة لتجنب مشاكل المسارات
  */
 
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 class GlobalSearch {
     constructor() {
         this.modal = null;
@@ -1040,8 +1050,8 @@ class GlobalSearch {
                     <i class="fas ${icons[result.type]}"></i>
                 </div>
                 <div class="gsearch-item-info">
-                    <div class="gsearch-item-title">${result.title}</div>
-                    <div class="gsearch-item-subtitle">${result.subtitle}</div>
+                    <div class="gsearch-item-title">${escapeHtml(result.title)}</div>
+                    <div class="gsearch-item-subtitle">${escapeHtml(result.subtitle)}</div>
                 </div>
                 <span class="gsearch-item-badge ${result.type}">${typeLabels[result.type]}</span>
             </div>

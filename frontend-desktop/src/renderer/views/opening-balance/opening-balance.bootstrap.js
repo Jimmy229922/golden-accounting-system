@@ -6,6 +6,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         let ar = {};
         const MAIN_WAREHOUSE_ID = 1;
         const { t } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f };
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
         const openingBalanceRender = window.openingBalancePageRender;
         const openingBalanceUtils = window.openingBalancePageUtils;
         const isInsideShellFrame = (() => {
@@ -162,7 +170,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const itemOptions = [`<option value="">${itemPlaceholder}</option>`]
                     .concat(items.map((item) => {
                         const selected = Number(entry.item_id) === Number(item.id) ? 'selected' : '';
-                        return `<option value="${item.id}" ${selected}>${item.name} - ${item.barcode || ''} (${t('openingBalance.currentQtyLabel', 'الكمية الحالية')}: ${item.stock_quantity || 0})</option>`;
+                        return `<option value="${item.id}" ${selected}>${escapeHtml(item.name)} - ${escapeHtml(item.barcode || '')} (${t('openingBalance.currentQtyLabel', 'الكمية الحالية')}: ${item.stock_quantity || 0})</option>`;
                     }))
                     .join('');
 
@@ -174,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 ${itemOptions}
                             </select>
                         </td>
-                        <td><span class="pending-row-unit">${entry.unit_name || '-'}</span></td>
+                        <td><span class="pending-row-unit">${escapeHtml(entry.unit_name || '-')}</span></td>
                         <td>
                             <input type="number" class="form-control pending-row-control pending-qty-input" data-index="${index}" min="0.01" step="0.01" value="${Number(entry.quantity) || 0}">
                         </td>

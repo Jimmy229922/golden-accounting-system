@@ -11,7 +11,7 @@ process.on('uncaughtException', (error) => {
 
 // Prevent running multiple instances simultaneously
 const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
+if (!gotTheLock || process.argv.some(arg => arg.includes('--remote-debugging-port') || arg.includes('--inspect') || arg.includes('--remote-debugging-pipe'))) {
     app.quit();
 }
 

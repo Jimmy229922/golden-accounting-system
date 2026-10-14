@@ -6,6 +6,15 @@
             return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function buildTopNavHTML() {
             if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
                 return window.navManager.getTopNavHTML(t);
@@ -253,8 +262,8 @@
                                     <i class="fas ${config.visuals.transactionArrowIcon}"></i>
                                 </div>
                                 <div class="transaction-details">
-                                    <h4>${entity?.name || text('unknownEntity')}</h4>
-                                    <span>${tr.transaction_date} - ${tr.description || text('defaultDescription')}</span>
+                                    <h4>${escapeHtml(entity?.name || text('unknownEntity'))}</h4>
+                                    <span>${escapeHtml(tr.transaction_date)} - ${escapeHtml(tr.description || text('defaultDescription'))}</span>
                                 </div>
                             </div>
                             <div class="transaction-amount ${config.visuals.transactionClass}">${config.visuals.transactionAmountPrefix}${formatMoney(tr.amount)}</div>
@@ -285,11 +294,11 @@
                         </div>
                         <div class="voucher-result-row">
                             <span class="voucher-result-label">${text('dateLabel')}:</span>
-                            <span>${tr.transaction_date}</span>
+                            <span>${escapeHtml(tr.transaction_date)}</span>
                         </div>
                         <div class="voucher-result-row">
                             <span class="voucher-result-label">${text('entityLabel')}:</span>
-                            <span>${tr.customer_name || '\u2014'}</span>
+                            <span>${escapeHtml(tr.customer_name || '\u2014')}</span>
                         </div>
                         <div class="voucher-result-row">
                             <span class="voucher-result-label">${text('amountLabel')}:</span>
@@ -297,7 +306,7 @@
                         </div>
                         <div class="voucher-result-row">
                             <span class="voucher-result-label">${text('descriptionLabel')}:</span>
-                            <span>${tr.description || '\u2014'}</span>
+                            <span>${escapeHtml(tr.description || '\u2014')}</span>
                         </div>
                     </div>
                 `;

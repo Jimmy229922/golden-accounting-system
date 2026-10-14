@@ -1,3 +1,13 @@
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 (() => {
     if (typeof GlobalSearch === 'undefined') {
         return;
@@ -42,8 +52,8 @@
             let html = `
                 <div class="gsearch-item-details">
                     <div class="gsearch-detail-header">
-                        <h2>${item.name}</h2>
-                        <p>${this.t('globalSearch.barcodeLabel', 'الباركود')}: ${item.barcode || this.t('globalSearch.noBarcode', 'لا يوجد')} | ${this.t('globalSearch.unitLabel', 'الوحدة')}: ${item.unit_name || '-'}</p>
+                        <h2>${escapeHtml(item.name)}</h2>
+                        <p>${this.t('globalSearch.barcodeLabel', 'الباركود')}: ${escapeHtml(item.barcode || this.t('globalSearch.noBarcode', 'لا يوجد'))} | ${this.t('globalSearch.unitLabel', 'الوحدة')}: ${escapeHtml(item.unit_name || '-')}</p>
                     </div>
                     
                     <div class="gsearch-stats">
@@ -101,7 +111,7 @@
                             <div class="gsearch-movement-info">
                                 <div class="gsearch-movement-title">${mov.type_label}</div>
                                 <div class="gsearch-movement-subtitle">
-                                    ${mov.party_name} | ${this.t('globalSearch.invoiceLabel', 'فاتورة')}: ${mov.invoice_number} | ${date}
+                                    ${escapeHtml(mov.party_name)} | ${this.t('globalSearch.invoiceLabel', 'فاتورة')}: ${escapeHtml(mov.invoice_number)} | ${date}
                                 </div>
                             </div>
                             <div class="gsearch-movement-qty">
@@ -194,7 +204,7 @@
                         </div>
                         ${relatedCustomer ? `
                         <div class="gsearch-stat">
-                            <div class="gsearch-stat-value">${relatedCustomer.name}</div>
+                            <div class="gsearch-stat-value">${escapeHtml(relatedCustomer.name)}</div>
                             <div class="gsearch-stat-label">${isReceipt ? this.t('globalSearch.customer', 'العميل') : this.t('globalSearch.supplier', 'المورد')}</div>
                         </div>
                         ` : ''}
@@ -267,7 +277,7 @@
                 const discountText = Number.isFinite(discount) ? discount.toLocaleString() : '-';
                 return `
                 <tr>
-                    <td>${item.item_name || '-'}</td>
+                    <td>${escapeHtml(item.item_name || '-')}</td>
                     <td>${(item.quantity || 0).toLocaleString()}</td>
                     <td>${price.toLocaleString()}</td>
                     <td>${discountText}</td>

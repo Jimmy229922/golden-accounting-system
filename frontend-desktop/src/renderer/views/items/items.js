@@ -1,5 +1,14 @@
-﻿let ar = {};
+let ar = {};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
@@ -409,7 +418,7 @@ function syncAutoBarcodeField(force = false) {
 async function loadUnits() {
     try {
         allUnits = await window.electronAPI.getUnits();
-        const options = allUnits.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+        const options = allUnits.map(u => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
         
         if (itemUnitSelect) {
             itemUnitSelect.innerHTML = `<option value="">${t('items.selectUnit', 'اختر الوحدة...')}</option>` + options;
@@ -503,9 +512,10 @@ function renderTable() {
 
     pageItems.forEach((item, index) => {
         const unitName = allUnits.find(u => u.id == item.unit_id)?.name || '-';
+        const safeUnitName = escapeHtml(unitName);
         
-        let displayName = item.name;
-        let displayBarcode = item.barcode || '-';
+        let displayName = escapeHtml(item.name);
+        let displayBarcode = escapeHtml(item.barcode || '-');
         
         if (regex) {
             displayName = displayName.replace(regex, '<span class="highlight">$1</span>');
@@ -521,7 +531,7 @@ function renderTable() {
             <td>${startIndex + index + 1}</td>
             <td>${displayBarcode}</td>
             <td>${displayName}</td>
-            <td>${unitName}</td>
+            <td>${safeUnitName}</td>
             <td>${formatCurrency(item.cost_price)}</td>
             <td>${formatCurrency(item.sale_price)}</td>
             <td>${reorderLvl}</td>

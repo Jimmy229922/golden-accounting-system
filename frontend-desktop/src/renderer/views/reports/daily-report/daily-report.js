@@ -2,6 +2,16 @@ let reportData = null;
 let ar = {};
 const { t } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f };
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
         return window.navManager.getTopNavHTML(t);
@@ -449,7 +459,7 @@ function renderReportData(data) {
     renderTableBody('salesInvoicesBody', income.salesInvoices, (row) => `
         <tr>
             <td><strong>#${row.invoice_number || row.id}</strong></td>
-            <td>${row.customer_name || 'عميل نقدي'}</td>
+            <td>${escapeHtml(row.customer_name || 'عميل نقدي')}</td>
             <td class="text-green font-weight-bold">${formatCurrency(row.paid_amount)}</td>
             <td>${formatCurrency(row.total_amount)}</td>
         </tr>
@@ -458,8 +468,8 @@ function renderReportData(data) {
     renderTableBody('localSalesBody', income.localSales, (row) => `
         <tr>
             <td><strong>#${row.document_number || row.id}</strong></td>
-            <td>${row.customer_name || '—'}</td>
-            <td>${row.statement || '—'}</td>
+            <td>${escapeHtml(row.customer_name || '—')}</td>
+            <td>${escapeHtml(row.statement || '—')}</td>
             <td class="text-green font-weight-bold">${formatCurrency(row.total)}</td>
         </tr>
     `, 4);
@@ -467,8 +477,8 @@ function renderReportData(data) {
     renderTableBody('exportRevenuesBody', income.exportRevenues, (row) => `
         <tr>
             <td><strong>#${row.document_number || row.id}</strong></td>
-            <td>${row.statement || '—'}</td>
-            <td>${formatCurrency(row.amount)} ${row.currency || ''}</td>
+            <td>${escapeHtml(row.statement || '—')}</td>
+            <td>${formatCurrency(row.amount)} ${escapeHtml(row.currency || '')}</td>
             <td class="text-green font-weight-bold">${formatCurrency(row.amount_egp)}</td>
         </tr>
     `, 4);
@@ -476,8 +486,8 @@ function renderReportData(data) {
     renderTableBody('treasuryIncomeBody', income.treasuryIncome, (row) => `
         <tr>
             <td><strong>#${row.voucher_number || row.id}</strong></td>
-            <td>${row.customer_name || '—'}</td>
-            <td>${row.description || '—'}</td>
+            <td>${escapeHtml(row.customer_name || '—')}</td>
+            <td>${escapeHtml(row.description || '—')}</td>
             <td class="text-green font-weight-bold">${formatCurrency(row.amount)}</td>
         </tr>
     `, 4);
@@ -485,7 +495,7 @@ function renderReportData(data) {
     renderTableBody('purchaseInvoicesBody', expense.purchaseInvoices, (row) => `
         <tr>
             <td><strong>#${row.invoice_number || row.id}</strong></td>
-            <td>${row.supplier_name || 'مورد نقدي'}</td>
+            <td>${escapeHtml(row.supplier_name || 'مورد نقدي')}</td>
             <td class="text-red font-weight-bold">${formatCurrency(row.paid_amount)}</td>
             <td>${formatCurrency(row.total_amount)}</td>
         </tr>
@@ -494,8 +504,8 @@ function renderReportData(data) {
     renderTableBody('pettyExpensesBody', expense.pettyExpenses, (row) => `
         <tr>
             <td><strong>#${row.document_number || row.id}</strong></td>
-            <td>${row.category || 'عام'}</td>
-            <td>${row.statement || row.notes || '—'}</td>
+            <td>${escapeHtml(row.category || 'عام')}</td>
+            <td>${escapeHtml(row.statement || row.notes || '—')}</td>
             <td class="text-red font-weight-bold">${formatCurrency(row.amount)}</td>
         </tr>
     `, 4);
@@ -503,8 +513,8 @@ function renderReportData(data) {
     renderTableBody('factoryPettyExpensesBody', expense.factoryPettyExpenses, (row) => `
         <tr>
             <td><strong>#${row.document_number || row.id}</strong></td>
-            <td>${row.category || 'عام'}</td>
-            <td>${row.statement || row.notes || '—'}</td>
+            <td>${escapeHtml(row.category || 'عام')}</td>
+            <td>${escapeHtml(row.statement || row.notes || '—')}</td>
             <td class="text-red font-weight-bold">${formatCurrency(row.amount)}</td>
         </tr>
     `, 4);
@@ -512,8 +522,8 @@ function renderReportData(data) {
     renderTableBody('treasuryExpenseBody', expense.treasuryExpense, (row) => `
         <tr>
             <td><strong>#${row.voucher_number || row.id}</strong></td>
-            <td>${row.party_name || '—'}</td>
-            <td>${row.description || '—'}</td>
+            <td>${escapeHtml(row.party_name || '—')}</td>
+            <td>${escapeHtml(row.description || '—')}</td>
             <td class="text-red font-weight-bold">${formatCurrency(row.amount)}</td>
         </tr>
     `, 4);

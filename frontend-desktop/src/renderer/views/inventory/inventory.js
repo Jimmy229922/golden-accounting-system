@@ -799,9 +799,9 @@ function renderTable(items) {
         const quantityClass = item.stock_quantity <= reorderLevel ? 'qty-low' : '';
         const encodedName = encodeURIComponent(item.name);
         row.innerHTML = `
-            <td>${item.barcode || '-'}</td>
-            <td>${item.name}</td>
-            <td>${item.unit_name || '-'}</td>
+            <td>${escapeHtml(item.barcode || '-')}</td>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${escapeHtml(item.unit_name || '-')}</td>
             <td class="${quantityClass}">${Number(item.stock_quantity || 0).toLocaleString('en-US')}</td>
             <td class="amount-cell">${Number(item.cost_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td class="amount-cell">${Number(item.sale_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -887,7 +887,7 @@ async function showItemCard(itemId, itemName) {
                 <td>${dateDisplay}</td>
                 <td><span class="inv-mv-badge ${isIn ? 'mv-in' : 'mv-out'}">${mv.type_label || mv.type}</span></td>
                 <td>${invoiceNumberCell}</td>
-                <td>${mv.party_name || '-'}</td>
+                <td>${escapeHtml(mv.party_name || '-')}</td>
                 <td class="transaction-in">${isIn ? mv.quantity : '-'}</td>
                 <td class="transaction-out">${!isIn ? mv.quantity : '-'}</td>
                 <td>${(mv.price || 0).toFixed(2)}</td>

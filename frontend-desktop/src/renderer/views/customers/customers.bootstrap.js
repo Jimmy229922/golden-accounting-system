@@ -1,6 +1,15 @@
 let ar = {};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
         return window.navManager.getTopNavHTML(t);
@@ -274,11 +283,11 @@ function renderTable() {
         }
 
         tr.innerHTML = `
-            <td>${customer.code || '-'}</td>
-            <td>${customer.name}</td>
+            <td>${escapeHtml(customer.code || '-')}</td>
+            <td>${escapeHtml(customer.name)}</td>
             <td><span class="badge ${badgeClass}">${typeText}</span></td>
-            <td>${customer.phone || '-'}</td>
-            <td>${customer.address || '-'}</td>
+            <td>${escapeHtml(customer.phone || '-')}</td>
+            <td>${escapeHtml(customer.address || '-')}</td>
             <td class="${balanceClass}" dir="ltr">${formatCurrency(Math.abs(balance))}<span class="balance-tag">${balanceTag}</span></td>
             <td>
                 <div class="action-buttons">

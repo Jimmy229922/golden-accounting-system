@@ -248,12 +248,22 @@
     `;
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function buildItemsOptions({ allItems, existingItem, t, fmt }) {
         let itemsOptions = `<option value="">${t('purchases.selectItem', 'اختر الصنف')}</option>`;
         allItems.forEach((item) => {
             const isSelected = existingItem && existingItem.item_id === item.id ? 'selected' : '';
-            const itemLabel = item.name;
-            itemsOptions += `<option value="${item.id}" data-price="${item.cost_price}" data-barcode="${item.barcode || ''}" ${isSelected}>${itemLabel}</option>`;
+            const itemLabel = escapeHtml(item.name);
+            const itemBarcode = escapeHtml(item.barcode || '');
+            itemsOptions += `<option value="${item.id}" data-price="${item.cost_price}" data-barcode="${itemBarcode}" ${isSelected}>${itemLabel}</option>`;
         });
         return itemsOptions;
     }
@@ -262,7 +272,7 @@
         if (!allWarehouses || allWarehouses.length === 0) return `<option value="1">${t('purchases.mainWarehouse', 'المخزن الرئيسي')}</option>`;
         const selectedId = existingItem ? existingItem.warehouse_id : 1;
         return allWarehouses.map(w => 
-            `<option value="${w.id}" ${w.id == selectedId ? 'selected' : ''}>${w.name}</option>`
+            `<option value="${w.id}" ${w.id == selectedId ? 'selected' : ''}>${escapeHtml(w.name)}</option>`
         ).join('');
     }
 
@@ -301,7 +311,7 @@
         row.innerHTML = `
         <td class="row-index"></td>
         <td>
-            <input type="text" autocomplete="off" class="form-control barcode-input" data-fs-size="sm" value="${barcodeValue}" placeholder="${t('items.barcodePlaceholder', 'امسح الباركود...')}">
+            <input type="text" autocomplete="off" class="form-control barcode-input" data-fs-size="sm" value="${escapeHtml(barcodeValue)}" placeholder="${t('items.barcodePlaceholder', 'امسح الباركود...')}">
         </td>
         <td style="position:relative;">
             <div style="display:flex; align-items:center; gap:8px;">
@@ -312,7 +322,7 @@
             </div>
         </td>
         <td>
-            <span class="unit-label">${unitName}</span>
+            <span class="unit-label">${escapeHtml(unitName)}</span>
         </td>
         <td>
             <button class="baskeel-btn" type="button" data-action="open-weights">

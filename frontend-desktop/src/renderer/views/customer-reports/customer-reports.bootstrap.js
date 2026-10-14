@@ -387,7 +387,7 @@ async function loadCustomerReport(customerId) {
                 <td>${item.trans_date}</td>
                 <td>${typeBadge}</td>
                 <td>${docNumberCellHtml}</td>
-                <td class="notes-cell">${item.notes || '—'}</td>
+                <td class="notes-cell">${escapeHtml(item.notes || '—')}</td>
                 <td class="amt-cell">${totalInvoiceVal}</td>
                 <td class="amt-cell">${paidVal}</td>
                 <td class="amt-cell">${remainingVal}</td>
@@ -504,8 +504,8 @@ async function toggleItems(rowId, btn, type, id) {
                 itemsHTML += `
                                 <tr>
                                     <td>${i + 1}</td>
-                                    <td>${itm.item_name}</td>
-                                    <td>${itm.unit_name || '—'}</td>
+                                    <td>${escapeHtml(itm.item_name)}</td>
+                                    <td>${escapeHtml(itm.unit_name || '—')}</td>
                                     ${qtyCells}
                                     <td>${formatCurrency(itm.price || 0)}</td>
                                     <td>${formatCurrency(itm.total_price || 0)}</td>

@@ -1041,6 +1041,16 @@ function renderSyncDiagnostics(res) {
                 </div>
             </div>
         `;
+    } else if (counts.pending > 0 && counts.failed === 0 && !res?.error) {
+        bannerHTML = `
+            <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
+                <i class="fas fa-cloud-arrow-up" style="color: #38bdf8; font-size: 1.5rem;"></i>
+                <div>
+                    <div style="font-weight: 700; color: #38bdf8; font-size: 0.95rem;">جاري رفع حركات جديدة للسحابة...</div>
+                    <div style="font-size: 0.82rem; color: #bae6fd;">يتم الآن إرسال الدفعات وتحديث كشف الحساب وتطبيق الموبايل لحظياً.</div>
+                </div>
+            </div>
+        `;
     } else if (!isHealthy) {
         const errorDetail = res?.error || (batches[0] && batches[0].last_error) || 'توجد حزم بانتظار اكتمال الاتصال بالإنترنت والسحابة';
         let humanReason = 'جاري محاولة الاتصال بخادم المزامنة وإرسال الحزم المعلقة.';

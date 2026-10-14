@@ -1,4 +1,13 @@
 (function () {
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function renderHistoryRows({ data, t, formatCurrency }) {
         if (!Array.isArray(data) || data.length === 0) {
             return `<tr><td colspan="6" class="empty-state">${t('openingBalance.noData', 'لا توجد بيانات')}</td></tr>`;
@@ -6,7 +15,7 @@
 
         return data.map((row) => `
             <tr>
-                <td>${row.item_name || '-'}</td>
+                <td>${escapeHtml(row.item_name || '-')}</td>
                 <td>${row.quantity}</td>
                 <td>${formatCurrency(row.cost_price)}</td>
                 <td>${formatCurrency(row.quantity * row.cost_price)}</td>

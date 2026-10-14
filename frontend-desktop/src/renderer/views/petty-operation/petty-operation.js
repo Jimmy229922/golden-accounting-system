@@ -1,4 +1,14 @@
 let ar = {};
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 const { t } = window.i18n?.createPageHelpers?.(() => ar) || { t: (_k, fallback = '') => fallback };
 
 const state = {
@@ -417,12 +427,12 @@ function renderRows() {
 
     body.innerHTML = state.rows.map((row) => `
         <tr>
-            <td>${row.document_number || ''}</td>
-            <td>${row.expense_date || ''}</td>
-            <td style="font-weight: 600;">${row.invoice_number || '-'}</td>
+            <td>${escapeHtml(row.document_number || '')}</td>
+            <td>${escapeHtml(row.expense_date || '')}</td>
+            <td style="font-weight: 600;">${escapeHtml(row.invoice_number || '-')}</td>
             <td style="font-weight: 700; color: var(--primary-color);">${formatMoney(row.amount)}</td>
-            <td class="statement-cell">${row.statement || ''}</td>
-            <td class="notes-cell">${row.notes || ''}</td>
+            <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
+            <td class="notes-cell">${escapeHtml(row.notes || '')}</td>
             <td>
                 <button type="button" class="btn btn-outline" data-action="edit-expense" data-id="${row.id}">
                     <i class="fas fa-pen"></i> تعديل

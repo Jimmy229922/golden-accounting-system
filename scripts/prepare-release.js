@@ -160,7 +160,13 @@ function main() {
     const version = getRootVersion();
 
     if (shouldBuild) {
-        runCommand('npm', ['run', 'desktop:build']);
+        const { obfuscateMain, restoreMain } = require('./obfuscate-main');
+        try {
+            obfuscateMain();
+            runCommand('npm', ['run', 'desktop:build']);
+        } finally {
+            restoreMain();
+        }
     }
 
     const artifacts = prepareArtifacts(version);

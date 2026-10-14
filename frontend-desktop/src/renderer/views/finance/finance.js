@@ -1,4 +1,4 @@
-﻿let treasuryBalanceEl;
+let treasuryBalanceEl;
 let transactionsTableBody;
 let transactionForm;
 let transDateInput;
@@ -9,6 +9,15 @@ let ar = {};
 let isSavingTransaction = false;
 let isUpdatingTransaction = false;
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 const CUSTOMER_COLLECTION_PENDING_RELATED_TYPE = 'customer_collection_pending';
 const CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE = 'customer_collection_shift_close';
 const FINANCE_PAGE_SIZE = 50;
@@ -333,11 +342,11 @@ function renderTransactions(transactions) {
 
         row.innerHTML = `
             <td>${voucherCell}</td>
-            <td>${tr.transaction_date}</td>
+            <td>${escapeHtml(tr.transaction_date)}</td>
             <td>${typeBadge}</td>
             <td style="font-weight: bold; direction: ltr;">${formatNumberWithCommas(tr.amount)}</td>
-            <td>${tr.description}</td>
-            <td>${relatedText}</td>
+            <td>${escapeHtml(tr.description)}</td>
+            <td>${escapeHtml(relatedText)}</td>
             <td>${actions}</td>
         `;
         transactionsTableBody.appendChild(row);

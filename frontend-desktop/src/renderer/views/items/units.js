@@ -1,5 +1,14 @@
-﻿let ar = {};
+let ar = {};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
@@ -188,8 +197,7 @@ function renderTable() {
 
     pageUnits.forEach((unit, index) => {
         const row = document.createElement('tr');
-        // Highlight search term if exists
-        let displayName = unit.name;
+        let displayName = escapeHtml(unit.name);
         const searchTerm = searchInput.value.trim();
         if (searchTerm) {
             const regex = new RegExp(`(${searchTerm})`, 'gi');

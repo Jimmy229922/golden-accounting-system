@@ -1,7 +1,16 @@
-﻿let customers = [];
+let customers = [];
 let filteredCustomers = [];
 let ar = {};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
@@ -230,7 +239,7 @@ function renderTable() {
         if (customer.type === 'both') { typeText = t('debtorCreditor.bothTypeLabel', 'عميل ومورد'); typeClass = 'dc-badge-both'; }
 
         tr.innerHTML = `
-            <td>${customer.name}</td>
+            <td>${escapeHtml(customer.name)}</td>
             <td><span class="dc-badge ${typeClass}">${typeText}</span></td>
             <td class="amount">${(customer.openingBalance || 0).toFixed(2)}</td>
             <td class="amount">${(customer.debitAmount || 0).toFixed(2)}</td>
