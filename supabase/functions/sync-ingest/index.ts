@@ -159,7 +159,7 @@ serve(async (req: Request) => {
     const requestTime = new Date(timestampStr).getTime();
     const now = Date.now();
     if (isNaN(requestTime) || Math.abs(now - requestTime) > MAX_TIME_DRIFT_MS) {
-      return new Response(JSON.stringify({ error: "Timestamp expired or clock out of sync" }), {
+      return new Response(JSON.stringify({ error: "Timestamp expired or clock out of sync", server_time: new Date().toISOString() }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -173,13 +173,26 @@ serve(async (req: Request) => {
       .single();
 
     if (devError || !device || !device.is_active) {
-      return new Response(JSON.stringify({ error: "Device revoked or unauthorized" }), {
+      return new Response(JSON.stringify({ error: "Device revoked or unauthorized", server_time: new Date().toISOString() }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
     const verifiedCompanyId = device.company_id;
+
+    const { data: company, error: compError } = await supabase
+      .from("mobile_companies")
+      .select("is_active")
+      .eq("id", verifiedCompanyId)
+      .single();
+
+    if (compError || !company || !company.is_active) {
+      return new Response(JSON.stringify({ error: "Company suspended or inactive", server_time: new Date().toISOString() }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
     // قراءة جسم الطلب المقيد بالحجم
     let rawBody = "";
@@ -232,6 +245,13 @@ serve(async (req: Request) => {
 
     // ── الحالة 1: نبضة اتصال الكمبيوتر (Heartbeat) ──
     if (payload.mode === "heartbeat") {
+      if (payload.company_name && typeof payload.company_name === "string" && payload.company_name.trim()) {
+        await supabase
+          .from("mobile_companies")
+          .update({ name: payload.company_name.trim(), updated_at: new Date().toISOString() })
+          .eq("id", verifiedCompanyId);
+      }
+
       await supabase.from("mobile_devices").update({
         last_heartbeat_at: new Date().toISOString()
       }).eq("id", deviceId);
@@ -242,7 +262,7 @@ serve(async (req: Request) => {
         desktop_app_version: payload.desktop_version || "9.1.6"
       }, { onConflict: "company_id" });
 
-      return new Response(JSON.stringify({ success: true, mode: "heartbeat_ack" }), {
+      return new Response(JSON.stringify({ success: true, mode: "heartbeat_ack", server_time: new Date().toISOString() }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -270,6 +290,20 @@ serve(async (req: Request) => {
       const sanitizedChunk = entityType === "party"
         ? rawList.map((r: any) => sanitizePartyRow(verifiedCompanyId, r))
         : rawList.map((r: any) => sanitizeLedgerRow(verifiedCompanyId, r));
+
+      const { data: existingSession } = await supabase
+        .from("mobile_sync_staging")
+        .select("company_id")
+        .eq("session_id", payload.session_id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingSession && existingSession.company_id !== verifiedCompanyId) {
+        return new Response(JSON.stringify({ error: "Session belongs to another company" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
 
       const { error: stagingError } = await supabase
         .from("mobile_sync_staging")
@@ -370,13 +404,63 @@ serve(async (req: Request) => {
 
       const deltaRes = result[0]?.res;
       const isSuccess = Boolean(deltaRes && deltaRes.success !== false);
-      return new Response(JSON.stringify({ success: isSuccess, result: deltaRes }), {
+      return new Response(JSON.stringify({ success: isSuccess, result: deltaRes, server_time: new Date().toISOString() }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    return new Response(JSON.stringify({ error: "Unknown sync mode" }), {
+    if (payload.mode === "reconcile_ids") {
+      const db = getDbClient();
+      const partyIds = Array.isArray(payload.party_ids) ? payload.party_ids.map((id: any) => Number(id)) : [];
+      const ledgerIds = Array.isArray(payload.ledger_ids) ? payload.ledger_ids.map((id: any) => Number(id)) : [];
+      const expectedParties = Number(payload.expected_parties_count !== undefined ? payload.expected_parties_count : partyIds.length);
+      const expectedLedger = Number(payload.expected_ledger_count !== undefined ? payload.expected_ledger_count : ledgerIds.length);
+
+      const result = await db`
+        SELECT private.reconcile_company_ids(
+          ${verifiedCompanyId}::uuid,
+          ${partyIds}::bigint[],
+          ${ledgerIds}::bigint[],
+          ${expectedParties}::int,
+          ${expectedLedger}::int
+        ) AS res
+      `;
+
+      const reconRes = result[0]?.res;
+      return new Response(JSON.stringify({ success: true, result: reconRes, server_time: new Date().toISOString() }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (payload.mode === "rebind_stream") {
+      const db = getDbClient();
+      const newStreamId = payload.new_stream_id ? String(payload.new_stream_id).trim() : null;
+
+      if (!newStreamId) {
+        return new Response(JSON.stringify({ error: "Missing new_stream_id", server_time: new Date().toISOString() }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      const result = await db`
+        SELECT private.rebind_sync_stream(
+          ${verifiedCompanyId}::uuid,
+          ${newStreamId}::uuid
+        ) AS res
+      `;
+
+      const rebindRes = result[0]?.res;
+      const isSuccess = Boolean(rebindRes && rebindRes.success !== false);
+      return new Response(JSON.stringify({ success: isSuccess, result: rebindRes, server_time: new Date().toISOString() }), {
+        status: isSuccess ? 200 : 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    return new Response(JSON.stringify({ error: "Unknown sync mode", server_time: new Date().toISOString() }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });

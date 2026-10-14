@@ -16,6 +16,7 @@ try {
 }
 
 function computeLedgerHash(item) {
+    const partyId = String(item.party_id || '');
     const effect = Number(item.effect_amount || 0).toFixed(4);
     const transDate = String(item.trans_date || '');
     const docNum = String(item.doc_number || '');
@@ -25,7 +26,7 @@ function computeLedgerHash(item) {
     const rem = Number(item.remaining_amount || 0).toFixed(4);
     const runBal = Number(item.running_balance || 0).toFixed(4);
     const notes = String(item.notes || '');
-    return `${effect}_${transDate}_${docNum}_${docType}_${total}_${paid}_${rem}_${runBal}_${notes}`;
+    return `${partyId}_${effect}_${transDate}_${docNum}_${docType}_${total}_${paid}_${rem}_${runBal}_${notes}`;
 }
 
 function computePartyHash(p) {
@@ -280,10 +281,10 @@ class SyncEngine {
                 p.phone,
                 p.address,
                 p.type,
-                COALESCE(b.balance, 0) AS balance
+                ROUND(COALESCE(b.balance, 0), 2) AS balance
             FROM parties p
             LEFT JOIN (
-                SELECT party_id, SUM(amount) AS balance
+                SELECT party_id, ROUND(SUM(amount), 2) AS balance
                 FROM party_ledger
                 GROUP BY party_id
             ) b ON b.party_id = p.id
@@ -295,7 +296,7 @@ class SyncEngine {
             SELECT 
                 pl.id AS ledger_id,
                 pl.party_id,
-                pl.amount AS effect_amount,
+                ROUND(pl.amount, 2) AS effect_amount,
                 pl.transaction_date AS trans_date,
                 pl.transaction_type,
                 COALESCE(si.invoice_number, pi.invoice_number, tt.voucher_number, ls.document_number, 'OB-' || pl.party_id) AS doc_number,
@@ -308,21 +309,21 @@ class SyncEngine {
                     ELSE 'opening_balance'
                 END AS doc_type,
                 CASE 
-                    WHEN pl.transaction_type = 'sales_invoice' THEN COALESCE(si.total_amount, 0)
-                    WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.total_amount, 0)
-                    WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
+                    WHEN pl.transaction_type = 'sales_invoice' THEN ROUND(COALESCE(si.total_amount, 0), 2)
+                    WHEN pl.transaction_type = 'purchase_invoice' THEN ROUND(COALESCE(pi.total_amount, 0), 2)
+                    WHEN pl.transaction_type = 'local_sale' THEN ROUND(COALESCE(ls.total, 0), 2)
                     ELSE 0
                 END AS total_amount,
                 CASE 
-                    WHEN pl.transaction_type = 'sales_invoice' THEN COALESCE(si.paid_amount, 0)
-                    WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.paid_amount, 0)
-                    WHEN pl.transaction_type IN ('treasury_income', 'treasury_expense') THEN COALESCE(tt.amount, 0)
+                    WHEN pl.transaction_type = 'sales_invoice' THEN ROUND(COALESCE(si.paid_amount, 0), 2)
+                    WHEN pl.transaction_type = 'purchase_invoice' THEN ROUND(COALESCE(pi.paid_amount, 0), 2)
+                    WHEN pl.transaction_type IN ('treasury_income', 'treasury_expense') THEN ROUND(COALESCE(tt.amount, 0), 2)
                     ELSE 0
                 END AS paid_amount,
                 CASE 
-                    WHEN pl.transaction_type = 'sales_invoice' THEN COALESCE(si.remaining_amount, si.total_amount - si.paid_amount, 0)
-                    WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.remaining_amount, pi.total_amount - pi.paid_amount, 0)
-                    WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
+                    WHEN pl.transaction_type = 'sales_invoice' THEN ROUND(COALESCE(si.remaining_amount, si.total_amount - si.paid_amount, 0), 2)
+                    WHEN pl.transaction_type = 'purchase_invoice' THEN ROUND(COALESCE(pi.remaining_amount, pi.total_amount - pi.paid_amount, 0), 2)
+                    WHEN pl.transaction_type = 'local_sale' THEN ROUND(COALESCE(ls.total, 0), 2)
                     ELSE 0
                 END AS remaining_amount,
                 COALESCE(NULLIF(pl.notes, ''), NULLIF(si.notes, ''), NULLIF(pi.notes, ''), NULLIF(tt.description, ''), NULLIF(ls.statement, ''), CASE WHEN pl.transaction_type = 'opening_balance' THEN 'رصيد افتتاحي' ELSE NULL END) AS notes
@@ -343,11 +344,11 @@ class SyncEngine {
         // حساب الرصيد التراكمي بدقة لكل طرف
         const runningBalanceMap = {};
         const enrichedLedger = rawLedger.map(row => {
-            const currentBal = (runningBalanceMap[row.party_id] || 0) + Number(row.effect_amount);
+            const currentBal = Math.round(((runningBalanceMap[row.party_id] || 0) + Number(row.effect_amount)) * 100) / 100;
             runningBalanceMap[row.party_id] = currentBal;
             return {
                 ...row,
-                running_balance: currentBal.toFixed(4)
+                running_balance: currentBal.toFixed(2)
             };
         });
 
@@ -731,15 +732,23 @@ class SyncEngine {
                     resJson = await res.json();
                 } catch (_) {}
 
+                if (resJson && resJson.server_time) {
+                    try {
+                        const { setServerTimeOffset } = require('./secureKeyStore');
+                        setServerTimeOffset(resJson.server_time);
+                    } catch (_) {}
+                }
+
                 const resultObj = resJson ? (resJson.result || resJson) : null;
                 const resultStatus = resultObj ? resultObj.status : null;
-                const isResyncRequired = resultStatus === 'resync_required' || resultStatus === 'already_applied';
+                const isAlreadyApplied = resultStatus === 'already_applied';
+                const isResyncRequired = resultStatus === 'resync_required';
 
-                const isVerifiedSuccess = res.ok &&
+                const isVerifiedSuccess = ((res.ok &&
                     resJson &&
                     (resJson.success === true || resJson.status === 'ok') &&
                     resultObj &&
-                    Number(resultObj.batch_seq_no) === Number(item.seq_no) &&
+                    Number(resultObj.batch_seq_no) === Number(item.seq_no)) || isAlreadyApplied) &&
                     !isResyncRequired;
 
                 if (isVerifiedSuccess) {
@@ -798,6 +807,18 @@ class SyncEngine {
                         error_text: errText
                     });
 
+                    if (typeof errText === 'string' && (errText.includes('stream_conflict') || resultStatus === 'stream_conflict')) {
+                        const rebound = await this.rebindStreamWithCloud();
+                        if (rebound && rebound.success) {
+                            this.stateDb.prepare("DELETE FROM outbox_queue WHERE status = 'pending'").run();
+                            this.setLastSeqNo(0);
+                            this.stateDb.prepare("DELETE FROM shadow_parties").run();
+                            this.stateDb.prepare("DELETE FROM shadow_ledger").run();
+                            this.stateDb.prepare("DELETE FROM sync_meta WHERE key = 'last_data_signature'").run();
+                            break;
+                        }
+                    }
+
                     if (typeof errText === 'string' && errText.includes('Sequence conflict: Expected')) {
                         const match = errText.match(/Expected\s+(\d+)/i);
                         if (match && match[1]) {
@@ -811,7 +832,14 @@ class SyncEngine {
                         }
                     }
 
-                    this.stateDb.prepare("UPDATE outbox_queue SET retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, errText, item.seq_no);
+                    if (newRetryCount >= 8) {
+                        this.stateDb.prepare("UPDATE outbox_queue SET status = 'dead', last_error = ? WHERE seq_no = ?").run(errText, item.seq_no);
+                        this.stateDb.prepare("DELETE FROM shadow_parties").run();
+                        this.stateDb.prepare("DELETE FROM shadow_ledger").run();
+                        this.stateDb.prepare("DELETE FROM sync_meta WHERE key = 'last_data_signature'").run();
+                    } else {
+                        this.stateDb.prepare("UPDATE outbox_queue SET retry_count = ?, last_error = ? WHERE seq_no = ?").run(newRetryCount, errText, item.seq_no);
+                    }
                     break;
                 }
             } catch (netErr) {
@@ -904,7 +932,79 @@ class SyncEngine {
             const errText = await res.text().catch(() => 'HTTP Error ' + res.status);
             throw new Error(errText || ('HTTP ' + res.status));
         }
-        return await res.json().catch(() => ({ status: 'ok' }));
+        const resJson = await res.json().catch(() => null);
+        if (resJson && resJson.server_time) {
+            try {
+                const { setServerTimeOffset } = require('./secureKeyStore');
+                setServerTimeOffset(resJson.server_time);
+            } catch (_) {}
+        }
+        return resJson || { status: 'ok' };
+    }
+
+    async reconcileWithCloud() {
+        if (!this.keyStore || !this.edgeFunctionUrl) return null;
+        try {
+            const parties = this.accountingDb.prepare("SELECT id FROM parties").all();
+            const partyIds = parties.map(p => Number(p.id));
+            const ledger = this.accountingDb.prepare("SELECT id FROM party_ledger").all();
+            const ledgerIds = ledger.map(l => Number(l.id));
+
+            const payload = {
+                mode: 'reconcile_ids',
+                party_ids: partyIds,
+                ledger_ids: ledgerIds,
+                expected_parties_count: partyIds.length,
+                expected_ledger_count: ledgerIds.length
+            };
+            const bodyStr = JSON.stringify(payload);
+            const signed = this.keyStore.sign(bodyStr);
+            const res = await fetch(this.edgeFunctionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Device-Id': this.keyStore.deviceId,
+                    'X-Timestamp': signed.timestamp,
+                    'X-Nonce': signed.nonce,
+                    'X-Signature': signed.signatureBase64
+                },
+                body: bodyStr,
+                signal: AbortSignal.timeout(15000)
+            });
+            if (!res.ok) return null;
+            return await res.json().catch(() => null);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async rebindStreamWithCloud() {
+        if (!this.keyStore || !this.edgeFunctionUrl) return null;
+        try {
+            const newStreamId = this.getStreamId();
+            const payload = {
+                mode: 'rebind_stream',
+                new_stream_id: newStreamId
+            };
+            const bodyStr = JSON.stringify(payload);
+            const signed = this.keyStore.sign(bodyStr);
+            const res = await fetch(this.edgeFunctionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Device-Id': this.keyStore.deviceId,
+                    'X-Timestamp': signed.timestamp,
+                    'X-Nonce': signed.nonce,
+                    'X-Signature': signed.signatureBase64
+                },
+                body: bodyStr,
+                signal: AbortSignal.timeout(10000)
+            });
+            if (!res.ok) return null;
+            return await res.json().catch(() => null);
+        } catch (_) {
+            return null;
+        }
     }
 
     getSyncDiagnostics() {

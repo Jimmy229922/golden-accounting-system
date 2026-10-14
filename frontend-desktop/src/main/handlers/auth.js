@@ -406,11 +406,20 @@ function checkPermission(page, operation) {
     if (!user) return false;
     if (user.isAdmin) return true;
 
-    const row = db.prepare('SELECT can_view, can_add, can_edit, can_delete FROM user_permissions WHERE user_id = ? AND page = ?').get(user.id, page);
+    const mappedPage = (page === 'under-collection' || page === 'remaining-under-collection') ? 'finance' : page;
+    const row = db.prepare('SELECT can_view, can_add, can_edit, can_delete FROM user_permissions WHERE user_id = ? AND page = ?').get(user.id, mappedPage);
     if (!row) return false;
 
     const col = 'can_' + operation;
     return Boolean(row[col]);
+}
+
+function monitorPermission(page, operation) {
+    if (!checkPermission(page, operation)) {
+        const user = getActiveAuthUser();
+        console.warn(`[permission-audit-monitor] User ${user ? user.id : 'unknown'} attempted ${operation} on ${page}`);
+    }
+    return null;
 }
 
 function requirePermission(page, operation) {
@@ -993,11 +1002,46 @@ async function notifyCloudRecoveryEvent(companyId, challenge, username) {
                 return { success: false, error: 'تم استخدام كود الاسترداد هذا مسبقاً وتغيير كلمة المرور به.' };
             }
 
-            const expected = generateRecoveryCode(challenge);
-
             const cleanCode = String(code).trim().toUpperCase();
-            if (cleanCode !== expected) {
-                return { success: false, error: 'كود الاسترداد غير صحيح أو منتهي الصلاحية لهذا اليوم.' };
+            const companyIdRow = db.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
+            const companyId = companyIdRow?.value;
+            const machineId = getMachineId();
+            const adminUser = db.prepare('SELECT * FROM auth_users WHERE is_admin = 1 ORDER BY id ASC LIMIT 1').get();
+
+            let verified = false;
+            if (companyId && typeof fetch === 'function') {
+                try {
+                    const res = await fetch(`${SUPABASE_URL}/functions/v1/license-gateway`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            action: 'recovery',
+                            company_id: companyId,
+                            machine_id: machineId,
+                            challenge: challenge,
+                            recovery_code: cleanCode,
+                            admin_username: adminUser?.username || 'admin'
+                        }),
+                        signal: AbortSignal.timeout(4000)
+                    });
+                    const data = await res.json().catch(() => null);
+                    if (data && data.success && data.authorized) {
+                        verified = true;
+                    } else if (res.status === 400 || (data && data.error === 'INVALID_RECOVERY_CODE')) {
+                        return { success: false, error: 'كود الاسترداد غير صحيح أو منتهي الصلاحية لهذا اليوم.' };
+                    }
+                } catch (_) {}
+            }
+
+            if (!verified) {
+                const expected = generateRecoveryCode(challenge);
+                if (cleanCode !== expected) {
+                    return { success: false, error: 'كود الاسترداد غير صحيح أو منتهي الصلاحية لهذا اليوم.' };
+                }
             }
 
             if (!newPassword) {
@@ -1008,7 +1052,6 @@ async function notifyCloudRecoveryEvent(companyId, challenge, username) {
                 return { success: false, error: 'كلمة المرور الجديدة يجب أن تكون 6 حروف أو أكثر.' };
             }
 
-            const adminUser = db.prepare('SELECT * FROM auth_users WHERE is_admin = 1 ORDER BY id ASC LIMIT 1').get();
             if (!adminUser) {
                 return { success: false, error: 'لم يتم العثور على حساب مسؤول في النظام.' };
             }
@@ -1023,8 +1066,7 @@ async function notifyCloudRecoveryEvent(companyId, challenge, username) {
             db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
               .run('last_used_recovery_challenge', challenge);
 
-            const companyIdRow = db.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
-            notifyCloudRecoveryEvent(companyIdRow?.value, challenge, adminUser.username);
+            notifyCloudRecoveryEvent(companyId, challenge, adminUser.username);
 
             return { success: true, username: adminUser.username, message: 'تم تعيين كلمة المرور بنجاح. يمكنك تسجيل الدخول بها الآن.' };
         } catch (error) {
@@ -1033,4 +1075,4 @@ async function notifyCloudRecoveryEvent(companyId, challenge, username) {
     });
 }
 
-module.exports = { register, checkPermission, requirePermission };
+module.exports = { register, checkPermission, requirePermission, monitorPermission };

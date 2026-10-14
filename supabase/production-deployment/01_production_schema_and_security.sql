@@ -112,9 +112,11 @@ CREATE TABLE IF NOT EXISTS public.mobile_sync_meta (
     desktop_app_version TEXT NOT NULL DEFAULT '9.2.0',
     sync_status TEXT NOT NULL DEFAULT 'pending_first_sync',
     stream_id UUID,
+    last_batch_hash TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE public.mobile_sync_meta ADD COLUMN IF NOT EXISTS stream_id UUID;
+ALTER TABLE public.mobile_sync_meta ADD COLUMN IF NOT EXISTS last_batch_hash TEXT;
 
 -- فهارس الأداء العالي
 CREATE INDEX IF NOT EXISTS idx_prod_parties_type ON public.mobile_parties(company_id, type);
@@ -365,6 +367,19 @@ BEGIN
         END IF;
     END IF;
 
+    -- التحقق إن كانت الدفعة طُبقت بالفعل سابقاً وتكرر إرسالها بسبب انقطاع اتصال لحظي
+    IF v_last_applied_seq IS NOT NULL AND p_batch_seq_no = v_last_applied_seq THEN
+        IF (SELECT last_batch_hash FROM public.mobile_sync_meta WHERE company_id = p_company_id) = md5(p_events::text) THEN
+            RETURN jsonb_build_object(
+                'success', true,
+                'status', 'already_applied',
+                'batch_seq_no', p_batch_seq_no,
+                'applied_events', 0,
+                'skipped_events', 0
+            );
+        END IF;
+    END IF;
+
     IF v_last_applied_seq IS NOT NULL AND p_batch_seq_no <= v_last_applied_seq THEN
         RETURN jsonb_build_object(
             'success', false,
@@ -456,6 +471,7 @@ BEGIN
                     now()
                 )
                 ON CONFLICT (company_id, ledger_id) DO UPDATE SET
+                    party_id = EXCLUDED.party_id,
                     doc_type = EXCLUDED.doc_type,
                     doc_number = EXCLUDED.doc_number,
                     trans_date = EXCLUDED.trans_date,
@@ -479,15 +495,16 @@ BEGIN
 
     -- 4. تحديث مؤشر المزامنة للشركة برقم الدفعة المؤكد
     INSERT INTO public.mobile_sync_meta (
-        company_id, last_heartbeat_at, last_financial_sync_at, last_applied_seq_no, desktop_app_version, sync_status, updated_at
+        company_id, last_heartbeat_at, last_financial_sync_at, last_applied_seq_no, last_batch_hash, desktop_app_version, sync_status, updated_at
     )
     VALUES (
-        p_company_id, now(), now(), p_batch_seq_no, p_desktop_version, 'synced', now()
+        p_company_id, now(), now(), p_batch_seq_no, md5(p_events::text), p_desktop_version, 'synced', now()
     )
     ON CONFLICT (company_id) DO UPDATE SET
         last_heartbeat_at = now(),
         last_financial_sync_at = now(),
         last_applied_seq_no = EXCLUDED.last_applied_seq_no,
+        last_batch_hash = EXCLUDED.last_batch_hash,
         desktop_app_version = EXCLUDED.desktop_app_version,
         sync_status = 'synced',
         updated_at = now();
@@ -503,6 +520,87 @@ $$;
 
 REVOKE ALL ON FUNCTION private.apply_delta_sync_batch FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.apply_delta_sync_batch TO service_role;
+
+CREATE OR REPLACE FUNCTION private.reconcile_company_ids(
+    p_company_id UUID,
+    p_party_ids BIGINT[],
+    p_ledger_ids BIGINT[],
+    p_expected_parties INT,
+    p_expected_ledger INT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_del_l INT;
+    v_del_p INT;
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtext(p_company_id::text));
+
+    IF cardinality(p_party_ids) <> p_expected_parties OR cardinality(p_ledger_ids) <> p_expected_ledger THEN
+        RAISE EXCEPTION 'Reconcile count mismatch';
+    END IF;
+
+    IF cardinality(p_party_ids) = 0 AND EXISTS (SELECT 1 FROM public.mobile_parties WHERE company_id = p_company_id) THEN
+        RAISE EXCEPTION 'Refusing to wipe company data from empty snapshot';
+    END IF;
+
+    DELETE FROM public.mobile_party_ledger 
+    WHERE company_id = p_company_id AND NOT (ledger_id = ANY(p_ledger_ids));
+    GET DIAGNOSTICS v_del_l = ROW_COUNT;
+
+    DELETE FROM public.mobile_parties 
+    WHERE company_id = p_company_id AND NOT (id = ANY(p_party_ids));
+    GET DIAGNOSTICS v_del_p = ROW_COUNT;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'deleted_ledger', v_del_l,
+        'deleted_parties', v_del_p
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.reconcile_company_ids FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.reconcile_company_ids TO service_role;
+
+CREATE OR REPLACE FUNCTION private.rebind_sync_stream(
+    p_company_id UUID,
+    p_stream_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_last TIMESTAMPTZ;
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtext(p_company_id::text));
+
+    SELECT last_financial_sync_at INTO v_last 
+    FROM public.mobile_sync_meta 
+    WHERE company_id = p_company_id 
+    FOR UPDATE;
+
+    IF v_last IS NOT NULL AND v_last > now() - interval '30 minutes' THEN
+        RETURN jsonb_build_object('success', false, 'status', 'stream_busy');
+    END IF;
+
+    UPDATE public.mobile_sync_meta 
+    SET stream_id = p_stream_id,
+        last_applied_seq_no = 0,
+        last_batch_hash = NULL
+    WHERE company_id = p_company_id;
+
+    RETURN jsonb_build_object('success', true, 'status', 'rebound');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.rebind_sync_stream FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.rebind_sync_stream TO service_role;
 
 -- ============================================================================
 -- 7. تفعيل Realtime على الجداول الحية فقط مع العزل

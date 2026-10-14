@@ -336,8 +336,60 @@ async function uploadFileToSupabase(localFilePath, options = {}) {
             cloudPrefix: config.cloudPrefix
         });
 
+        let fileBuffer = null;
+        try {
+            const { loadOrCreateDeviceIdentity, signPayload } = require('../sync/secureKeyStore');
+            const identity = loadOrCreateDeviceIdentity();
+            if (identity && identity.privateKeyBase64) {
+                const companyId = process.env.COMPANY_ID || '715526d2-f05a-458f-8cf7-179ee172a7a1';
+                const gwPayload = JSON.stringify({ action: 'get_upload_url', file_name: fileName });
+                const signed = signPayload(identity.privateKeyBase64, companyId, gwPayload);
+                const gwUrl = `${config.projectUrl}/functions/v1/backup-gateway`;
+                const gwRes = await fetch(gwUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Id': identity.deviceId,
+                        'X-Timestamp': signed.timestamp,
+                        'X-Nonce': signed.nonce,
+                        'X-Signature': signed.signatureBase64
+                    },
+                    body: gwPayload,
+                    signal: AbortSignal.timeout(10000)
+                });
+                if (gwRes.ok) {
+                    const gwData = await gwRes.json();
+                    if (gwData && gwData.signed_url) {
+                        fileBuffer = fs.readFileSync(localFilePath);
+                        const fullUploadUrl = gwData.signed_url.startsWith('http')
+                            ? gwData.signed_url
+                            : `${config.projectUrl}/storage/v1${gwData.signed_url}`;
+                        const signedUploadRes = await fetch(fullUploadUrl, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/octet-stream'
+                            },
+                            body: fileBuffer
+                        });
+                        if (signedUploadRes.ok) {
+                            return {
+                                success: true,
+                                bucketName: gwData.bucket || config.bucketName,
+                                objectPath: gwData.path,
+                                size: stat.size,
+                                uploadedAt: new Date().toISOString()
+                            };
+                        }
+                    }
+                }
+            }
+        } catch (_) {}
+
+        if (!fileBuffer) {
+            fileBuffer = fs.readFileSync(localFilePath);
+        }
+
         const uploadUrl = `${config.storageBaseUrl}/object/${encodeURIComponent(config.bucketName)}/${encodeStoragePath(objectPath)}`;
-        const fileBuffer = fs.readFileSync(localFilePath);
 
         const response = await fetch(uploadUrl, {
             method: 'POST',
@@ -494,13 +546,47 @@ async function downloadCloudBackupToTempFile(objectPath) {
     }
 
     try {
-        const downloadUrl = `${config.storageBaseUrl}/object/${encodeURIComponent(config.bucketName)}/${encodeStoragePath(cleanObjectPath)}`;
+        let downloadUrl = `${config.storageBaseUrl}/object/${encodeURIComponent(config.bucketName)}/${encodeStoragePath(cleanObjectPath)}`;
+        let authHeaders = {
+            Authorization: `Bearer ${config.serviceKey}`,
+            apikey: config.serviceKey
+        };
+
+        try {
+            const { loadOrCreateDeviceIdentity, signPayload } = require('../sync/secureKeyStore');
+            const identity = loadOrCreateDeviceIdentity();
+            if (identity && identity.privateKeyBase64 && cleanObjectPath.startsWith('clients/')) {
+                const companyId = process.env.COMPANY_ID || '715526d2-f05a-458f-8cf7-179ee172a7a1';
+                const gwPayload = JSON.stringify({ action: 'get_download_url', path: cleanObjectPath });
+                const signed = signPayload(identity.privateKeyBase64, companyId, gwPayload);
+                const gwUrl = `${config.projectUrl}/functions/v1/backup-gateway`;
+                const gwRes = await fetch(gwUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Id': identity.deviceId,
+                        'X-Timestamp': signed.timestamp,
+                        'X-Nonce': signed.nonce,
+                        'X-Signature': signed.signatureBase64
+                    },
+                    body: gwPayload,
+                    signal: AbortSignal.timeout(10000)
+                });
+                if (gwRes.ok) {
+                    const gwData = await gwRes.json();
+                    if (gwData && gwData.signed_url) {
+                        downloadUrl = gwData.signed_url.startsWith('http')
+                            ? gwData.signed_url
+                            : `${config.projectUrl}/storage/v1${gwData.signed_url}`;
+                        authHeaders = {};
+                    }
+                }
+            }
+        } catch (_) {}
+
         const response = await fetch(downloadUrl, {
             method: 'GET',
-            headers: {
-                Authorization: `Bearer ${config.serviceKey}`,
-                apikey: config.serviceKey
-            }
+            headers: authHeaders
         });
 
         if (!response.ok) {

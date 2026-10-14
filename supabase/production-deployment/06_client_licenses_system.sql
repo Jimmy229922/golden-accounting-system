@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS public.client_licenses (
     renew_count INTEGER NOT NULL DEFAULT 0,
     last_heartbeat_at TIMESTAMPTZ,
     desktop_version TEXT,
+    bound_machine_id TEXT,
+    last_seen_machine_id TEXT,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

@@ -1297,7 +1297,7 @@ function initDB() {
             // Purchase Invoices
             db.exec(`
                 INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
-                SELECT supplier_id, 'purchase_invoice', -(total_amount - paid_amount), invoice_date, id, created_at
+                SELECT supplier_id, 'purchase_invoice', -(remaining_amount), invoice_date, id, created_at
                 FROM purchase_invoices
             `);
             // Treasury

@@ -171,8 +171,89 @@ function saveRotatedBackups(backupRootPath, sourceBackupFile) {
             const oldest = weeklyFiles.shift();
             try { fs.unlinkSync(path.join(weeklyDir, oldest)); } catch (_) {}
         }
+        copyToSecondaryBackup(sourceBackupFile);
     } catch (e) {
         console.error('[auto-backup] Rotation error:', e.message);
+    }
+}
+
+function getSecondaryBackupDirectory() {
+    try {
+        const row = db.prepare("SELECT value FROM settings WHERE key = 'secondary_backup_path'").get();
+        if (row && row.value && fs.existsSync(row.value)) {
+            return row.value;
+        }
+    } catch (_) {}
+
+    try {
+        const currentRoot = path.parse(getProgramRootPath()).root.toUpperCase();
+        const candidateDrives = ['D:\\', 'E:\\'].filter(d => d !== currentRoot && fs.existsSync(d));
+        if (candidateDrives.length > 0) {
+            const secDir = path.join(candidateDrives[0], 'APP_JS_BACKUPS');
+            fs.mkdirSync(secDir, { recursive: true });
+            return secDir;
+        }
+    } catch (_) {}
+
+    return null;
+}
+
+function copyToSecondaryBackup(sourceBackupPath) {
+    try {
+        const secDir = getSecondaryBackupDirectory();
+        if (!secDir || !sourceBackupPath || !fs.existsSync(sourceBackupPath)) {
+            return;
+        }
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const targetFile = path.join(secDir, `backup-${dateStr}.db`);
+        fs.copyFileSync(sourceBackupPath, targetFile);
+    } catch (e) {
+        console.error('[auto-backup] Secondary drive mirror error:', e.message);
+    }
+}
+
+let periodicBackupTimer = null;
+
+function runPeriodicSnapshot() {
+    try {
+        const { backupRootPath } = getBackupPaths();
+        const snapshotDir = path.join(backupRootPath, 'backups', 'snapshots');
+        fs.mkdirSync(snapshotDir, { recursive: true });
+
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/[:.]/g, '-');
+        const snapshotPath = path.join(snapshotDir, `snapshot-${timestamp}.db`);
+
+        runWalCheckpoint();
+        db.backup(snapshotPath)
+            .then(() => {
+                copyToSecondaryBackup(snapshotPath);
+                const files = fs.readdirSync(snapshotDir)
+                    .filter(f => f.startsWith('snapshot-') && f.endsWith('.db'))
+                    .sort();
+                while (files.length > 12) {
+                    const oldest = files.shift();
+                    try { fs.unlinkSync(path.join(snapshotDir, oldest)); } catch (_) {}
+                }
+            })
+            .catch((err) => {
+                console.error('[auto-backup] Periodic snapshot error:', err.message);
+            });
+    } catch (err) {
+        console.error('[auto-backup] Failed to trigger periodic snapshot:', err.message);
+    }
+}
+
+function startPeriodicBackupTimer() {
+    if (periodicBackupTimer) return;
+    periodicBackupTimer = setInterval(runPeriodicSnapshot, 2 * 60 * 60 * 1000);
+}
+
+function stopPeriodicBackupTimer() {
+    if (periodicBackupTimer) {
+        clearInterval(periodicBackupTimer);
+        periodicBackupTimer = null;
     }
 }
 
@@ -308,6 +389,7 @@ function runStartupChecks() {
     } else {
         // Database is healthy - create a startup backup
         createStartupBackup();
+        startPeriodicBackupTimer();
     }
 
     return true; // Continue normally
@@ -318,6 +400,7 @@ function runStartupChecks() {
  * Used by main.js in the 'before-quit' event.
  */
 function handleQuitBackup() {
+    stopPeriodicBackupTimer();
     return createDataBackupBeforeQuit();
 }
 
@@ -351,5 +434,7 @@ function handleQuitBackupFallback() {
 module.exports = {
     runStartupChecks,
     handleQuitBackup,
-    handleQuitBackupFallback
+    handleQuitBackupFallback,
+    startPeriodicBackupTimer,
+    stopPeriodicBackupTimer
 };

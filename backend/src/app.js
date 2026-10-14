@@ -67,14 +67,7 @@ if (!config.rpcToken) {
 }
 
 function isAuthorized(req) {
-    const ip = req.socket.remoteAddress;
-    const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
     const tokenToValidate = config.rpcToken || fallbackToken;
-
-    if (isLocalhost && !config.rpcToken) {
-        return true;
-    }
-
     return req.headers['x-api-token'] === tokenToValidate;
 }
 

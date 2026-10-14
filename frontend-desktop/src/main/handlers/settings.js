@@ -865,7 +865,7 @@ function register() {
             }
 
             const targetPath = String(installerPath || '').trim();
-            if (targetPath && fs.existsSync(targetPath)) {
+            if (targetPath && targetPath.toLowerCase().endsWith('.exe') && fs.existsSync(targetPath)) {
                 app.isQuittingForAppUpdate = true;
                 app.appUpdateInstallerPath = targetPath;
                 app.once('quit', () => {

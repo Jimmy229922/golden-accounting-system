@@ -1,7 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const BACKEND_URL = (process.env.BACKEND_URL || 'http://localhost:4000').replace(/\/+$/, '');
-const USE_REMOTE_BACKEND = String(process.env.USE_REMOTE_BACKEND || 'false').toLowerCase() === 'true';
+const isDev = process.env.NODE_ENV === 'development' || Boolean(process.defaultApp);
+const USE_REMOTE_BACKEND = isDev && String(process.env.USE_REMOTE_BACKEND || 'false').toLowerCase() === 'true';
 const BACKEND_RPC_TOKEN = process.env.BACKEND_RPC_TOKEN || '';
 const ipcRendererInvoke = ipcRenderer.invoke.bind(ipcRenderer);
 

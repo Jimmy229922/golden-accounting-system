@@ -242,7 +242,7 @@ try {
     process.exit(1);
 }
 
-const { runStartupChecks, handleQuitBackup, handleQuitBackupFallback } = require('./autoBackup');
+const { runStartupChecks, handleQuitBackup, handleQuitBackupFallback, stopPeriodicBackupTimer } = require('./autoBackup');
 const { openAppFlow, getMainWindow, showSplashWindow, updateSplashStatus, closeSplashWindow } = require('./windowManager');
 const { INVITE_CODE, INVITE_DURATION_DAYS } = require('./inviteConfig');
 const licenseService = require('./licenseService');
@@ -505,21 +505,26 @@ function getOrInitializeCompanyId(accountingDb) {
             return String(saved.value).trim();
         }
 
-        const hasExistingData = accountingDb.prepare("SELECT count(*) as cnt FROM sales_invoices").get()?.cnt > 0;
-        const targetCompanyId = hasExistingData 
-            ? '715526d2-f05a-458f-8cf7-179ee172a7a1' 
-            : require('crypto').randomUUID();
-
+        const targetCompanyId = require('crypto').randomUUID();
         accountingDb.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('company_id', ?)").run(targetCompanyId);
         return targetCompanyId;
     } catch (_) {
-        return '715526d2-f05a-458f-8cf7-179ee172a7a1';
+        return null;
     }
 }
 
-async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceId, publicKeyBase64, desktopVersion) {
+let lastCloudRegistrationResult = null;
+
+async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceId, publicKeyBase64, desktopVersion, enrollmentToken = null) {
     if (!app.isPackaged || typeof fetch !== 'function' || !companyId || !deviceId) return null;
     try {
+        let token = enrollmentToken;
+        if (!token) {
+            try {
+                const tokenRow = db.prepare("SELECT value FROM settings WHERE key = 'device_enrollment_token'").get();
+                if (tokenRow && tokenRow.value) token = tokenRow.value.trim();
+            } catch (_) {}
+        }
         const response = await fetch('https://ryoqhtsdhfbydmejmaby.supabase.co/rest/v1/rpc/register_client_device', {
             method: 'POST',
             headers: {
@@ -533,12 +538,15 @@ async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceI
                 p_device_id: deviceId,
                 p_device_name: process.env.COMPUTERNAME || 'Windows-Desktop-POS',
                 p_public_key: publicKeyBase64,
-                p_desktop_version: desktopVersion || '10.1.0'
+                p_desktop_version: desktopVersion || (app.getVersion ? app.getVersion() : '10.1.2'),
+                p_enrollment_token: token || null
             }),
             signal: AbortSignal.timeout(6000)
         });
         if (!response.ok) return null;
-        return await response.json();
+        const res = await response.json();
+        lastCloudRegistrationResult = res;
+        return res;
     } catch (_) {
         return null;
     }
@@ -620,7 +628,7 @@ ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
                 data.companyName,
                 identity.deviceId,
                 identity.publicKeyBase64,
-                app.getVersion ? app.getVersion() : '10.1.0'
+                app.getVersion ? app.getVersion() : '10.1.2'
             ).catch(() => {});
         }
         return { success: true };
@@ -629,7 +637,57 @@ ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
     }
 });
 
+ipcMain.removeHandler('submit-enrollment-token');
+ipcMain.handle('submit-enrollment-token', async (_event, token) => {
+    try {
+        const cleanToken = String(token || '').trim();
+        if (!cleanToken) return { success: false, error: 'كود الربط مطلوب' };
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('device_enrollment_token', ?)").run(cleanToken);
+        const COMPANY_ID = getOrInitializeCompanyId(db);
+        const storageDir = path.join(getPortableRootPath(), 'DATA');
+        const { loadOrCreateDeviceIdentity } = require('./sync/secureKeyStore');
+        const identity = loadOrCreateDeviceIdentity(storageDir, safeStorage);
+        let compName = 'مؤسسة الذهب للمحاسبة';
+        try {
+            const row = db.prepare("SELECT value FROM settings WHERE key IN ('companyName', 'company_name') LIMIT 1").get();
+            if (row && row.value) compName = row.value;
+        } catch (_) {}
+        if (identity) {
+            const regResult = await autoRegisterClientDeviceWithCloud(
+                COMPANY_ID,
+                compName,
+                identity.deviceId,
+                identity.publicKeyBase64,
+                app.getVersion ? app.getVersion() : '10.1.2',
+                cleanToken
+            );
+            return regResult || { success: false, error: 'تعذر الاتصال بالسحابة' };
+        }
+        return { success: false, error: 'تعذر قراءة هوية الجهاز' };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
 function startBackgroundSyncEngine() {
+    ipcMain.removeHandler('trigger-manual-sync');
+    ipcMain.handle('trigger-manual-sync', async (_event, options) => {
+        if (options && options.getDiagnostics) {
+            const diagnostics = syncEngineInstance ? syncEngineInstance.getSyncDiagnostics() : null;
+            return {
+                success: false,
+                disabled: true,
+                reason: 'المزامنة قيد التهيئة',
+                registration: lastCloudRegistrationResult,
+                diagnostics
+            };
+        }
+        return { success: false, disabled: true, reason: 'المزامنة قيد التهيئة', registration: lastCloudRegistrationResult };
+    });
+
+    ipcMain.removeHandler('send-sync-diagnostic-report');
+    ipcMain.handle('send-sync-diagnostic-report', async () => ({ success: false, reason: 'المزامنة قيد التهيئة' }));
+
     try {
         const { evaluateSyncGuard } = require('./sync/syncGuard');
         const { SyncEngine } = require('./sync/syncEngine');
@@ -784,16 +842,21 @@ function startBackgroundSyncEngine() {
                 const diagnostics = syncEngineInstance ? syncEngineInstance.getSyncDiagnostics() : null;
                 return {
                     ...lastSyncStatus,
+                    registration: lastCloudRegistrationResult,
                     diagnostics
                 };
             }
             if (options && options.statusOnly) {
-                return lastSyncStatus;
+                return {
+                    ...lastSyncStatus,
+                    registration: lastCloudRegistrationResult
+                };
             }
             const syncRes = await triggerSyncNow(true);
             const diagnostics = syncEngineInstance ? syncEngineInstance.getSyncDiagnostics() : null;
             return {
                 ...syncRes,
+                registration: lastCloudRegistrationResult,
                 diagnostics
             };
         });
@@ -837,9 +900,26 @@ function startBackgroundSyncEngine() {
                 await syncEngineInstance.pingHeartbeat();
             } catch (_) {}
         }, 60000);
-    } catch (_) {}
+    } catch (err) {
+        console.error('[sync-subsystem] Initialization error:', err);
+        ipcMain.removeHandler('trigger-manual-sync');
+        ipcMain.handle('trigger-manual-sync', async () => ({ success: false, disabled: true, error: err.message, reason: 'تعذر تشغيل محرك المزامنة', registration: lastCloudRegistrationResult }));
+        ipcMain.removeHandler('send-sync-diagnostic-report');
+        ipcMain.handle('send-sync-diagnostic-report', async () => ({ success: false, error: err.message, reason: 'تعذر تشغيل محرك المزامنة' }));
+        reportClientErrorToCloud({
+            companyId: null,
+            deviceId: null,
+            companyName: null,
+            desktopVersion: (app.getVersion ? app.getVersion() : '10.1.2'),
+            severity: 'error',
+            module: 'sync_init',
+            errorMessage: err.message,
+            errorDetails: { stack: err.stack }
+        }).catch(() => {});
+    }
 }
 app.on('before-quit', (event) => {
+    try { stopPeriodicBackupTimer(); } catch (_) {}
     if (isQuittingForAppUpdate()) {
         if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
         if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }

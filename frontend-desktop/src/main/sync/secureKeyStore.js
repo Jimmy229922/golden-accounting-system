@@ -77,7 +77,9 @@ function loadOrCreateDeviceIdentity(storageDir, safeStorage = null) {
             };
         } catch (e) {
             console.error('[secureKeyStore] فشل قراءة هوية الجهاز المشفرة:', e.message);
-            return null;
+            try {
+                fs.renameSync(filePath, `${filePath}.corrupt-${Date.now()}.bak`);
+            } catch (_) {}
         }
     }
 
@@ -117,8 +119,20 @@ function loadOrCreateDeviceIdentity(storageDir, safeStorage = null) {
     };
 }
 
+let serverTimeOffsetMs = 0;
+
+function setServerTimeOffset(serverIsoString) {
+    if (!serverIsoString) return;
+    try {
+        const serverMs = new Date(serverIsoString).getTime();
+        if (!isNaN(serverMs)) {
+            serverTimeOffsetMs = serverMs - Date.now();
+        }
+    } catch (_) {}
+}
+
 function signPayload(privateKeyBase64, companyId, payloadJsonString) {
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date(Date.now() + serverTimeOffsetMs).toISOString();
     const nonce = crypto.randomBytes(16).toString('hex');
     const canonicalMessage = `${timestamp}.${nonce}.${companyId}.${payloadJsonString}`;
 
@@ -142,5 +156,6 @@ module.exports = {
     protectPrivateKey,
     unprotectPrivateKey,
     loadOrCreateDeviceIdentity,
-    signPayload
+    signPayload,
+    setServerTimeOffset
 };

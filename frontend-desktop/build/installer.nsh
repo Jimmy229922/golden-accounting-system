@@ -18,13 +18,24 @@
 !macroend
 
 !macro customInstall
+  ClearErrors
+  FileOpen $2 "$INSTDIR\app_root_path.txt" r
+  ${IfNot} ${Errors}
+    FileRead $2 $1
+    FileClose $2
+    ${If} ${FileExists} "$1\DATA"
+      Goto PathResolved
+    ${EndIf}
+  ${EndIf}
+
   ${If} ${FileExists} "C:\APP_JS\DATA"
     StrCpy $1 "C:\APP_JS"
   ${Else}
-    StrCpy $0 $EXEDIR 2
+    StrCpy $0 $WINDIR 2
     StrCpy $1 "$0\APP_JS"
   ${EndIf}
 
+PathResolved:
   CreateDirectory "$1"
   CreateDirectory "$1\PIC"
   CreateDirectory "$1\DATA"
