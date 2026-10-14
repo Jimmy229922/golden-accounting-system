@@ -31,8 +31,40 @@
                 <input id="confirmPassword" type="password" autocomplete="new-password">
             </div>
             <button type="submit" class="btn-primary" id="submitBtn" data-i18n="auth.loginBtn">دخول</button>
+            <div class="forgot-password-link" style="text-align: center; margin-top: 15px;">
+                <a href="#" id="forgotPasswordBtn" style="color: #64748b; font-size: 13px; text-decoration: none;">هل نسيت كلمة المرور؟</a>
+            </div>
             <div id="status" class="status"></div>
         </form>
+    </div>
+    <div id="recoveryModal" class="recovery-modal-overlay" style="display: none;">
+        <div class="recovery-modal-card">
+            <div class="recovery-modal-header">
+                <h2>استرداد وتعيين كلمة المرور</h2>
+                <button type="button" class="recovery-modal-close" id="closeRecoveryIconBtn" title="إغلاق">&times;</button>
+            </div>
+            <p class="recovery-modal-desc">أرسل رمز الاسترداد التالي للدعم الفني للحصول على كود فك القفل المؤقت لليوم:</p>
+            <div class="recovery-challenge-wrapper">
+                <div class="recovery-challenge-box" id="recoveryChallengeText" title="انقر للنسخ">جاري التحميل...</div>
+                <button type="button" class="recovery-copy-btn" id="copyChallengeBtn" title="نسخ الرمز">📋 نسخ</button>
+            </div>
+            <div class="form-group">
+                <label for="recoveryCodeInput">كود فك القفل المستلم:</label>
+                <div class="recovery-input-group">
+                    <input type="text" id="recoveryCodeInput" placeholder="XXXX-XXXX" autocomplete="off" spellcheck="false">
+                    <button type="button" class="btn-verify" id="verifyRecoveryCodeBtn">تحقق</button>
+                </div>
+            </div>
+            <div class="form-group recovery-password-group locked" id="recoveryPasswordGroup">
+                <label for="recoveryNewPasswordInput">كلمة المرور الجديدة:</label>
+                <input type="password" id="recoveryNewPasswordInput" placeholder="يجب التحقق من كود فك القفل أولاً" autocomplete="new-password" disabled>
+            </div>
+            <div id="recoveryStatus" class="status"></div>
+            <div class="recovery-modal-actions">
+                <button type="button" class="btn-secondary" id="closeRecoveryBtn">إلغاء</button>
+                <button type="button" class="btn-primary" id="submitRecoveryBtn" disabled>حفظ وتعيين</button>
+            </div>
+        </div>
     </div>
     <script src="../../assets/js/i18n.js"></script>
     <script src="auth.state.js"></script>

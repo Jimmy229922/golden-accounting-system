@@ -210,35 +210,27 @@ function register() {
         const denied = requirePermission('customers', 'delete');
         if (denied) return denied;
         try {
+            const hasMovements = db.prepare(`
+                SELECT (
+                    EXISTS (SELECT 1 FROM sales_invoices WHERE customer_id = ?)
+                    OR EXISTS (SELECT 1 FROM purchase_invoices WHERE supplier_id = ?)
+                    OR EXISTS (SELECT 1 FROM treasury_transactions WHERE customer_id = ?)
+                    OR EXISTS (SELECT 1 FROM local_sales WHERE customer_id = ?)
+                    OR EXISTS (SELECT 1 FROM party_ledger WHERE party_id = ? AND transaction_type != 'opening_balance')
+                ) AS has_movements
+            `).get(id, id, id, id, id)?.has_movements;
+
+            if (hasMovements) {
+                return { success: false, error: 'لا يمكن حذف طرف مرتبط بعمليات مالية أو فواتير أو حركات سابقة' };
+            }
+
+            const party = db.prepare('SELECT opening_balance FROM parties WHERE id = ?').get(id);
+            if (party && party.opening_balance && Math.abs(party.opening_balance) > 0.001) {
+                return { success: false, error: 'لا يمكن حذف طرف لديه رصيد افتتاحي غير صفري' };
+            }
+
             db.transaction(() => {
-                // 1. Delete sales invoice details for this customer's invoices
-                db.prepare(`
-                    DELETE FROM sales_invoice_details 
-                    WHERE invoice_id IN (SELECT id FROM sales_invoices WHERE customer_id = ?)
-                `).run(id);
-
-                // 2. Delete sales invoices
-                db.prepare('DELETE FROM sales_invoices WHERE customer_id = ?').run(id);
-
-                // 3. Delete purchase invoice details for this supplier's invoices
-                db.prepare(`
-                    DELETE FROM purchase_invoice_details 
-                    WHERE invoice_id IN (SELECT id FROM purchase_invoices WHERE supplier_id = ?)
-                `).run(id);
-
-                // 4. Delete purchase invoices
-                db.prepare('DELETE FROM purchase_invoices WHERE supplier_id = ?').run(id);
-
-                // 5. Delete treasury transactions linked to this party
-                db.prepare('DELETE FROM treasury_transactions WHERE customer_id = ?').run(id);
-
-                // 6. Delete local sales
-                db.prepare('DELETE FROM local_sales WHERE customer_id = ?').run(id);
-
-                // 7. Delete party_ledger (trigger will update parties.balance)
                 db.prepare('DELETE FROM party_ledger WHERE party_id = ?').run(id);
-
-                // 8. Delete the party itself
                 db.prepare('DELETE FROM parties WHERE id = ?').run(id);
             })();
             return { success: true };

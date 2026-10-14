@@ -202,13 +202,13 @@ serve(async (req: Request) => {
 
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      rawPublicKey,
+      rawPublicKey as any,
       { name: "Ed25519" },
       false,
       ["verify"]
     );
 
-    const isValid = await crypto.subtle.verify("Ed25519", cryptoKey, rawSignature, canonicalMessage);
+    const isValid = await crypto.subtle.verify("Ed25519", cryptoKey, rawSignature as any, canonicalMessage);
     if (!isValid) {
       return new Response(JSON.stringify({ error: "Invalid cryptographic signature" }), {
         status: 403,
@@ -357,17 +357,20 @@ serve(async (req: Request) => {
       }
 
       const db = getDbClient();
+      const streamId = payload.stream_id ? String(payload.stream_id).trim() : null;
       const result = await db`
         SELECT private.apply_delta_sync_batch(
           ${verifiedCompanyId}::uuid,
           ${db.json(sanitizedEvents)},
           ${Number(payload.batch_seq_no || 0)}::bigint,
-          ${payload.desktop_version || "9.1.6"}::text
+          ${payload.desktop_version || "9.1.6"}::text,
+          ${streamId ? streamId : null}::uuid
         ) AS res
       `;
 
       const deltaRes = result[0]?.res;
-      return new Response(JSON.stringify({ success: true, result: deltaRes }), {
+      const isSuccess = Boolean(deltaRes && deltaRes.success !== false);
+      return new Response(JSON.stringify({ success: isSuccess, result: deltaRes }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });

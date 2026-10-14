@@ -255,6 +255,21 @@ class SyncEngine {
         `).run(String(seqNo));
     }
 
+    getOrCreateStreamId() {
+        try {
+            const row = this.stateDb.prepare("SELECT value FROM sync_meta WHERE key = 'stream_id'").get();
+            if (row && row.value && String(row.value).trim()) {
+                return String(row.value).trim();
+            }
+            const crypto = require('crypto');
+            const newStreamId = crypto.randomUUID();
+            this.stateDb.prepare("INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('stream_id', ?)").run(newStreamId);
+            return newStreamId;
+        } catch (_) {
+            return null;
+        }
+    }
+
     // استخراج بيانات الأطراف وحركات دفتر الأستاذ دون المساس بقاعدة المحاسبة الأصلية
     extractCurrentProjection() {
         const partiesQuery = `
@@ -664,6 +679,7 @@ class SyncEngine {
             });
             const payload = {
                 mode: 'delta_batch',
+                stream_id: this.getOrCreateStreamId(),
                 batch_seq_no: curSeq,
                 desktop_version: this.desktopVersion,
                 events: chunkEvents
@@ -715,11 +731,16 @@ class SyncEngine {
                     resJson = await res.json();
                 } catch (_) {}
 
+                const resultObj = resJson ? (resJson.result || resJson) : null;
+                const resultStatus = resultObj ? resultObj.status : null;
+                const isResyncRequired = resultStatus === 'resync_required' || resultStatus === 'already_applied';
+
                 const isVerifiedSuccess = res.ok &&
                     resJson &&
                     (resJson.success === true || resJson.status === 'ok') &&
-                    resJson.result &&
-                    Number(resJson.result.batch_seq_no) === Number(item.seq_no);
+                    resultObj &&
+                    Number(resultObj.batch_seq_no) === Number(item.seq_no) &&
+                    !isResyncRequired;
 
                 if (isVerifiedSuccess) {
                     this.stateDb.prepare("UPDATE outbox_queue SET status = 'synced' WHERE seq_no = ?").run(item.seq_no);
@@ -745,6 +766,24 @@ class SyncEngine {
                     });
 
                     processedCount++;
+                } else if (isResyncRequired) {
+                    const expectedSeq = Number((resultObj && resultObj.expected_seq) || (Number(item.seq_no) + 1));
+                    this.stateDb.prepare("DELETE FROM outbox_queue WHERE status = 'pending'").run();
+                    this.setLastSeqNo(expectedSeq - 1);
+                    this.stateDb.prepare("DELETE FROM shadow_parties").run();
+                    this.stateDb.prepare("DELETE FROM shadow_ledger").run();
+                    this.stateDb.prepare("DELETE FROM sync_meta WHERE key = 'last_data_signature'").run();
+                    if (this._pendingProjections) {
+                        this._pendingProjections.clear();
+                    }
+                    this.logSyncHistory({
+                        seq_no: item.seq_no,
+                        sync_type: 'delta_batch',
+                        status: 'failed',
+                        events_count: (payload.events && Array.isArray(payload.events)) ? payload.events.length : 0,
+                        summary: 'طلب السيرفر إعادة مطابقة التسلسل، جاري رفع لقطة كاملة'
+                    });
+                    break;
                 } else {
                     const errText = resJson ? (resJson.error || JSON.stringify(resJson)) : (await res.text().catch(() => 'HTTP Error ' + res.status));
                     lastError = errText;

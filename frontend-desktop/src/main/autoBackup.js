@@ -136,24 +136,43 @@ function copyBackupToUserData(sourceBackupPath) {
 }
 
 function cleanupLegacyAutoBackups(backupRootPath) {
-    try {
-        const legacyEntries = fs.readdirSync(backupRootPath, { withFileTypes: true })
-            .filter((entry) => {
-                if (!entry.isFile()) return false;
-                return entry.name.startsWith('accounting-auto-backup-');
-            });
+}
 
-        for (const entry of legacyEntries) {
-            const fullPath = path.join(backupRootPath, entry.name);
-            try {
-                fs.unlinkSync(fullPath);
-                console.log(`[auto-backup] removed legacy backup file: ${entry.name}`);
-            } catch (error) {
-                console.error(`[auto-backup] failed to remove legacy backup ${entry.name}:`, error.message);
-            }
+function saveRotatedBackups(backupRootPath, sourceBackupFile) {
+    try {
+        if (!fs.existsSync(sourceBackupFile)) return;
+
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        
+        const dailyDir = path.join(backupRootPath, 'backups', 'daily');
+        fs.mkdirSync(dailyDir, { recursive: true });
+        const dailyFile = path.join(dailyDir, `backup-${dateStr}.db`);
+        fs.copyFileSync(sourceBackupFile, dailyFile);
+
+        const dailyFiles = fs.readdirSync(dailyDir)
+            .filter(f => f.startsWith('backup-') && f.endsWith('.db'))
+            .sort();
+        while (dailyFiles.length > 14) {
+            const oldest = dailyFiles.shift();
+            try { fs.unlinkSync(path.join(dailyDir, oldest)); } catch (_) {}
         }
-    } catch (error) {
-        console.error('[auto-backup] cleanupLegacyAutoBackups error:', error.message);
+
+        const weeklyDir = path.join(backupRootPath, 'backups', 'weekly');
+        fs.mkdirSync(weeklyDir, { recursive: true });
+        const weekNum = Math.ceil(((now - new Date(now.getFullYear(), 0, 1)) / 86400000 + 1) / 7);
+        const weeklyFile = path.join(weeklyDir, `backup-week-${now.getFullYear()}-${String(weekNum).padStart(2, '0')}.db`);
+        fs.copyFileSync(sourceBackupFile, weeklyFile);
+
+        const weeklyFiles = fs.readdirSync(weeklyDir)
+            .filter(f => f.startsWith('backup-week-') && f.endsWith('.db'))
+            .sort();
+        while (weeklyFiles.length > 8) {
+            const oldest = weeklyFiles.shift();
+            try { fs.unlinkSync(path.join(weeklyDir, oldest)); } catch (_) {}
+        }
+    } catch (e) {
+        console.error('[auto-backup] Rotation error:', e.message);
     }
 }
 
@@ -233,6 +252,7 @@ function createStartupBackup() {
             .then(() => {
                 console.log('[auto-backup] Startup backup saved to DATA');
                 copyBackupToUserData(backupFilePath);
+                saveRotatedBackups(backupRootPath, backupFilePath);
             })
             .catch((err) => console.error('[auto-backup] Startup backup failed:', err.message));
     } catch (error) {
@@ -253,6 +273,7 @@ function createDataBackupBeforeQuit() {
     // Use better-sqlite3's built-in .backup() for a safe, consistent database backup
     return db.backup(backupFilePath).then(() => {
         copyBackupToUserData(backupFilePath);
+        saveRotatedBackups(backupRootPath, backupFilePath);
         return backupFilePath;
     });
 }

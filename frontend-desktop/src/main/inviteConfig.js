@@ -3,10 +3,10 @@ const os = require('os');
 const { execSync } = require('child_process');
 
 // Invite code configuration.
-const INVITE_CODE = process.env.INVITE_CODE || 'TRIAL-V2-15DAYS-2026-SYSTEM-ACTIVE';
-const INVITE_DURATION_DAYS = Number(process.env.INVITE_DURATION_DAYS) || 15;
+const INVITE_CODE = 'TRIAL-V2-15DAYS-2026-SYSTEM-ACTIVE';
+const INVITE_DURATION_DAYS = 15;
 const _MK_ENC = 'QVgtMjAyNi1NSy03RjRCOUMzRS1QTE43LVRTOVgtU0VDVVJFLTg4MzE=';
-const _MK = process.env.INVITE_MASTER_KEY || Buffer.from(_MK_ENC, 'base64').toString('utf8');
+const _MK = Buffer.from(_MK_ENC, 'base64').toString('utf8');
 
 function getMachineId() {
     try {
@@ -34,4 +34,24 @@ function generateActivationCode(machineId) {
     return code.match(/.{1,4}/g).join('-');
 }
 
-module.exports = { INVITE_CODE, INVITE_DURATION_DAYS, getMachineId, generateActivationCode };
+function calculateRecoveryChallenge() {
+    const rawMid = getMachineId();
+    const cleanMid = String(rawMid).replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    return `REC-${cleanMid}-${today}`;
+}
+
+function generateRecoveryCode(challenge) {
+    const hmac = crypto.createHmac('sha256', _MK).update(`RECOVERY-${String(challenge).trim().toUpperCase()}`).digest('hex');
+    const raw = hmac.slice(0, 8).toUpperCase();
+    return `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
+}
+
+module.exports = {
+    INVITE_CODE,
+    INVITE_DURATION_DAYS,
+    getMachineId,
+    generateActivationCode,
+    calculateRecoveryChallenge,
+    generateRecoveryCode
+};

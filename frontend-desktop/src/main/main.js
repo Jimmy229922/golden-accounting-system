@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -307,6 +307,15 @@ function activateInviteForDays(days) {
 
 function ensureAutoActivationForFreshInstall() {
     try {
+        const companyIdRow = db.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
+        if (companyIdRow && companyIdRow.value === '715526d2-f05a-458f-8cf7-179ee172a7a1') {
+            return false;
+        }
+        const licenseStatusRow = db.prepare("SELECT value FROM settings WHERE key = 'license_status'").get();
+        if (licenseStatusRow && licenseStatusRow.value === 'lifetime') {
+            return false;
+        }
+
         // Upgrade legacy trial codes to V2
         const legacyCodes = ['INV-2026-R3-K9N4Q7W2-61ZT-MPL8-HSX5-7440', 'INV-2026-AX9F3Q7M-48ZP-CKD1-PLN7-TS9X-9931'];
         
@@ -509,7 +518,7 @@ function getOrInitializeCompanyId(accountingDb) {
 }
 
 async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceId, publicKeyBase64, desktopVersion) {
-    if (typeof fetch !== 'function' || !companyId || !deviceId) return null;
+    if (!app.isPackaged || typeof fetch !== 'function' || !companyId || !deviceId) return null;
     try {
         const response = await fetch('https://ryoqhtsdhfbydmejmaby.supabase.co/rest/v1/rpc/register_client_device', {
             method: 'POST',
@@ -536,7 +545,7 @@ async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceI
 }
 
 async function reportClientErrorToCloud(payload = {}) {
-    if (typeof fetch !== 'function') return null;
+    if (!app.isPackaged || typeof fetch !== 'function') return null;
     try {
         const response = await fetch('https://ryoqhtsdhfbydmejmaby.supabase.co/rest/v1/rpc/report_client_error', {
             method: 'POST',
@@ -603,7 +612,7 @@ ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
         const portableRoot = getPortableRootPath();
         const storageDir = path.join(portableRoot, 'DATA');
         const { loadOrCreateDeviceIdentity } = require('./sync/secureKeyStore');
-        const identity = loadOrCreateDeviceIdentity(storageDir);
+        const identity = loadOrCreateDeviceIdentity(storageDir, safeStorage);
         const COMPANY_ID = getOrInitializeCompanyId(db);
         if (identity) {
             autoRegisterClientDeviceWithCloud(
@@ -632,7 +641,7 @@ function startBackgroundSyncEngine() {
 
         const guard = evaluateSyncGuard({
             isPackaged: app.isPackaged,
-            allowDevMode: !app.isPackaged,
+            allowDevMode: false,
             dbPath,
             syncConfig: {
                 enabled: true,
@@ -648,7 +657,7 @@ function startBackgroundSyncEngine() {
             return;
         }
 
-        const identity = loadOrCreateDeviceIdentity(storageDir);
+        const identity = loadOrCreateDeviceIdentity(storageDir, safeStorage);
         if (!identity) {
             ipcMain.removeHandler('trigger-manual-sync');
             ipcMain.handle('trigger-manual-sync', async () => ({ success: false, disabled: true, reason: 'تعذر تحميل هوية الجهاز' }));

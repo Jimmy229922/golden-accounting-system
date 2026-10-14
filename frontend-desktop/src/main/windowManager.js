@@ -150,6 +150,9 @@ function showInviteWindow() {
         });
 
         const onUnlocked = () => {
+            if (!isInviteValid()) {
+                return;
+            }
             inviteUnlocked = true;
             ipcMain.removeListener('invite-unlocked', onUnlocked);
             if (inviteWindow) {
@@ -157,11 +160,12 @@ function showInviteWindow() {
             }
         };
 
-        ipcMain.once('invite-unlocked', onUnlocked);
+        ipcMain.on('invite-unlocked', onUnlocked);
 
         inviteWindow.on('closed', () => {
+            ipcMain.removeListener('invite-unlocked', onUnlocked);
             inviteWindow = null;
-            if (inviteUnlocked) {
+            if (inviteUnlocked && isInviteValid()) {
                 // Resolve only after the window is fully destroyed
                 resolve();
             } else if (!mainWindow) {
@@ -179,7 +183,7 @@ function showAuthWindow() {
             return;
         }
 
-        const { width, height } = getDialogSize(460, 440);
+        const { width, height } = getDialogSize(480, 520);
         authWindow = new BrowserWindow({
             width,
             height,
@@ -265,18 +269,27 @@ function createWindow() {
     });
 
     mainWindow.webContents.on('before-input-event', (event, input) => {
-        const isOpenDevToolsShortcut = input.type === 'keyDown'
+        const isOpenDevToolsShortcut = (input.type === 'keyDown'
             && input.control
             && input.shift
-            && String(input.key || '').toLowerCase() === 'i';
+            && String(input.key || '').toLowerCase() === 'i')
+            || (input.type === 'keyDown' && String(input.key || '').toLowerCase() === 'f12');
 
         if (!isOpenDevToolsShortcut) {
             return;
         }
 
         event.preventDefault();
-        mainWindow.webContents.openDevTools({ mode: 'detach' });
+        if (!app.isPackaged) {
+            mainWindow.webContents.openDevTools({ mode: 'detach' });
+        }
     });
+
+    if (app.isPackaged) {
+        mainWindow.webContents.on('devtools-opened', () => {
+            mainWindow.webContents.closeDevTools();
+        });
+    }
 
     // Open the DevTools (optional, helpful for development)
     // mainWindow.webContents.openDevTools();

@@ -223,11 +223,8 @@ $$;
 ALTER TABLE public.client_licenses ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public can check own license through RPC" ON public.client_licenses;
-CREATE POLICY "Public can check own license through RPC"
-ON public.client_licenses
-FOR SELECT
-TO anon, authenticated
-USING (true);
+REVOKE ALL ON TABLE public.client_licenses FROM anon;
+REVOKE ALL ON TABLE public.client_licenses FROM authenticated;
 
 GRANT EXECUTE ON FUNCTION public.sync_client_license TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.renew_client_license TO authenticated, service_role;

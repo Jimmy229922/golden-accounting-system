@@ -272,6 +272,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setAuthSessionToken: (token) => ipcRenderer.send('auth-session-token', token),
     getAuthSessionToken: () => ipcRenderer.invoke('get-auth-session-token'),
     notifyAuthUnlocked: () => ipcRenderer.send('auth-unlocked'),
+    getRecoveryChallenge: () => invokeChannel('get-recovery-challenge'),
+    verifyRecoveryCode: (payload) => invokeChannel('verify-recovery-code', payload),
 
     // Backup & Restore API
     backupDatabase: (payload = {}) => invokeChannel('backup-database', payload),

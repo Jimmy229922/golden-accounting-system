@@ -9,7 +9,7 @@ function getLicenseSettings(accountingDb) {
     try {
         const rows = accountingDb.prepare(`
             SELECT key, value FROM settings 
-            WHERE key IN ('company_id', 'companyName', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at')
+            WHERE key IN ('company_id', 'companyName', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id')
         `).all();
         const map = {};
         rows.forEach(r => { map[r.key] = r.value; });
@@ -26,24 +26,14 @@ function saveSetting(accountingDb, key, value) {
 }
 
 function isLegacyClient(accountingDb, map) {
-    if (map.company_id === LEGACY_COMPANY_ID) return true;
-    try {
-        const hasExistingData = accountingDb.prepare("SELECT count(*) as cnt FROM sales_invoices").get()?.cnt > 0;
-        if (hasExistingData && !map.license_status) {
-            return true;
-        }
-    } catch (_) {}
-    return false;
+    return map.company_id === LEGACY_COMPANY_ID;
 }
 
 function initLicenseForDatabase(accountingDb) {
     const map = getLicenseSettings(accountingDb);
 
     if (!map.company_id) {
-        const hasExistingData = accountingDb.prepare("SELECT count(*) as cnt FROM sales_invoices").get()?.cnt > 0;
-        const newCompanyId = hasExistingData 
-            ? '715526d2-f05a-458f-8cf7-179ee172a7a1' 
-            : require('crypto').randomUUID();
+        const newCompanyId = require('crypto').randomUUID();
         saveSetting(accountingDb, 'company_id', newCompanyId);
         map.company_id = newCompanyId;
     }
@@ -62,11 +52,13 @@ function initLicenseForDatabase(accountingDb) {
     if (!map.invite_expiry) {
         const now = new Date();
         const expiry = new Date(now.getTime() + (INVITE_DURATION_DAYS * 24 * 60 * 60 * 1000));
+        const currentMachineId = getMachineId();
         saveSetting(accountingDb, 'trial_starts_at', now.toISOString());
         saveSetting(accountingDb, 'invite_expiry', expiry.toISOString());
         saveSetting(accountingDb, 'invite_code', INVITE_CODE);
         saveSetting(accountingDb, 'renew_count', '0');
         saveSetting(accountingDb, 'license_status', 'trial');
+        saveSetting(accountingDb, 'bound_machine_id', currentMachineId);
         return {
             status: 'trial',
             valid: true,
@@ -79,7 +71,7 @@ function initLicenseForDatabase(accountingDb) {
 
 
 async function syncLicenseWithCloud(companyId, companyName, machineId, desktopVersion) {
-    if (typeof fetch !== 'function') return null;
+    if (!app.isPackaged || typeof fetch !== 'function') return null;
     
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
@@ -113,7 +105,7 @@ async function syncLicenseWithCloud(companyId, companyName, machineId, desktopVe
 }
 
 async function notifyCloudRenewal(companyId, extendDays = 30) {
-    if (typeof fetch !== 'function') return null;
+    if (!app.isPackaged || typeof fetch !== 'function') return null;
     try {
         const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/renew_client_license`, {
             method: 'POST',
@@ -216,6 +208,20 @@ async function getLicenseStatus(accountingDb) {
         };
     }
 
+    if (!isLegacyClient(accountingDb, map) && licenseStatus !== 'lifetime' && map.bound_machine_id && map.bound_machine_id !== machineId) {
+        return {
+            valid: false,
+            status: 'unauthorized_device',
+            remainingDays: 0,
+            expiresAt: expiresAt.toISOString(),
+            startsAt: map.trial_starts_at || null,
+            requiresCode: true,
+            cycle: nextCycle,
+            machineId: `${machineId}-${nextCycle}`,
+            error: 'تم تشغيل البرنامج على جهاز كمبيوتر غير مصرح له.'
+        };
+    }
+
     const now = new Date();
     if (map.trial_starts_at && now.getTime() < new Date(map.trial_starts_at).getTime()) {
         return {
@@ -252,13 +258,14 @@ function isLicenseCurrentlyValid(accountingDb) {
     if (map.license_status === 'suspended') {
         return false;
     }
-    if (map.license_status === 'lifetime') {
-        return true;
-    }
-    if (isLegacyClient(accountingDb, map) && !map.invite_expiry) {
+    if (map.license_status === 'lifetime' || isLegacyClient(accountingDb, map)) {
         return true;
     }
     if (!map.invite_expiry) {
+        return false;
+    }
+    const currentMachineId = getMachineId();
+    if (map.bound_machine_id && map.bound_machine_id !== currentMachineId) {
         return false;
     }
     const expiresAt = new Date(map.invite_expiry);
@@ -281,9 +288,8 @@ async function activateLicenseWithCode(accountingDb, code) {
     const nextCycle = renewCount + 1;
 
     const expectedDynamicCode = generateActivationCode(`${machineId}-${nextCycle}`).toUpperCase();
-    const isMasterMatch = cleanCode === 'GOLDEN-PRO-2026-LIFETIME';
 
-    if (cleanCode !== expectedDynamicCode && !isMasterMatch) {
+    if (cleanCode !== expectedDynamicCode) {
         return {
             success: false,
             error: 'كود التفعيل غير صحيح أو غير متطابق مع دورة التجديد الحالية للجهاز.'
@@ -293,23 +299,16 @@ async function activateLicenseWithCode(accountingDb, code) {
     const now = new Date();
     const currentExpiry = map.invite_expiry ? new Date(map.invite_expiry) : now;
     const baseTime = currentExpiry.getTime() > now.getTime() ? currentExpiry : now;
-    
-    let newExpiresAt;
-    let newStatus = 'active';
-
-    if (isMasterMatch) {
-        newExpiresAt = new Date('2099-12-31T23:59:59.000Z');
-        newStatus = 'lifetime';
-    } else {
-        newExpiresAt = new Date(baseTime.getTime() + (30 * 24 * 60 * 60 * 1000));
-    }
+    const newExpiresAt = new Date(baseTime.getTime() + (30 * 24 * 60 * 60 * 1000));
+    const newStatus = 'active';
 
     const stmt = accountingDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)');
     const tx = accountingDb.transaction(() => {
         stmt.run({ key: 'invite_code', value: cleanCode });
         stmt.run({ key: 'invite_expiry', value: newExpiresAt.toISOString() });
-        stmt.run({ key: 'renew_count', value: String(isMasterMatch ? 999 : nextCycle) });
+        stmt.run({ key: 'renew_count', value: String(nextCycle) });
         stmt.run({ key: 'license_status', value: newStatus });
+        stmt.run({ key: 'bound_machine_id', value: machineId });
     });
     tx();
 
@@ -318,9 +317,9 @@ async function activateLicenseWithCode(accountingDb, code) {
     return {
         success: true,
         expiresAt: newExpiresAt.toISOString(),
-        remainingDays: isMasterMatch ? 99999 : 30,
+        remainingDays: 30,
         status: newStatus,
-        renewCount: isMasterMatch ? 999 : nextCycle
+        renewCount: nextCycle
     };
 }
 

@@ -210,7 +210,7 @@ function initDB() {
     db.pragma('journal_mode = WAL');
     db.pragma('busy_timeout = 5000');
     db.pragma('cache_size = -16000');
-    db.pragma('synchronous = NORMAL');
+    db.pragma('synchronous = FULL');
     applyUnifiedPartiesSchemaReset();
 
     // 1. Units Table (جدول الوحدات)
@@ -1199,25 +1199,44 @@ function initDB() {
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_treasury_update`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_treasury_update
-        AFTER UPDATE OF amount, type, transaction_date ON treasury_transactions
+        AFTER UPDATE OF amount, type, transaction_date, customer_id ON treasury_transactions
         FOR EACH ROW
-        WHEN NEW.customer_id IS NOT NULL
         BEGIN
+            DELETE FROM party_ledger
+            WHERE transaction_type IN ('treasury_income', 'treasury_expense')
+              AND reference_id = NEW.id
+              AND NEW.customer_id IS NULL;
+
             UPDATE party_ledger
-            SET amount = CASE WHEN NEW.type = 'income' THEN -NEW.amount ELSE NEW.amount END,
+            SET party_id = NEW.customer_id,
+                amount = CASE WHEN NEW.type = 'income' THEN -NEW.amount ELSE NEW.amount END,
                 transaction_type = CASE WHEN NEW.type = 'income' THEN 'treasury_income' ELSE 'treasury_expense' END,
                 transaction_date = NEW.transaction_date
-            WHERE transaction_type IN ('treasury_income', 'treasury_expense') AND reference_id = NEW.id;
+            WHERE transaction_type IN ('treasury_income', 'treasury_expense')
+              AND reference_id = NEW.id
+              AND NEW.customer_id IS NOT NULL;
+
+            INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+            SELECT NEW.customer_id,
+                   CASE WHEN NEW.type = 'income' THEN 'treasury_income' ELSE 'treasury_expense' END,
+                   CASE WHEN NEW.type = 'income' THEN -NEW.amount ELSE NEW.amount END,
+                   NEW.transaction_date, NEW.id, NEW.created_at
+            WHERE NEW.customer_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM party_ledger 
+                  WHERE transaction_type IN ('treasury_income', 'treasury_expense') AND reference_id = NEW.id
+              );
         END
     `);
 
+    db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_treasury_delete`);
     db.exec(`
         CREATE TRIGGER IF NOT EXISTS trg_party_ledger_after_treasury_delete
         AFTER DELETE ON treasury_transactions
         FOR EACH ROW
-        WHEN OLD.customer_id IS NOT NULL
         BEGIN
             DELETE FROM party_ledger
             WHERE transaction_type IN ('treasury_income', 'treasury_expense') AND reference_id = OLD.id;

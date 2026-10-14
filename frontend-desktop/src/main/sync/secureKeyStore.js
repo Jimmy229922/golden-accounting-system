@@ -63,6 +63,12 @@ function loadOrCreateDeviceIdentity(storageDir, safeStorage = null) {
         try {
             const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             const privateKeyBase64 = unprotectPrivateKey(raw.protectedPrivateKey, safeStorage);
+            if (raw.protectedPrivateKey && raw.protectedPrivateKey.mode !== 'windows_dpapi' && safeStorage && typeof safeStorage.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable()) {
+                raw.protectedPrivateKey = protectPrivateKey(privateKeyBase64, safeStorage);
+                try {
+                    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), 'utf8');
+                } catch (_) {}
+            }
             return {
                 deviceId: raw.deviceId,
                 publicKeyBase64: raw.publicKeyBase64,

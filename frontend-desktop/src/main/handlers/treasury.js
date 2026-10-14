@@ -224,11 +224,15 @@ function register() {
                 return { success: false, error: 'مبلغ حركة الخزينة يجب أن يكون أكبر من صفر.' };
             }
 
-            const normalizedCustomerId = normalizeTreasuryCustomerId(transaction.customer_id);
             const existing = db.prepare('SELECT * FROM treasury_transactions WHERE id = ?').get(id);
             if (!existing) {
                 return { success: false, error: 'الحركة المطلوب تعديلها غير موجودة.' };
             }
+
+            const hasCustomerField = Object.prototype.hasOwnProperty.call(transaction, 'customer_id');
+            const normalizedCustomerId = hasCustomerField
+                ? normalizeTreasuryCustomerId(transaction.customer_id)
+                : existing.customer_id;
 
             if (normalizedType === 'expense') {
                 let balanceBeforeUpdate = getCurrentTreasuryBalance();

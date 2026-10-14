@@ -111,8 +111,10 @@ CREATE TABLE IF NOT EXISTS public.mobile_sync_meta (
     last_applied_seq_no BIGINT NOT NULL DEFAULT 0,
     desktop_app_version TEXT NOT NULL DEFAULT '9.2.0',
     sync_status TEXT NOT NULL DEFAULT 'pending_first_sync',
+    stream_id UUID,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE public.mobile_sync_meta ADD COLUMN IF NOT EXISTS stream_id UUID;
 
 -- فهارس الأداء العالي
 CREATE INDEX IF NOT EXISTS idx_prod_parties_type ON public.mobile_parties(company_id, type);
@@ -322,7 +324,8 @@ CREATE OR REPLACE FUNCTION private.apply_delta_sync_batch(
     p_company_id UUID,
     p_events JSONB,
     p_batch_seq_no BIGINT,
-    p_desktop_version TEXT
+    p_desktop_version TEXT,
+    p_stream_id UUID DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -335,23 +338,41 @@ DECLARE
     v_skipped_count INT := 0;
     v_existing_seq BIGINT;
     v_last_applied_seq BIGINT;
+    v_current_stream UUID;
 BEGIN
     -- 1. قفل استشاري يمنع أي محركين من إرسال دفعات متزامنة لنفس الشركة
     PERFORM pg_advisory_xact_lock(hashtext(p_company_id::text));
 
     -- 2. التحقق من تسلسل الدفعة ومنع التضارب أو إعادة المعالجة (Idempotency Guard)
-    SELECT last_applied_seq_no INTO v_last_applied_seq
+    SELECT last_applied_seq_no, stream_id INTO v_last_applied_seq, v_current_stream
     FROM public.mobile_sync_meta
     WHERE company_id = p_company_id
     FOR UPDATE;
 
+    IF p_stream_id IS NOT NULL THEN
+        IF v_current_stream IS NULL THEN
+            UPDATE public.mobile_sync_meta
+            SET stream_id = p_stream_id
+            WHERE company_id = p_company_id;
+            v_current_stream := p_stream_id;
+        ELSIF v_current_stream <> p_stream_id THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'status', 'stream_conflict',
+                'error', 'A different sync stream is registered for this company',
+                'batch_seq_no', p_batch_seq_no
+            );
+        END IF;
+    END IF;
+
     IF v_last_applied_seq IS NOT NULL AND p_batch_seq_no <= v_last_applied_seq THEN
         RETURN jsonb_build_object(
-            'success', true,
-            'status', 'already_applied',
+            'success', false,
+            'status', 'resync_required',
             'applied_events', 0,
             'skipped_events', 0,
-            'batch_seq_no', p_batch_seq_no
+            'batch_seq_no', p_batch_seq_no,
+            'expected_seq', (v_last_applied_seq + 1)
         );
     END IF;
 

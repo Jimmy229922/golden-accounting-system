@@ -1,4 +1,4 @@
-﻿const authState = window.authPageState.createInitialState();
+const authState = window.authPageState.createInitialState();
 const authApi = window.authPageApi;
 const authUi = window.authPageUi;
 const { t } = window.i18n?.createPageHelpers?.(() => authState.ar) || { t: (k, f = '') => f };
@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (authState.dom.passwordToggleBtn) {
         authState.dom.passwordToggleBtn.addEventListener('click', togglePasswordVisibility);
     }
+    initRecoveryFlow();
 
     await initAuthMode();
     } catch (error) {
@@ -152,4 +153,206 @@ async function submitLogin({ username, password }) {
     authUi.setStatus(authState, t('auth.success.loginDone', 'تم تسجيل الدخول بنجاح.'), 'success');
     authUi.showLoadingOverlay(t);
     authApi.notifyAuthUnlockedWithDelay(600);
+}
+
+function initRecoveryFlow() {
+    const forgotBtn = document.getElementById('forgotPasswordBtn');
+    const recoveryModal = document.getElementById('recoveryModal');
+    const closeRecoveryBtn = document.getElementById('closeRecoveryBtn');
+    const closeRecoveryIconBtn = document.getElementById('closeRecoveryIconBtn');
+    const copyChallengeBtn = document.getElementById('copyChallengeBtn');
+    const verifyRecoveryCodeBtn = document.getElementById('verifyRecoveryCodeBtn');
+    const recoveryPasswordGroup = document.getElementById('recoveryPasswordGroup');
+    const submitRecoveryBtn = document.getElementById('submitRecoveryBtn');
+    const challengeText = document.getElementById('recoveryChallengeText');
+    const recoveryCodeInput = document.getElementById('recoveryCodeInput');
+    const newPasswordInput = document.getElementById('recoveryNewPasswordInput');
+    const recoveryStatus = document.getElementById('recoveryStatus');
+
+    if (!forgotBtn || !recoveryModal) return;
+
+    let isCodeVerified = false;
+
+    const resetFlow = () => {
+        isCodeVerified = false;
+        recoveryStatus.textContent = '';
+        recoveryCodeInput.value = '';
+        recoveryCodeInput.disabled = false;
+        newPasswordInput.value = '';
+        newPasswordInput.disabled = true;
+        newPasswordInput.placeholder = 'يجب التحقق من كود فك القفل أولاً';
+        if (recoveryPasswordGroup) {
+            recoveryPasswordGroup.classList.remove('unlocked');
+            recoveryPasswordGroup.classList.add('locked');
+        }
+        if (verifyRecoveryCodeBtn) {
+            verifyRecoveryCodeBtn.disabled = false;
+            verifyRecoveryCodeBtn.textContent = 'تحقق';
+            verifyRecoveryCodeBtn.classList.remove('verified');
+        }
+        if (submitRecoveryBtn) {
+            submitRecoveryBtn.disabled = true;
+        }
+    };
+
+    const closeModal = () => {
+        recoveryModal.style.display = 'none';
+        resetFlow();
+    };
+
+    forgotBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        resetFlow();
+        challengeText.textContent = 'جاري استخراج الرمز...';
+        recoveryModal.style.display = 'flex';
+
+        try {
+            const res = await authApi.getRecoveryChallenge();
+            if (res && res.success) {
+                challengeText.textContent = res.challenge;
+            } else {
+                challengeText.textContent = 'تعذر استخراج رمز الاسترداد';
+            }
+        } catch (_) {
+            challengeText.textContent = 'خطأ في الاتصال';
+        }
+    });
+
+    if (closeRecoveryBtn) {
+        closeRecoveryBtn.addEventListener('click', closeModal);
+    }
+    if (closeRecoveryIconBtn) {
+        closeRecoveryIconBtn.addEventListener('click', closeModal);
+    }
+    recoveryModal.addEventListener('click', (e) => {
+        if (e.target === recoveryModal) {
+            closeModal();
+        }
+    });
+
+    if (copyChallengeBtn) {
+        copyChallengeBtn.addEventListener('click', async () => {
+            const text = challengeText.textContent.trim();
+            if (!text || text.includes('...')) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                const prev = copyChallengeBtn.textContent;
+                copyChallengeBtn.textContent = '✓ تم النسخ';
+                setTimeout(() => {
+                    copyChallengeBtn.textContent = prev;
+                }, 1500);
+            } catch (_) {}
+        });
+    }
+
+    const verifyCodeAction = async () => {
+        const code = recoveryCodeInput.value.trim().toUpperCase();
+        if (!code) {
+            recoveryStatus.textContent = 'يرجى إدخال كود فك القفل أولاً.';
+            recoveryStatus.style.color = '#ef4444';
+            return;
+        }
+
+        verifyRecoveryCodeBtn.disabled = true;
+        recoveryStatus.textContent = 'جاري التحقق من الكود...';
+        recoveryStatus.style.color = '#94a3b8';
+
+        try {
+            const res = await authApi.verifyRecoveryCode({ code });
+            if (res && res.success) {
+                isCodeVerified = true;
+                recoveryCodeInput.disabled = true;
+                verifyRecoveryCodeBtn.textContent = '✓ تم التحقق';
+                verifyRecoveryCodeBtn.classList.add('verified');
+                verifyRecoveryCodeBtn.disabled = true;
+
+                if (recoveryPasswordGroup) {
+                    recoveryPasswordGroup.classList.remove('locked');
+                    recoveryPasswordGroup.classList.add('unlocked');
+                }
+                newPasswordInput.disabled = false;
+                newPasswordInput.placeholder = 'أدخل كلمة المرور الجديدة (6 أحرف أو أكثر)';
+                newPasswordInput.focus();
+
+                submitRecoveryBtn.disabled = false;
+                recoveryStatus.textContent = 'الكود صحيح. يرجى إدخال كلمة المرور الجديدة.';
+                recoveryStatus.style.color = '#34d399';
+            } else {
+                recoveryStatus.textContent = res.error || 'كود الاسترداد غير صحيح.';
+                recoveryStatus.style.color = '#ef4444';
+                verifyRecoveryCodeBtn.disabled = false;
+            }
+        } catch (_) {
+            recoveryStatus.textContent = 'حدث خطأ أثناء فحص الكود.';
+            recoveryStatus.style.color = '#ef4444';
+            verifyRecoveryCodeBtn.disabled = false;
+        }
+    };
+
+    if (verifyRecoveryCodeBtn) {
+        verifyRecoveryCodeBtn.addEventListener('click', verifyCodeAction);
+    }
+
+    recoveryCodeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (!isCodeVerified) {
+                verifyCodeAction();
+            }
+        }
+    });
+
+    if (submitRecoveryBtn) {
+        submitRecoveryBtn.addEventListener('click', async () => {
+            if (!isCodeVerified) {
+                recoveryStatus.textContent = 'يرجى التحقق من كود فك القفل أولاً.';
+                recoveryStatus.style.color = '#ef4444';
+                return;
+            }
+
+            const code = recoveryCodeInput.value.trim().toUpperCase();
+            const newPassword = newPasswordInput.value;
+
+            if (!newPassword) {
+                recoveryStatus.textContent = 'يرجى إدخال كلمة المرور الجديدة.';
+                recoveryStatus.style.color = '#ef4444';
+                return;
+            }
+            if (newPassword.length < 6) {
+                recoveryStatus.textContent = 'كلمة المرور يجب ألا تقل عن 6 أحرف/أرقام.';
+                recoveryStatus.style.color = '#ef4444';
+                return;
+            }
+
+            submitRecoveryBtn.disabled = true;
+            recoveryStatus.textContent = 'جاري حفظ كلمة المرور...';
+            recoveryStatus.style.color = '#94a3b8';
+
+            try {
+                const res = await authApi.verifyRecoveryCode({ code, newPassword });
+                if (res && res.success) {
+                    recoveryStatus.textContent = res.message || 'تم تعيين كلمة المرور بنجاح!';
+                    recoveryStatus.style.color = '#34d399';
+                    setTimeout(() => {
+                        closeModal();
+                        if (authState.dom.usernameInput && res.username) {
+                            authState.dom.usernameInput.value = res.username;
+                        }
+                        if (authState.dom.passwordInput) {
+                            authState.dom.passwordInput.value = newPassword;
+                        }
+                        authUi.setStatus(authState, 'تم تعيين كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.', 'success');
+                    }, 1200);
+                } else {
+                    recoveryStatus.textContent = res.error || 'كود الاسترداد غير صحيح.';
+                    recoveryStatus.style.color = '#ef4444';
+                    submitRecoveryBtn.disabled = false;
+                }
+            } catch (_) {
+                recoveryStatus.textContent = 'حدث خطأ أثناء معالجة الطلب.';
+                recoveryStatus.style.color = '#ef4444';
+                submitRecoveryBtn.disabled = false;
+            }
+        });
+    }
 }

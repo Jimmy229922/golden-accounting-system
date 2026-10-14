@@ -84,6 +84,7 @@ DECLARE
     v_comp_name TEXT := COALESCE(NULLIF(TRIM(p_company_name), ''), 'مؤسسة جديدة');
     v_dev_name TEXT := COALESCE(NULLIF(TRIM(p_device_name), ''), 'Windows-Desktop-POS');
     v_code TEXT := SUBSTRING(REPLACE(p_company_id::text, '-', ''), 1, 8);
+    v_existing_dev RECORD;
 BEGIN
     IF p_company_id IS NULL OR p_device_id IS NULL THEN
         RETURN jsonb_build_object('success', false, 'error', 'Missing company_id or device_id');
@@ -96,15 +97,30 @@ BEGIN
         is_active = true,
         updated_at = now();
 
-    IF p_public_key IS NOT NULL AND TRIM(p_public_key) <> '' THEN
-        INSERT INTO public.mobile_devices (id, company_id, device_name, public_key, is_active, last_heartbeat_at)
-        VALUES (p_device_id, p_company_id, v_dev_name, TRIM(p_public_key), true, now())
-        ON CONFLICT (id) DO UPDATE SET
-            company_id = EXCLUDED.company_id,
-            public_key = EXCLUDED.public_key,
-            device_name = EXCLUDED.device_name,
+    SELECT * INTO v_existing_dev FROM public.mobile_devices WHERE id = p_device_id;
+
+    IF FOUND THEN
+        IF v_existing_dev.company_id <> p_company_id THEN
+            RETURN jsonb_build_object('success', false, 'error', 'DEVICE_COMPANY_MISMATCH');
+        END IF;
+
+        IF p_public_key IS NOT NULL AND TRIM(p_public_key) <> '' 
+           AND v_existing_dev.public_key IS NOT NULL 
+           AND v_existing_dev.public_key <> TRIM(p_public_key) THEN
+            RETURN jsonb_build_object('success', false, 'error', 'DEVICE_KEY_MISMATCH');
+        END IF;
+
+        UPDATE public.mobile_devices
+        SET 
+            device_name = COALESCE(v_dev_name, device_name),
             is_active = true,
-            last_heartbeat_at = now();
+            last_heartbeat_at = now()
+        WHERE id = p_device_id;
+    ELSE
+        IF p_public_key IS NOT NULL AND TRIM(p_public_key) <> '' THEN
+            INSERT INTO public.mobile_devices (id, company_id, device_name, public_key, is_active, last_heartbeat_at)
+            VALUES (p_device_id, p_company_id, v_dev_name, TRIM(p_public_key), true, now());
+        END IF;
     END IF;
 
     INSERT INTO public.mobile_sync_meta (company_id, currency_code, last_heartbeat_at, desktop_app_version, sync_status)

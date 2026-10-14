@@ -11,6 +11,14 @@
         return window.electronAPI.loginAuthAccount(payload);
     }
 
+    async function getRecoveryChallenge() {
+        return window.electronAPI.getRecoveryChallenge();
+    }
+
+    async function verifyRecoveryCode(payload) {
+        return window.electronAPI.verifyRecoveryCode(payload);
+    }
+
     function storeSessionToken(key, token) {
         if (!token) return;
         try {
@@ -30,6 +38,8 @@
         getAuthStatus,
         setupAuthAccount,
         loginAuthAccount,
+        getRecoveryChallenge,
+        verifyRecoveryCode,
         storeSessionToken,
         notifyAuthUnlockedWithDelay
     };
