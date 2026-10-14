@@ -508,6 +508,118 @@ function getOrInitializeCompanyId(accountingDb) {
     }
 }
 
+async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceId, publicKeyBase64, desktopVersion) {
+    if (typeof fetch !== 'function' || !companyId || !deviceId) return null;
+    try {
+        const response = await fetch('https://ryoqhtsdhfbydmejmaby.supabase.co/rest/v1/rpc/register_client_device', {
+            method: 'POST',
+            headers: {
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4',
+                'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                p_company_id: companyId,
+                p_company_name: companyName || null,
+                p_device_id: deviceId,
+                p_device_name: process.env.COMPUTERNAME || 'Windows-Desktop-POS',
+                p_public_key: publicKeyBase64,
+                p_desktop_version: desktopVersion || '10.0.0'
+            }),
+            signal: AbortSignal.timeout(6000)
+        });
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (_) {
+        return null;
+    }
+}
+
+async function reportClientErrorToCloud(payload = {}) {
+    if (typeof fetch !== 'function') return null;
+    try {
+        const response = await fetch('https://ryoqhtsdhfbydmejmaby.supabase.co/rest/v1/rpc/report_client_error', {
+            method: 'POST',
+            headers: {
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4',
+                'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                p_company_id: payload.companyId || null,
+                p_device_id: payload.deviceId || null,
+                p_company_name: payload.companyName || null,
+                p_desktop_version: payload.desktopVersion || '10.0.0',
+                p_severity: payload.severity || 'error',
+                p_module: payload.module || 'sync',
+                p_error_message: String(payload.errorMessage || 'Unknown error'),
+                p_error_details: payload.errorDetails || {}
+            }),
+            signal: AbortSignal.timeout(6000)
+        });
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (_) {
+        return null;
+    }
+}
+
+ipcMain.removeHandler('check-initial-onboarding');
+ipcMain.handle('check-initial-onboarding', async () => {
+    try {
+        const row = db.prepare("SELECT value FROM settings WHERE key = 'onboarding_completed'").get();
+        if (row && row.value === '1') {
+            return { needed: false };
+        }
+        const nameRow = db.prepare("SELECT value FROM settings WHERE key IN ('companyName', 'company_name')").get();
+        const hasCustomName = nameRow && nameRow.value && nameRow.value !== 'مؤسسة الذهب للمحاسبة' && nameRow.value !== 'مؤسسة جديدة' && nameRow.value !== 'اسم المؤسسة';
+        if (hasCustomName) {
+            db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('onboarding_completed', '1')").run();
+            return { needed: false };
+        }
+        return { needed: true };
+    } catch (_) {
+        return { needed: false };
+    }
+});
+
+ipcMain.removeHandler('complete-initial-onboarding');
+ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
+    try {
+        const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)');
+        const transaction = db.transaction((items) => {
+            for (const [key, value] of Object.entries(items)) {
+                stmt.run({ key, value: String(value || '') });
+            }
+        });
+        transaction({
+            companyName: data.companyName || 'مؤسسة جديدة',
+            companyPhone: data.companyPhone || '',
+            companyAddress: data.companyAddress || '',
+            companyActivity: data.companyActivity || '',
+            onboarding_completed: '1'
+        });
+
+        const portableRoot = getPortableRootPath();
+        const storageDir = path.join(portableRoot, 'DATA');
+        const { loadOrCreateDeviceIdentity } = require('./sync/secureKeyStore');
+        const identity = loadOrCreateDeviceIdentity(storageDir);
+        const COMPANY_ID = getOrInitializeCompanyId(db);
+        if (identity) {
+            autoRegisterClientDeviceWithCloud(
+                COMPANY_ID,
+                data.companyName,
+                identity.deviceId,
+                identity.publicKeyBase64,
+                app.getVersion ? app.getVersion() : '10.0.0'
+            ).catch(() => {});
+        }
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
 function startBackgroundSyncEngine() {
     try {
         const { evaluateSyncGuard } = require('./sync/syncGuard');
@@ -550,13 +662,27 @@ function startBackgroundSyncEngine() {
             accountingDb: db,
             storageDir,
             companyId: COMPANY_ID,
-            desktopVersion: (app.getVersion ? app.getVersion() : '9.2.10'),
+            desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
             edgeFunctionUrl: EDGE_URL,
             keyStore: {
                 deviceId: identity.deviceId,
                 sign: (payloadStr) => signPayload(identity.privateKeyBase64, COMPANY_ID, payloadStr)
             }
         });
+
+        let compName = 'مؤسسة الذهب للمحاسبة';
+        try {
+            const row = db.prepare("SELECT value FROM settings WHERE key IN ('companyName', 'company_name') LIMIT 1").get();
+            if (row && row.value) compName = row.value;
+        } catch (_) {}
+
+        autoRegisterClientDeviceWithCloud(
+            COMPANY_ID,
+            compName,
+            identity.deviceId,
+            identity.publicKeyBase64,
+            app.getVersion ? app.getVersion() : '10.0.0'
+        ).catch(() => {});
 
         syncEngineInstance.dispatchOutbox().catch(() => {});
 
@@ -588,6 +714,16 @@ function startBackgroundSyncEngine() {
                     const errReason = (dispatchResult && dispatchResult.lastError) ? dispatchResult.lastError : 'توجد حزم معلقة قيد إعادة المحاولة';
                     lastSyncStatus = { success: false, inProgress: false, pending: true, error: errReason, lastSyncAt: lastSyncStatus.lastSyncAt };
                     syncEngineInstance.logPeriodicSyncCheck(isManual, false, errReason);
+                    reportClientErrorToCloud({
+                        companyId: COMPANY_ID,
+                        deviceId: identity.deviceId,
+                        companyName: compName,
+                        desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
+                        severity: 'warn',
+                        module: 'sync_dispatch',
+                        errorMessage: errReason,
+                        errorDetails: { isManual, dispatchResult }
+                    }).catch(() => {});
                 } else {
                     const didWork = generatedDelta || (dispatchResult && dispatchResult.processed > 0);
                     if (!didWork) {
@@ -612,6 +748,16 @@ function startBackgroundSyncEngine() {
                 if (syncEngineInstance) {
                     syncEngineInstance.logPeriodicSyncCheck(isManual, false, err.message);
                 }
+                reportClientErrorToCloud({
+                    companyId: COMPANY_ID,
+                    deviceId: identity.deviceId,
+                    companyName: compName,
+                    desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
+                    severity: 'error',
+                    module: 'sync_runtime',
+                    errorMessage: err.message,
+                    errorDetails: { stack: err.stack, isManual }
+                }).catch(() => {});
                 BrowserWindow.getAllWindows().forEach((win) => {
                     if (win && !win.isDestroyed() && win.webContents) {
                         win.webContents.send('cloud-sync-status', lastSyncStatus);
@@ -641,6 +787,36 @@ function startBackgroundSyncEngine() {
                 ...syncRes,
                 diagnostics
             };
+        });
+
+        ipcMain.removeHandler('send-sync-diagnostic-report');
+        ipcMain.handle('send-sync-diagnostic-report', async () => {
+            if (!syncEngineInstance) return { success: false, reason: 'المزامنة غير مفعلة' };
+            const diag = syncEngineInstance.getSyncDiagnostics ? syncEngineInstance.getSyncDiagnostics() : null;
+            const hasError = !lastSyncStatus.success ||
+                !!lastSyncStatus.error ||
+                (diag && diag.counts && (diag.counts.failed > 0 || diag.counts.pending > 0)) ||
+                (diag && Array.isArray(diag.recentBatches) && diag.recentBatches.some(b => b.status === 'failed' || !!b.last_error));
+
+            if (!hasError) {
+                return { success: false, noError: true, reason: 'المزامنة سليمة تماماً ولا توجد أخطاء للإرسال' };
+            }
+
+            return await reportClientErrorToCloud({
+                companyId: COMPANY_ID,
+                deviceId: identity.deviceId,
+                companyName: compName,
+                desktopVersion: (app.getVersion ? app.getVersion() : '10.0.0'),
+                severity: 'error',
+                module: 'diagnostic_report',
+                errorMessage: lastSyncStatus.error || 'تقرير فني لوجود تعثر في المزامنة',
+                errorDetails: {
+                    diagnostics: diag,
+                    computerName: process.env.COMPUTERNAME,
+                    os: process.platform,
+                    timestamp: new Date().toISOString()
+                }
+            });
         });
 
         syncTimer = setInterval(triggerSyncNow, 30000);

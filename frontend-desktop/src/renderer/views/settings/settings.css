@@ -139,7 +139,7 @@
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: var(--space-3);
-            align-items: start;
+            align-items: stretch;
             margin-bottom: 0;
         }
         .settings-subsection {
@@ -147,7 +147,10 @@
             border-radius: 12px;
             padding: var(--space-3);
             background: var(--secondary-bg, var(--input-bg));
-            align-self: start;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-sizing: border-box;
         }
         .subsection-title {
             display: flex;
@@ -178,6 +181,34 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: var(--space-4);
+        }
+        .subsection-company .subsection-grid {
+            flex: 1;
+            align-content: center;
+        }
+        .subsection-logo .form-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            margin: 0;
+        }
+        .subsection-address,
+        .subsection-footer {
+            display: flex;
+            flex-direction: column;
+        }
+        .subsection-address .form-group,
+        .subsection-footer .form-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+        }
+        .subsection-address textarea.form-control,
+        .subsection-footer textarea.form-control {
+            flex: 1;
+            min-height: 96px;
         }
         #settingsForm {
             display: flex;
@@ -396,6 +427,7 @@
         .action-card.backup-card::before { background: linear-gradient(135deg, #2563eb, #3b82f6); }
         .action-card.update-card::before { background: linear-gradient(135deg, #0f766e, #14b8a6); }
         .action-card.restore-card::before { background: linear-gradient(135deg, #f97316, #ea580c); }
+        .action-card.license-card::before { background: linear-gradient(135deg, #10b981, #059669); }
         .action-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 24px var(--shadow-color);
@@ -419,6 +451,7 @@
         .action-card-icon.backup { background: rgba(37,99,235,0.1); color: #2563eb; }
         .action-card-icon.update { background: rgba(20,184,166,0.12); color: #0f766e; }
         .action-card-icon.restore { background: rgba(249,115,22,0.1); color: #f97316; }
+        .action-card-icon.license { background: rgba(16,185,129,0.12); color: #10b981; }
         .action-card-header h3 {
             font-size: 1rem;
             font-weight: 700;
@@ -472,6 +505,10 @@
             background: linear-gradient(135deg, #f97316, #ea580c);
         }
         .btn-action.restore-btn:hover { box-shadow: 0 4px 12px rgba(249,115,22,0.3); }
+        .btn-action.license-btn {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+        .btn-action.license-btn:hover { box-shadow: 0 4px 12px rgba(16,185,129,0.3); }
         .update-progress {
             display: flex;
             flex-direction: column;
@@ -1006,4 +1043,170 @@
 
 .workers-btn-primary:hover {
     background-color: #0f766e;
+}
+
+.license-status-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-top: 4px;
+    background: rgba(100, 116, 139, 0.15);
+    color: var(--text-muted);
+}
+.license-status-badge.active,
+.license-status-badge.lifetime {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+.license-status-badge.trial {
+    background: rgba(59, 130, 246, 0.15);
+    color: #2563eb;
+}
+.license-status-badge.warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+}
+.license-status-badge.expired,
+.license-status-badge.suspended {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+.license-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.license-countdown-box {
+    background: var(--background-secondary, rgba(241, 245, 249, 0.7));
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+.license-countdown-number {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: #10b981;
+    line-height: 1.1;
+}
+.license-countdown-number.warning {
+    color: #f59e0b;
+}
+.license-countdown-number.danger {
+    color: #ef4444;
+}
+.license-countdown-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+.license-details-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.85rem;
+}
+.license-detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px dashed var(--border-color, #e2e8f0);
+}
+.license-detail-row:last-child {
+    border-bottom: none;
+}
+.license-detail-row .detail-label {
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.license-detail-row .detail-value {
+    font-weight: 600;
+    color: var(--text-color);
+}
+.license-machine-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.license-machine-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.license-machine-input-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+.license-machine-input {
+    flex: 1;
+    min-width: 0;
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color, #cbd5e1);
+    border-radius: 8px;
+    background: var(--input-bg, #f8fafc);
+    color: var(--text-color, #1e293b);
+    font-family: monospace;
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-align: center;
+    direction: ltr;
+}
+.btn-copy-machine {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 38px;
+    padding: 0 12px;
+    background: #0d9488;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+.btn-copy-machine:hover {
+    background-color: #0f766e;
+    transform: translateY(-1px);
+}
+.btn-copy-machine:active {
+    transform: translateY(0);
+}
+.workers-btn-secondary {
+    background-color: #64748b;
+    color: #fff;
+}
+.workers-btn-secondary:hover {
+    background-color: #475569;
+}
+[data-theme="dark"] .license-countdown-box {
+    background: rgba(15, 23, 42, 0.7);
+    border-color: rgba(148, 163, 184, 0.25);
+}
+[data-theme="dark"] .license-machine-input {
+    background: rgba(15, 23, 42, 0.82);
+    border-color: rgba(148, 163, 184, 0.35);
+    color: #f1f5f9;
+}
+[data-theme="dark"] .license-detail-row {
+    border-bottom-color: rgba(148, 163, 184, 0.2);
 }

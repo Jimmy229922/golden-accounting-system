@@ -39,6 +39,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
     loadDashboardStats(currentFilters, false);
+    if (window.electronAPI && typeof window.electronAPI.checkInitialOnboarding === 'function') {
+        window.electronAPI.checkInitialOnboarding().then((check) => {
+            if (check && check.needed && typeof window.showOnboardingWizardModal === 'function') {
+                window.showOnboardingWizardModal();
+            }
+        }).catch(() => {});
+    }
     } catch (error) {
         console.error('Initialization Error:', error);
         if (window.toast && typeof window.toast.error === 'function') {
@@ -692,6 +699,95 @@ window.showRevenuesDetails = function() {
     });
 };
 
+window.showOnboardingWizardModal = function() {
+    let existing = document.getElementById('onboardingWizardModal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'onboardingWizardModal';
+    modal.className = 'confirm-dialog-overlay';
+    modal.style.zIndex = '9999999';
+
+    modal.innerHTML = `
+        <div class="confirm-dialog-card" style="width: min(540px, 94%); padding: 0; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); border: 1px solid rgba(56, 189, 248, 0.25);">
+            <div class="confirm-dialog-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 22px 24px; display: flex; align-items: center; gap: 14px;">
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(56, 189, 248, 0.3);">
+                    <i class="fas fa-building" style="color: #38bdf8; font-size: 1.4rem;"></i>
+                </div>
+                <div>
+                    <div style="font-size: 1.25rem; font-weight: 700; color: #f8fafc;">مرحباً بك في نظام المحاسبة المتكامل</div>
+                    <div style="font-size: 0.84rem; color: #94a3b8; margin-top: 2px;">يرجى تسجيل بيانات منشأتك لبدء الاستخدام وتفعيل المزامنة</div>
+                </div>
+            </div>
+            
+            <form id="onboardingWizardForm" style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+                <div>
+                    <label style="display: block; font-size: 0.88rem; font-weight: 600; color: #e2e8f0; margin-bottom: 6px;">اسم المؤسسة / الشركة / المحل <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="onboardingCompName" required placeholder="مثال: مؤسسة الأمل للتجارة" style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 14px; color: #f8fafc; font-size: 0.95rem; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='#38bdf8'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'" />
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.88rem; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">النشاط التجاري</label>
+                    <input type="text" id="onboardingCompActivity" placeholder="مثال: تجارة عامة، تجارة ذهب، مواد غذائية..." style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 14px; color: #f8fafc; font-size: 0.95rem; outline: none;" />
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 0.88rem; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">رقم هاتف التواصل</label>
+                    <input type="tel" id="onboardingCompPhone" placeholder="01xxxxxxxxx" style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 14px; color: #f8fafc; font-size: 0.95rem; outline: none;" />
+                </div>
+
+                <div style="margin-top: 8px; display: flex; justify-content: flex-end;">
+                    <button type="submit" id="onboardingSubmitBtn" class="confirm-dialog-btn confirm" style="width: 100%; background: #0284c7; color: #fff; padding: 12px; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.2s;">
+                        <i class="fas fa-check"></i> حفظ وبدء استخدام النظام
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => {
+        modal.classList.add('show');
+        const nameInp = document.getElementById('onboardingCompName');
+        if (nameInp) nameInp.focus();
+    });
+
+    const form = modal.querySelector('#onboardingWizardForm');
+    const submitBtn = modal.querySelector('#onboardingSubmitBtn');
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const compName = (document.getElementById('onboardingCompName')?.value || '').trim();
+            const compActivity = (document.getElementById('onboardingCompActivity')?.value || '').trim();
+            const compPhone = (document.getElementById('onboardingCompPhone')?.value || '').trim();
+
+            if (!compName) return;
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> جاري حفظ البيانات...';
+            }
+
+            try {
+                if (window.electronAPI && typeof window.electronAPI.completeInitialOnboarding === 'function') {
+                    await window.electronAPI.completeInitialOnboarding({
+                        companyName: compName,
+                        companyActivity: compActivity,
+                        companyPhone: compPhone
+                    });
+                }
+                modal.classList.remove('show');
+                setTimeout(() => modal.remove(), 300);
+            } catch (_) {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-check"></i> حفظ وبدء استخدام النظام';
+                }
+            }
+        });
+    }
+};
+
 window.showSyncLogModal = async function() {
     let modal = document.getElementById('syncLogModal');
     if (modal) modal.remove();
@@ -726,6 +822,9 @@ window.showSyncLogModal = async function() {
                     تعمل المزامنة التلقائية كل 30 ثانية
                 </div>
                 <div style="display: flex; gap: 10px;">
+                    <button id="syncModalReportBtn" class="confirm-dialog-btn" style="background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); padding: 8px 14px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-paper-plane"></i> إرسال تقرير فني للدعم
+                    </button>
                     <button id="syncModalTriggerBtn" class="confirm-dialog-btn confirm" style="background: #0284c7; color: #fff; padding: 8px 18px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px;">
                         <i class="fas fa-rotate"></i> مزامنة فورية الآن
                     </button>
@@ -765,6 +864,68 @@ window.showSyncLogModal = async function() {
     const closeBottomBtn = modal.querySelector('#syncModalCloseBottomBtn');
     if (closeBottomBtn) closeBottomBtn.addEventListener('click', closeModal);
 
+    let latestSyncResponse = null;
+
+    const reportBtn = modal.querySelector('#syncModalReportBtn');
+    if (reportBtn) {
+        reportBtn.addEventListener('click', async () => {
+            const diag = latestSyncResponse ? latestSyncResponse.diagnostics : null;
+            const hasError = latestSyncResponse && (
+                latestSyncResponse.success === false ||
+                !!latestSyncResponse.error ||
+                (diag && diag.counts && (diag.counts.failed > 0 || diag.counts.pending > 0)) ||
+                (diag && Array.isArray(diag.recentBatches) && diag.recentBatches.some(b => b.status === 'failed' || !!b.last_error))
+            );
+
+            if (!hasError) {
+                reportBtn.innerHTML = '<i class="fas fa-check-circle"></i> لا توجد أخطاء بالمزامنة لإرسالها';
+                reportBtn.style.color = '#38bdf8';
+                reportBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                reportBtn.style.background = 'rgba(56, 189, 248, 0.15)';
+                setTimeout(() => {
+                    if (reportBtn) {
+                        reportBtn.innerHTML = '<i class="fas fa-paper-plane"></i> إرسال تقرير فني للدعم';
+                        reportBtn.style.color = '#fca5a5';
+                        reportBtn.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                        reportBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+                    }
+                }, 3000);
+                return;
+            }
+
+            reportBtn.disabled = true;
+            reportBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> جاري إرسال تقرير العطل...';
+            try {
+                if (window.electronAPI && typeof window.electronAPI.sendSyncDiagnosticReport === 'function') {
+                    const sendRes = await window.electronAPI.sendSyncDiagnosticReport();
+                    if (sendRes && sendRes.noError) {
+                        reportBtn.innerHTML = '<i class="fas fa-check-circle"></i> لا توجد أخطاء للإرسال';
+                        reportBtn.style.color = '#38bdf8';
+                        reportBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                        reportBtn.style.background = 'rgba(56, 189, 248, 0.15)';
+                    } else {
+                        reportBtn.innerHTML = '<i class="fas fa-check"></i> تم إرسال تقرير العطل بنجاح';
+                        reportBtn.style.color = '#86efac';
+                        reportBtn.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+                        reportBtn.style.background = 'rgba(34, 197, 94, 0.15)';
+                    }
+                }
+            } catch (_) {
+                reportBtn.innerHTML = '<i class="fas fa-times"></i> تعذر الإرسال';
+            } finally {
+                setTimeout(() => {
+                    if (reportBtn) {
+                        reportBtn.disabled = false;
+                        reportBtn.innerHTML = '<i class="fas fa-paper-plane"></i> إرسال تقرير فني للدعم';
+                        reportBtn.style.color = '#fca5a5';
+                        reportBtn.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                        reportBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+                    }
+                }, 4000);
+            }
+        });
+    }
+
     const loadData = async (isManualTrigger = false) => {
         const contentEl = document.getElementById('syncLogModalContent');
         const triggerBtn = document.getElementById('syncModalTriggerBtn');
@@ -785,6 +946,7 @@ window.showSyncLogModal = async function() {
                 }
             }
 
+            latestSyncResponse = res;
             renderSyncDiagnostics(res);
         } catch (err) {
             if (contentEl) {

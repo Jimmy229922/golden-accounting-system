@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderChangelogModal();
         await loadSettings();
         await loadSystemStatusSummary();
+        await loadLicenseStatusCard();
 
         // التحقق من إظهار ملاحظات التحديث تلقائياً لمرة واحدة
         const CURRENT_VERSION = getCurrentChangelogVersion();
@@ -150,7 +151,7 @@ function renderPage() {
                             </h3>
                             <div class="form-group">
                                 <label><i class="fas fa-map-marker-alt"></i> العنوان</label>
-                                <input type="text" id="companyAddress" class="form-control" placeholder="مثال: القاهرة - مدينة نصر">
+                                <textarea id="companyAddress" class="form-control" rows="3" placeholder="مثال: القاهرة - مدينة نصر"></textarea>
                             </div>
                         </section>
 
@@ -249,6 +250,46 @@ function renderPage() {
                         <button id="restoreBtn" class="btn-action restore-btn"><i class="fas fa-undo-alt"></i> ${t('settings.restoreNow', 'استعادة من نسخة احتياطية')}</button>
                         <small id="restoreStatus" class="status-text"></small>
                     </div>
+                    <div class="action-card license-card">
+                        <div class="action-card-header">
+                            <div class="action-card-icon license"><i class="fas fa-shield-alt"></i></div>
+                            <div>
+                                <h3>${t('settings.licenseCardTitle', 'صلاحية واشتراك البرنامج')}</h3>
+                                <span id="licenseStatusBadge" class="license-status-badge">جاري الفحص...</span>
+                            </div>
+                        </div>
+                        <div class="license-card-content">
+                            <div class="license-countdown-box">
+                                <div class="license-countdown-number" id="licenseRemainingDays">-</div>
+                                <div class="license-countdown-label" id="licenseRemainingLabel">يوم متبقي في الصلاحية</div>
+                            </div>
+                            <div class="license-details-list">
+                                <div class="license-detail-row">
+                                    <span class="detail-label"><i class="fas fa-calendar-check"></i> تاريخ التفعيل:</span>
+                                    <span class="detail-value" id="licenseStartDate">-</span>
+                                </div>
+                                <div class="license-detail-row">
+                                    <span class="detail-label"><i class="fas fa-calendar-times"></i> تاريخ الانتهاء:</span>
+                                    <span class="detail-value" id="licenseEndDate">-</span>
+                                </div>
+                                <div class="license-detail-row">
+                                    <span class="detail-label"><i class="fas fa-certificate"></i> نوع الترخيص:</span>
+                                    <span class="detail-value" id="licenseStatusText">-</span>
+                                </div>
+                            </div>
+                            <div class="license-machine-section">
+                                <label class="license-machine-label"><i class="fas fa-desktop"></i> رقم الجهاز (Machine ID):</label>
+                                <div class="license-machine-input-wrap">
+                                    <input type="text" id="licenseMachineIdInput" class="license-machine-input" readonly placeholder="جاري التحميل...">
+                                    <button type="button" id="copyLicenseMachineBtn" class="btn-copy-machine" title="نسخ رقم الجهاز">
+                                        <i class="fas fa-copy"></i>
+                                        <span>نسخ</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" id="openRenewModalBtn" class="btn-action license-btn"><i class="fas fa-key"></i> تجديد الاشتراك / تفعيل الكود</button>
+                    </div>
                 </div>
             </div>
 
@@ -320,6 +361,39 @@ function renderPage() {
                 </div>
             </div>
         </div>
+
+        <div class="workers-modal-overlay hidden" id="renewLicenseModal">
+            <div class="workers-modal" role="dialog" aria-modal="true" aria-labelledby="renewLicenseModalTitle" style="max-width: 480px;">
+                <div class="workers-modal-header">
+                    <h2 id="renewLicenseModalTitle"><i class="fas fa-key"></i> تجديد ترخيص واشتراك البرنامج</h2>
+                    <button type="button" class="workers-modal-close" data-close-modal="renewLicenseModal"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="workers-modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+                    <p style="margin: 0; font-size: 0.88rem; color: var(--text-muted); line-height: 1.6;">
+                        انسخ رقم الجهاز الحالي وأرسله للمطور للحصول على كود التجديد، ثم أدخل الكود أدناه لتمديد صلاحية البرنامج:
+                    </p>
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--text-color);"><i class="fas fa-desktop"></i> رقم الجهاز الحالي</label>
+                        <div class="license-machine-input-wrap">
+                            <input type="text" id="modalMachineIdInput" class="license-machine-input" readonly>
+                            <button type="button" id="copyModalMachineBtn" class="btn-copy-machine">
+                                <i class="fas fa-copy"></i>
+                                <span>نسخ</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--text-color);"><i class="fas fa-barcode"></i> كود التجديد والتفعيل</label>
+                        <input type="text" id="renewLicenseCodeInput" class="form-control" placeholder="XXXX-XXXX-XXXX-XXXX" style="direction: ltr; text-align: center; font-family: monospace; font-size: 1.05rem; letter-spacing: 2px; font-weight: bold; text-transform: uppercase;">
+                    </div>
+                    <div id="renewModalStatus" class="status-text" style="text-align: center; min-height: 20px; margin: 0;"></div>
+                </div>
+                <div class="workers-modal-footer">
+                    <button type="button" id="submitRenewCodeBtn" class="workers-btn workers-btn-primary" style="background: linear-gradient(135deg, #10b981, #059669);"><i class="fas fa-check"></i> تفعيل التجديد</button>
+                    <button type="button" class="workers-btn workers-btn-secondary" data-close-modal="renewLicenseModal">إلغاء</button>
+                </div>
+            </div>
+        </div>
     `;
 }
 
@@ -373,10 +447,48 @@ function initializeElements() {
             document.getElementById('changelogModal').classList.remove('hidden');
         });
     }
-    const closeButtons = document.querySelectorAll('[data-close-modal="changelogModal"]');
+    const copyLicenseMachineBtn = document.getElementById('copyLicenseMachineBtn');
+    if (copyLicenseMachineBtn) {
+        copyLicenseMachineBtn.addEventListener('click', () => {
+            const machineId = document.getElementById('licenseMachineIdInput')?.value;
+            copyLicenseToClipboard(machineId);
+        });
+    }
+
+    const copyModalMachineBtn = document.getElementById('copyModalMachineBtn');
+    if (copyModalMachineBtn) {
+        copyModalMachineBtn.addEventListener('click', () => {
+            const machineId = document.getElementById('modalMachineIdInput')?.value;
+            copyLicenseToClipboard(machineId);
+        });
+    }
+
+    const openRenewModalBtn = document.getElementById('openRenewModalBtn');
+    if (openRenewModalBtn) {
+        openRenewModalBtn.addEventListener('click', () => {
+            const codeInput = document.getElementById('renewLicenseCodeInput');
+            if (codeInput) codeInput.value = '';
+            const statusEl = document.getElementById('renewModalStatus');
+            if (statusEl) {
+                statusEl.textContent = '';
+                statusEl.className = 'status-text';
+            }
+            document.getElementById('renewLicenseModal')?.classList.remove('hidden');
+        });
+    }
+
+    const submitRenewCodeBtn = document.getElementById('submitRenewCodeBtn');
+    if (submitRenewCodeBtn) {
+        submitRenewCodeBtn.addEventListener('click', handleRenewLicenseSubmit);
+    }
+
+    const closeButtons = document.querySelectorAll('[data-close-modal]');
     closeButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
-            document.getElementById('changelogModal').classList.add('hidden');
+            const targetModalId = btn.getAttribute('data-close-modal');
+            if (targetModalId) {
+                document.getElementById(targetModalId)?.classList.add('hidden');
+            }
         });
     });
     bindAppUpdateProgress();
@@ -624,6 +736,217 @@ async function loadSystemStatusSummary() {
         }
     } catch (_) {
     }
+}
+
+async function loadLicenseStatusCard() {
+    const badgeEl = document.getElementById('licenseStatusBadge');
+    const remainingDaysEl = document.getElementById('licenseRemainingDays');
+    const remainingLabelEl = document.getElementById('licenseRemainingLabel');
+    const startDateEl = document.getElementById('licenseStartDate');
+    const endDateEl = document.getElementById('licenseEndDate');
+    const statusTextEl = document.getElementById('licenseStatusText');
+    const machineInputEl = document.getElementById('licenseMachineIdInput');
+    const modalMachineInputEl = document.getElementById('modalMachineIdInput');
+
+    if (!remainingDaysEl || !window.electronAPI) return;
+
+    try {
+        let machineId = '';
+        if (typeof window.electronAPI.getMachineId === 'function') {
+            machineId = await window.electronAPI.getMachineId();
+        }
+
+        let statusData = null;
+        if (typeof window.electronAPI.checkInviteStatus === 'function') {
+            statusData = await window.electronAPI.checkInviteStatus();
+        }
+
+        if (statusData?.machineId) {
+            machineId = statusData.machineId;
+        }
+
+        if (machineInputEl) machineInputEl.value = machineId || '-';
+        if (modalMachineInputEl) modalMachineInputEl.value = machineId || '-';
+
+        if (!statusData) {
+            if (badgeEl) badgeEl.textContent = 'غير معروف';
+            return;
+        }
+
+        const isLifetime = statusData.status === 'lifetime';
+        const isTrial = statusData.status === 'trial';
+        const isSuspended = statusData.status === 'suspended';
+        const isExpired = !statusData.valid || statusData.status === 'expired';
+
+        if (badgeEl) {
+            badgeEl.className = 'license-status-badge';
+            if (isLifetime) {
+                badgeEl.classList.add('lifetime');
+                badgeEl.textContent = 'مدى الحياة';
+            } else if (isSuspended) {
+                badgeEl.classList.add('suspended');
+                badgeEl.textContent = 'معلق';
+            } else if (isExpired) {
+                badgeEl.classList.add('expired');
+                badgeEl.textContent = 'منتهي';
+            } else if (isTrial) {
+                badgeEl.classList.add('trial');
+                badgeEl.textContent = 'فترة تجريبية';
+            } else {
+                badgeEl.classList.add('active');
+                badgeEl.textContent = 'اشتراك نشط';
+            }
+        }
+
+        if (remainingDaysEl) {
+            remainingDaysEl.className = 'license-countdown-number';
+            if (isLifetime) {
+                remainingDaysEl.textContent = '∞';
+                if (remainingLabelEl) remainingLabelEl.textContent = 'ترخيص دائم غير محدود';
+            } else if (isSuspended || isExpired) {
+                remainingDaysEl.textContent = '0';
+                remainingDaysEl.classList.add('danger');
+                if (remainingLabelEl) remainingLabelEl.textContent = isSuspended ? 'الترخيص معلق من الإدارة' : 'انتهت صلاحية استخدام البرنامج';
+            } else {
+                const days = Math.max(0, Number(statusData.remainingDays) || 0);
+                remainingDaysEl.textContent = String(days);
+                if (days <= 3) {
+                    remainingDaysEl.classList.add('danger');
+                } else if (days <= 7) {
+                    remainingDaysEl.classList.add('warning');
+                }
+                if (remainingLabelEl) {
+                    if (days === 1) {
+                        remainingLabelEl.textContent = 'يوم واحد متبقي في الصلاحية';
+                    } else if (days === 2) {
+                        remainingLabelEl.textContent = 'يومان متبقيان في الصلاحية';
+                    } else if (days >= 3 && days <= 10) {
+                        remainingLabelEl.textContent = 'أيام متبقية في الصلاحية';
+                    } else {
+                        remainingLabelEl.textContent = 'يوم متبقي في الصلاحية';
+                    }
+                }
+            }
+        }
+
+        if (startDateEl) {
+            startDateEl.textContent = statusData.startsAt ? formatSystemDateTime(statusData.startsAt).split(' ')[0] : 'أول تشغيل';
+        }
+
+        if (endDateEl) {
+            if (isLifetime) {
+                endDateEl.textContent = 'مدى الحياة (غير منتهي)';
+            } else if (statusData.expiresAt) {
+                endDateEl.textContent = formatSystemDateTime(statusData.expiresAt).split(' ')[0] || '-';
+            } else {
+                endDateEl.textContent = '-';
+            }
+        }
+
+        if (statusTextEl) {
+            if (isLifetime) {
+                statusTextEl.textContent = 'ترخيص دائم مدى الحياة';
+            } else if (isSuspended) {
+                statusTextEl.textContent = 'معلق من الإدارة';
+            } else if (isExpired) {
+                statusTextEl.textContent = 'منتهي الصلاحية';
+            } else if (isTrial) {
+                statusTextEl.textContent = 'فترة تجريبية مجانية';
+            } else {
+                statusTextEl.textContent = 'اشتراك رسمي نشط';
+            }
+        }
+    } catch (_) {
+    }
+}
+
+async function handleRenewLicenseSubmit() {
+    const codeInput = document.getElementById('renewLicenseCodeInput');
+    const statusEl = document.getElementById('renewModalStatus');
+    const submitBtn = document.getElementById('submitRenewCodeBtn');
+    const code = (codeInput?.value || '').trim();
+
+    if (!code) {
+        if (statusEl) {
+            statusEl.textContent = 'يرجى إدخال كود التفعيل أو التجديد.';
+            statusEl.className = 'status-text is-error';
+        }
+        return;
+    }
+
+    if (submitBtn) submitBtn.disabled = true;
+    if (statusEl) {
+        statusEl.textContent = 'جارٍ التحقق من كود التفعيل...';
+        statusEl.className = 'status-text';
+    }
+
+    try {
+        const result = await window.electronAPI.submitInviteCode(code);
+        if (result && result.success) {
+            if (statusEl) {
+                statusEl.textContent = 'تم التفعيل والتجديد بنجاح!';
+                statusEl.className = 'status-text is-success';
+            }
+            const msg = 'تم تجديد اشتراك وترخيص البرنامج بنجاح!';
+            if (window.toast && typeof window.toast.success === 'function') {
+                window.toast.success(msg);
+            } else if (window.showToast) {
+                window.showToast(msg, 'success');
+            }
+            document.getElementById('renewLicenseModal')?.classList.add('hidden');
+            await loadLicenseStatusCard();
+        } else {
+            const err = result?.error || 'كود التفعيل غير صحيح أو غير متطابق مع هذا الجهاز.';
+            if (statusEl) {
+                statusEl.textContent = err;
+                statusEl.className = 'status-text is-error';
+            }
+            if (window.toast && typeof window.toast.error === 'function') {
+                window.toast.error(err);
+            }
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = 'حدث خطأ أثناء الاتصال بالنظام.';
+            statusEl.className = 'status-text is-error';
+        }
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+    }
+}
+
+function copyLicenseToClipboard(text) {
+    if (!text || text === '-' || text.includes('جاري')) return;
+    const msg = 'تم نسخ رقم الجهاز بنجاح!';
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(text).then(() => {
+            if (window.toast && typeof window.toast.success === 'function') {
+                window.toast.success(msg);
+            } else if (window.showToast) {
+                window.showToast(msg, 'success');
+            }
+        }).catch(() => {
+            fallbackLicenseCopy(text, msg);
+        });
+    } else {
+        fallbackLicenseCopy(text, msg);
+    }
+}
+
+function fallbackLicenseCopy(text, msg) {
+    const tempInput = document.createElement('textarea');
+    tempInput.value = text;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    try {
+        document.execCommand('copy');
+        if (window.toast && typeof window.toast.success === 'function') {
+            window.toast.success(msg);
+        } else if (window.showToast) {
+            window.showToast(msg, 'success');
+        }
+    } catch (_) {}
+    document.body.removeChild(tempInput);
 }
 
 function showProfileImage(dataUrl) {

@@ -38,6 +38,15 @@ function isLegacyClient(accountingDb, map) {
 
 function initLicenseForDatabase(accountingDb) {
     const map = getLicenseSettings(accountingDb);
+
+    if (!map.company_id) {
+        const hasExistingData = accountingDb.prepare("SELECT count(*) as cnt FROM sales_invoices").get()?.cnt > 0;
+        const newCompanyId = hasExistingData 
+            ? '715526d2-f05a-458f-8cf7-179ee172a7a1' 
+            : require('crypto').randomUUID();
+        saveSetting(accountingDb, 'company_id', newCompanyId);
+        map.company_id = newCompanyId;
+    }
     
     if (isLegacyClient(accountingDb, map)) {
         saveSetting(accountingDb, 'license_status', 'lifetime');
@@ -67,6 +76,7 @@ function initLicenseForDatabase(accountingDb) {
 
     return null;
 }
+
 
 async function syncLicenseWithCloud(companyId, companyName, machineId, desktopVersion) {
     if (typeof fetch !== 'function') return null;
@@ -159,7 +169,10 @@ async function getLicenseStatus(accountingDb) {
                 status: 'lifetime',
                 remainingDays: 99999,
                 requiresCode: false,
-                cycle: nextCycle
+                cycle: nextCycle,
+                machineId: `${machineId}-${nextCycle}`,
+                startsAt: map.trial_starts_at || null,
+                expiresAt: '2099-12-31T23:59:59.000Z'
             };
         }
 
@@ -170,14 +183,19 @@ async function getLicenseStatus(accountingDb) {
             
             const now = new Date();
             const remainingMs = expiresAt.getTime() - now.getTime();
-            const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
-            const isValid = (remainingMs > 0);
+            const remainingDays = cloudSync.remaining_days !== undefined 
+                ? cloudSync.remaining_days 
+                : Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
+            const isValid = cloudSync.is_valid !== undefined 
+                ? Boolean(cloudSync.is_valid) 
+                : (remainingMs > 0);
 
             return {
                 valid: isValid,
                 status: licenseStatus,
                 remainingDays,
                 expiresAt: expiresAt.toISOString(),
+                startsAt: map.trial_starts_at || null,
                 requiresCode: !isValid,
                 cycle: nextCycle,
                 machineId: `${machineId}-${nextCycle}`
@@ -191,11 +209,28 @@ async function getLicenseStatus(accountingDb) {
             status: 'lifetime',
             remainingDays: 99999,
             requiresCode: false,
-            cycle: 999
+            cycle: 999,
+            machineId: `${machineId}-${nextCycle}`,
+            startsAt: map.trial_starts_at || null,
+            expiresAt: '2099-12-31T23:59:59.000Z'
         };
     }
 
     const now = new Date();
+    if (map.trial_starts_at && now.getTime() < new Date(map.trial_starts_at).getTime()) {
+        return {
+            valid: false,
+            status: 'expired',
+            remainingDays: 0,
+            expiresAt: expiresAt.toISOString(),
+            startsAt: map.trial_starts_at || null,
+            requiresCode: true,
+            cycle: nextCycle,
+            machineId: `${machineId}-${nextCycle}`,
+            error: 'تم اكتشاف تلاعب في ساعة النظام.'
+        };
+    }
+
     const remainingMs = expiresAt.getTime() - now.getTime();
     const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
     const isValid = (remainingMs > 0) && (licenseStatus !== 'suspended');
@@ -205,6 +240,7 @@ async function getLicenseStatus(accountingDb) {
         status: licenseStatus,
         remainingDays,
         expiresAt: expiresAt.toISOString(),
+        startsAt: map.trial_starts_at || null,
         requiresCode: !isValid,
         cycle: nextCycle,
         machineId: `${machineId}-${nextCycle}`
@@ -223,10 +259,14 @@ function isLicenseCurrentlyValid(accountingDb) {
         return true;
     }
     if (!map.invite_expiry) {
-        return true;
+        return false;
     }
     const expiresAt = new Date(map.invite_expiry);
-    return expiresAt.getTime() > Date.now();
+    const now = new Date();
+    if (map.trial_starts_at && now.getTime() < new Date(map.trial_starts_at).getTime()) {
+        return false;
+    }
+    return expiresAt.getTime() > now.getTime();
 }
 
 async function activateLicenseWithCode(accountingDb, code) {

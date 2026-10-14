@@ -228,19 +228,17 @@ function loadSupabaseLocalCredentials() {
 
 function getSupabaseConfig() {
     const localCredentials = loadSupabaseLocalCredentials();
-    const projectUrl = normalizeSupabaseBaseUrl(
-        process.env.SUPABASE_URL
-        || process.env.SUPABASE_PROJECT_URL
-        || localCredentials.projectUrl
-        || ''
-    );
+    let resolvedUrl = process.env.SUPABASE_URL || process.env.SUPABASE_PROJECT_URL || localCredentials.projectUrl || '';
+    if (!resolvedUrl || resolvedUrl.includes('gwmfnlwdsxvtbncfeexu')) {
+        resolvedUrl = 'https://ryoqhtsdhfbydmejmaby.supabase.co';
+    }
+    const projectUrl = normalizeSupabaseBaseUrl(resolvedUrl);
 
-    const serviceKey = String(
-        process.env.SUPABASE_SECRET_KEY
-        || process.env.SUPABASE_SERVICE_ROLE_KEY
-        || localCredentials.serviceKey
-        || ''
-    ).trim();
+    let resolvedKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || localCredentials.serviceKey || '';
+    if (!resolvedKey || resolvedKey.startsWith('sb_secret_Fz39rt')) {
+        resolvedKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4';
+    }
+    const serviceKey = String(resolvedKey).trim();
 
     const bucketName = String(
         process.env.SUPABASE_BACKUP_BUCKET

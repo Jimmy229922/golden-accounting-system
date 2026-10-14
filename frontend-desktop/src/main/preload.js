@@ -194,6 +194,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Dashboard API
     getDashboardStats: (filters = {}) => invokeChannel('get-dashboard-stats', filters),
     triggerManualSync: (options) => ipcRenderer.invoke('trigger-manual-sync', options),
+    sendSyncDiagnosticReport: () => ipcRenderer.invoke('send-sync-diagnostic-report'),
     onCloudSyncStatus: (callback) => {
         if (typeof callback !== 'function') return () => {};
         const listener = (_event, payload) => callback(payload || {});
@@ -219,6 +220,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Settings API
     getSettings: () => invokeChannel('get-settings'),
     saveSettings: (settings) => invokeChannel('save-settings', settings),
+    checkInitialOnboarding: () => invokeChannel('check-initial-onboarding'),
+    completeInitialOnboarding: (data) => invokeChannel('complete-initial-onboarding', data),
     getAppVersion: () => invokeChannel('get-app-version'),
     getAppUpdateProgressState: () => invokeChannel('get-app-update-progress-state'),
     checkAppUpdate: () => invokeChannel('check-app-update'),
