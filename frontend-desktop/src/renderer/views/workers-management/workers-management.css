@@ -864,6 +864,11 @@ body.attendance-is-dragging .attendance-day-cell {
     border-top: 1px solid var(--border-color, #dfe6ef);
 }
 
+.smart-attendance-preview.hidden,
+#cancelAdvanceEditBtn.hidden {
+    display: none;
+}
+
 .workers-modal.workers-smart-modal .workers-modal-footer {
     flex-shrink: 0;
     padding: 10px 18px;
@@ -1895,6 +1900,10 @@ body.attendance-is-dragging .attendance-day-cell {
     box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
     overflow: hidden;
     animation: dropdownFadeIn 0.18s ease-out;
+}
+
+.workers-custom-dropdown-menu.hidden {
+    display: none;
 }
 
 @keyframes dropdownFadeIn {
