@@ -364,11 +364,13 @@ function renderRows() {
     }
 
     const startIndex = (state.page - 1) * state.pageSize;
-    body.innerHTML = state.rows.map((row, index) => `
+    body.innerHTML = state.rows.map((row, index) => {
+        const isFullyPaid = (Number(row.is_collected) === 1 || (Number(row.remaining_amount) || 0) <= 0) && Number(row.invoice_total) > 0;
+        return `
         <tr>
             <td>${escapeHtml(row.document_number || startIndex + index + 1)}</td>
             <td>${escapeHtml(row.record_date || '')}</td>
-            <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
+            <td class="statement-cell">${isFullyPaid ? `<i class="fas fa-check-circle" style="color: #22c55e; margin-inline-end: 6px; font-size: 1rem;" title="مسدد بالكامل"></i>` : ''}${escapeHtml(row.statement || '')}</td>
             <td>${formatMoney(row.invoice_total)} $</td>
             <td>${escapeHtml(row.arrival_date || '')}</td>
             <td>${formatMoney(row.arrival_amount)} $</td>
@@ -385,7 +387,8 @@ function renderRows() {
                 <input type="checkbox" class="collected-checkbox" data-action="toggle-collected" data-id="${row.id}" ${Number(row.is_collected) ? 'checked' : ''}>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 
     body.querySelectorAll('[data-action="edit-record"]').forEach((button) => {
         button.addEventListener('click', () => openEditModal(button.dataset.id));

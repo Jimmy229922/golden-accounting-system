@@ -170,11 +170,20 @@ function renderPage() {
                     <label for="weekStartInput">أسبوع العمل</label>
                     <input type="date" class="workers-input" id="weekStartInput">
                 </div>
-                <div class="workers-field">
-                    <label for="weekHistorySelect">سجل الأسابيع السابقة</label>
-                    <select class="workers-select" id="weekHistorySelect">
-                        <option value="">اختر أسبوعًا محفوظًا</option>
-                    </select>
+                <div class="workers-field week-history-field">
+                    <label for="weekHistoryDropdownBtn">سجل الأسابيع السابقة</label>
+                    <div class="workers-custom-dropdown" id="weekHistoryDropdown">
+                        <button type="button" class="workers-custom-dropdown-trigger" id="weekHistoryDropdownBtn" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="dropdown-selected-text" id="weekHistorySelectedText">اختر أسبوعًا محفوظًا</span>
+                            <i class="fas fa-chevron-down dropdown-arrow" id="weekHistoryDropdownArrow"></i>
+                        </button>
+                        <div class="workers-custom-dropdown-menu hidden" id="weekHistoryDropdownMenu" role="listbox">
+                            <div class="dropdown-items-scroll" id="weekHistoryDropdownItems"></div>
+                        </div>
+                        <select id="weekHistorySelect" style="display: none;" aria-hidden="true">
+                            <option value="">اختر أسبوعًا محفوظًا</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="workers-toolbar-actions">
                     <button type="button" class="workers-btn workers-btn-prev" id="previousWeekBtn">
@@ -196,7 +205,7 @@ function renderPage() {
                     <div class="workers-summary-icon"><i class="fas fa-money-bill-wave"></i></div>
                     <div><span>${t('workersManagement.totalWages', 'إجمالي الأجور')}</span><strong id="grossPayValue">0.00 ج.م</strong></div>
                 </article>
-                <article class="workers-summary-card workers-advances">
+                <article class="workers-summary-card workers-advances" id="totalAdvancesCard" role="button" tabindex="0" title="انقر لعرض تفاصيل سُلف العمال">
                     <div class="workers-summary-icon"><i class="fas fa-hand-holding-dollar"></i></div>
                     <div><span>${t('workersManagement.totalAdvances', 'إجمالي السُلف')}</span><strong id="advancesValue">0.00 ج.م</strong></div>
                 </article>
@@ -480,6 +489,36 @@ function renderPage() {
                 </div>
                 <div class="workers-modal-footer">
                     <button type="button" class="workers-btn workers-btn-outline" data-close-modal="lowWageWorkersModal">إغلاق</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="workers-modal-overlay hidden" id="totalAdvancesModal">
+            <div class="workers-modal" role="dialog" aria-modal="true" aria-labelledby="totalAdvancesModalTitle" style="max-width: 620px;">
+                <div class="workers-modal-header">
+                    <div>
+                        <h2 id="totalAdvancesModalTitle"><i class="fas fa-hand-holding-dollar" style="color: #f59e0b;"></i> تفاصيل سُلف العمال</h2>
+                        <span class="smart-modal-subtitle">عرض إجمالي السُلف لكل عامل مع إمكانية عرض وتعديل السُلف</span>
+                    </div>
+                    <button type="button" class="workers-modal-close" data-close-modal="totalAdvancesModal"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="workers-modal-body">
+                    <div class="absent-modal-toolbar">
+                        <div class="workers-field absent-search-field" style="flex: 1;">
+                            <input type="text" class="workers-input" id="totalAdvancesSearchInput" placeholder="بحث باسم العامل أو المهنة...">
+                        </div>
+                        <div class="workers-field" style="width: 170px;">
+                            <select class="workers-select" id="totalAdvancesFilterSelect">
+                                <option value="has-advances">عمال بسُلف فقط</option>
+                                <option value="all">جميع العمال</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="absent-workers-list-wrap" id="totalAdvancesListContainer"></div>
+                </div>
+                <div class="workers-modal-footer">
+                    <div style="margin-left: auto; font-weight: 700; color: #f59e0b; font-size: 0.95rem;" id="totalAdvancesModalSummary"></div>
+                    <button type="button" class="workers-btn workers-btn-outline" data-close-modal="totalAdvancesModal">إغلاق</button>
                 </div>
             </div>
         </div>
@@ -886,6 +925,9 @@ async function loadWeek({ preserveAttendance = false } = {}) {
         updateWeekLabels();
         updateNavigationButtonsState();
         updateJobFilterOptions();
+        if (!document.getElementById('totalAdvancesModal')?.classList.contains('hidden')) {
+            renderTotalAdvancesList();
+        }
     } catch (error) {
         showMessage(error.message || 'تعذر تحميل بيانات الأسبوع', 'error');
     }
@@ -893,12 +935,87 @@ async function loadWeek({ preserveAttendance = false } = {}) {
 
 function renderWeeksHistory() {
     const select = document.getElementById('weekHistorySelect');
+    const itemsContainer = document.getElementById('weekHistoryDropdownItems');
+    const selectedText = document.getElementById('weekHistorySelectedText');
     if (!select) return;
 
     select.innerHTML = `
         <option value="">اختر أسبوعًا محفوظًا</option>
         ${state.weeks.map((week) => `<option value="${week}">${getWeekLabel(week)}</option>`).join('')}
     `;
+
+    if (itemsContainer) {
+        if (!state.weeks || !state.weeks.length) {
+            itemsContainer.innerHTML = `
+                <div class="dropdown-empty-item">لا توجد أسابيع محفوظة سابقة</div>
+            `;
+            if (selectedText) selectedText.textContent = 'لا توجد أسابيع محفوظة';
+            return;
+        }
+
+        const isCurrentInHistory = state.weeks.includes(state.weekStart);
+        if (selectedText) {
+            selectedText.textContent = isCurrentInHistory ? getWeekLabel(state.weekStart) : 'اختر أسبوعًا محفوظًا';
+        }
+
+        itemsContainer.innerHTML = state.weeks.map((week) => {
+            const isSelected = week === state.weekStart;
+            return `
+                <button type="button" class="dropdown-item ${isSelected ? 'is-selected' : ''}" data-week="${week}" role="option" aria-selected="${isSelected}">
+                    <i class="far fa-calendar-alt item-icon"></i>
+                    <span class="item-label">${escapeHtml(getWeekLabel(week))}</span>
+                    ${isSelected ? '<i class="fas fa-check item-check"></i>' : ''}
+                </button>
+            `;
+        }).join('');
+    }
+}
+
+function updateWeekHistoryDropdownLabel() {
+    const selectedText = document.getElementById('weekHistorySelectedText');
+    const itemsContainer = document.getElementById('weekHistoryDropdownItems');
+    if (!selectedText) return;
+
+    if (state.weeks && state.weeks.includes(state.weekStart)) {
+        selectedText.textContent = getWeekLabel(state.weekStart);
+    } else {
+        selectedText.textContent = 'اختر أسبوعًا محفوظًا';
+    }
+
+    if (itemsContainer) {
+        itemsContainer.querySelectorAll('.dropdown-item').forEach((item) => {
+            const isSelected = item.dataset.week === state.weekStart;
+            item.classList.toggle('is-selected', isSelected);
+            item.setAttribute('aria-selected', String(isSelected));
+            const check = item.querySelector('.item-check');
+            if (isSelected && !check) {
+                item.insertAdjacentHTML('beforeend', '<i class="fas fa-check item-check"></i>');
+            } else if (!isSelected && check) {
+                check.remove();
+            }
+        });
+    }
+}
+
+function toggleWeekHistoryDropdown(forceOpen) {
+    const menu = document.getElementById('weekHistoryDropdownMenu');
+    const btn = document.getElementById('weekHistoryDropdownBtn');
+    if (!menu || !btn) return;
+
+    const isOpen = typeof forceOpen === 'boolean' ? forceOpen : menu.classList.contains('hidden');
+    if (isOpen) {
+        menu.classList.remove('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+        btn.classList.add('is-open');
+    } else {
+        menu.classList.add('hidden');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.classList.remove('is-open');
+    }
+}
+
+function closeWeekHistoryDropdown() {
+    toggleWeekHistoryDropdown(false);
 }
 
 async function loadWeeksHistory() {
@@ -933,6 +1050,7 @@ async function changeWeek(weekStart) {
         const historySelect = document.getElementById('weekHistorySelect');
         if (currentInput) currentInput.value = state.weekStart;
         if (historySelect) historySelect.value = '';
+        updateWeekHistoryDropdownLabel();
         return;
     }
 
@@ -940,6 +1058,7 @@ async function changeWeek(weekStart) {
     state.weekStart = nextWeekStart;
     const input = document.getElementById('weekStartInput');
     if (input) input.value = state.weekStart;
+    updateWeekHistoryDropdownLabel();
     await loadWeek();
 }
 
@@ -1060,6 +1179,11 @@ function closeModal(id) {
 
     if (id === 'lowWageWorkersModal') {
         const search = document.getElementById('lowWageWorkersSearchInput');
+        if (search) search.value = '';
+    }
+
+    if (id === 'totalAdvancesModal') {
+        const search = document.getElementById('totalAdvancesSearchInput');
         if (search) search.value = '';
     }
 
@@ -1510,15 +1634,30 @@ function checkExistingDayAttendance() {
     if (alertEl) {
         if (count > 0) {
             alertEl.classList.remove('hidden');
-            alertEl.innerHTML = `
-                <i class="fas fa-triangle-exclamation"></i>
-                <div>
-                    <strong>تنبيه: يوم ${escapeHtml(dayLabel)} يحتوي بالفعل على (${count}) عامل مسجلين كحضور.</strong>
-                    <span>تطبيق الحضور سيقوم بتحديث واستبدال حضور هذا اليوم بالبيانات الجديدة.</span>
-                </div>
-            `;
+            const presentRaw = document.getElementById('smartPresentNamesInput')?.value.trim() || '';
+            const isOvertimeOnly = !presentRaw;
+            if (isOvertimeOnly) {
+                alertEl.classList.add('is-overtime-mode');
+                alertEl.innerHTML = `
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <strong>تنبيه: يوم ${escapeHtml(dayLabel)} يحتوي بالفعل على (${count}) عامل مسجلين كحضور.</strong>
+                        <span>خانة الحاضرين فارغة: سيتم إضافة وتحديث السهرات فقط دون المساس بالحضور الأساسي السابق.</span>
+                    </div>
+                `;
+            } else {
+                alertEl.classList.remove('is-overtime-mode');
+                alertEl.innerHTML = `
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <div>
+                        <strong>تنبيه: يوم ${escapeHtml(dayLabel)} يحتوي بالفعل على (${count}) عامل مسجلين كحضور.</strong>
+                        <span>تطبيق الحضور سيقوم بتحديث واستبدال حضور هذا اليوم بالبيانات الجديدة.</span>
+                    </div>
+                `;
+            }
         } else {
             alertEl.classList.add('hidden');
+            alertEl.classList.remove('is-overtime-mode');
             alertEl.innerHTML = '';
         }
     }
@@ -1529,10 +1668,17 @@ function populateSmartAttendanceDays() {
     const select = document.getElementById('smartAttendanceDaySelect');
     if (!select || !state.weekStart) return;
 
+    const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const todayKey = dayKeys[new Date().getDay()];
+
     select.innerHTML = ORDERED_WEEK_DAYS.map((day) => {
         const dateStr = addDays(state.weekStart, day.offset);
         return `<option value="${day.key}">${day.label} (${formatArabicDate(dateStr)})</option>`;
     }).join('');
+
+    if (todayKey && ORDERED_WEEK_DAYS.some((d) => d.key === todayKey)) {
+        select.value = todayKey;
+    }
 }
 
 function selectNameInTextarea(textareaId, targetName) {
@@ -1940,9 +2086,85 @@ function openLowWageWorkersModal() {
     }
 }
 
+function renderTotalAdvancesList(searchQuery) {
+    const container = document.getElementById('totalAdvancesListContainer');
+    if (!container) return;
+
+    const searchInput = document.getElementById('totalAdvancesSearchInput');
+    const term = (searchQuery !== undefined ? searchQuery : (searchInput?.value || '')).trim().toLowerCase();
+    const filterSelect = document.getElementById('totalAdvancesFilterSelect');
+    const filterMode = filterSelect ? filterSelect.value : 'has-advances';
+
+    const activeRows = state.rows.filter((r) => state.includeArchived ? true : r.is_active);
+    const withAdvances = activeRows.filter((r) => (Number(r.advances_total) || 0) > 0);
+
+    const summaryEl = document.getElementById('totalAdvancesModalSummary');
+    const totalSum = withAdvances.reduce((sum, r) => sum + (Number(r.advances_total) || 0), 0);
+    if (summaryEl) {
+        summaryEl.textContent = `الإجمالي: ${formatMoney(totalSum)} ج.م (${withAdvances.length} عامل بالسُلف)`;
+    }
+
+    let sourceRows = filterMode === 'all' ? [...activeRows] : [...withAdvances];
+    sourceRows.sort((a, b) => (Number(b.advances_total) || 0) - (Number(a.advances_total) || 0));
+
+    if (term) {
+        sourceRows = sourceRows.filter((w) => {
+            return (w.name || '').toLowerCase().includes(term) || (w.job_title || '').toLowerCase().includes(term);
+        });
+    }
+
+    if (!sourceRows.length) {
+        container.innerHTML = `
+            <div class="absent-empty-state">
+                <i class="fas ${term ? 'fa-magnifying-glass' : 'fa-circle-check'}" style="color: ${term ? '#94a3b8' : '#10b981'}; font-size: 2.2rem;"></i>
+                <strong>${term ? 'لا توجد نتائج بحث مطابقة' : 'لا توجد سُلف مسجلة لأي عامل في هذا الأسبوع!'}</strong>
+                <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #64748b;">${term ? 'جرب البحث باسم آخر أو تغيير التصفية' : 'يمكنك اختيار «جميع العمال» لإضافة سُلف جديدة لأي عامل.'}</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = sourceRows.map((w, idx) => {
+        const totalAdv = Number(w.advances_total) || 0;
+        const badgeStyle = totalAdv > 0
+            ? 'background: rgba(245, 158, 11, 0.12); color: #d97706; font-weight: 700;'
+            : 'background: rgba(148, 163, 184, 0.15); color: #64748b; font-weight: normal;';
+
+        return `
+            <div class="low-wage-worker-item">
+                <div class="absent-worker-info">
+                    <span class="absent-worker-num">${idx + 1}</span>
+                    <div class="absent-worker-details">
+                        <strong>${escapeHtml(w.name)}</strong>
+                        <span>${escapeHtml(w.job_title || 'عامل')}</span>
+                    </div>
+                </div>
+                <div class="low-wage-worker-actions">
+                    <span class="low-wage-current-badge" style="${badgeStyle}">${formatMoney(totalAdv)} ج.م</span>
+                    <button type="button" class="workers-btn workers-btn-outline workers-btn-small" data-action="open-worker-advance-details" data-id="${w.id}">
+                        <i class="fas fa-hand-holding-dollar"></i> التفاصيل
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openTotalAdvancesModal() {
+    renderTotalAdvancesList();
+    openModal('totalAdvancesModal');
+    const searchInput = document.getElementById('totalAdvancesSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        setTimeout(() => searchInput.focus(), 80);
+    }
+}
+
 function updateSmartAttendancePreview() {
     const previewEl = document.getElementById('smartAttendancePreview');
     if (!previewEl) return;
+
+    checkExistingDayAttendance();
 
     const presentRaw = document.getElementById('smartPresentNamesInput')?.value || '';
     const fullOvertimeRaw = document.getElementById('smartFullOvertimeNamesInput')?.value || '';
@@ -1970,6 +2192,8 @@ function updateSmartAttendancePreview() {
         previewEl.innerHTML = '';
         return;
     }
+
+    const isOvertimeOnly = !presentNames.length && (fullOvertimeNames.length > 0 || halfOvertimeNames.length > 0);
 
     const matchedPresent = new Map();
     const unrecognized = [];
@@ -2010,31 +2234,51 @@ function updateSmartAttendancePreview() {
         if (matchedHalf.has(id)) combinedCount++;
     });
 
-    const absentCount = Math.max(0, activeRows.length - matchedPresent.size);
-
     previewEl.classList.remove('hidden');
-    previewEl.innerHTML = `
-        <div class="smart-preview-summary">
-            <span class="preview-badge badge-present"><i class="fas fa-check-circle"></i> حاضرون: ${matchedPresent.size}</span>
-            <span class="preview-badge badge-overtime-full"><i class="fas fa-moon"></i> سهرة كاملة: ${matchedFull.size}</span>
-            <span class="preview-badge badge-overtime-half"><i class="fas fa-cloud-moon"></i> نصف سهرة: ${matchedHalf.size}</span>
-            ${combinedCount > 0 ? `<span class="preview-badge badge-overtime-combined" style="background: rgba(168, 85, 247, 0.12); color: #7e22ce;"><i class="fas fa-star"></i> يوم ونصف (سهرة + نصف): ${combinedCount}</span>` : ''}
-            ${absentCount === 0 ? `
-                <span class="preview-badge badge-absent-zero" id="smartAbsentPreviewBadge" role="button" tabindex="0" title="اكتمال الحضور - انقر لعرض التفاصيل"><i class="fas fa-circle-check"></i> اكتمال الحضور (0 غياب) 🎉</span>
-            ` : `
-                <span class="preview-badge badge-absent" id="smartAbsentPreviewBadge" role="button" tabindex="0" title="انقر لعرض قائمة العمال الغائبين بالتفصيل"><i class="fas fa-user-xmark"></i> غياب: ${absentCount} <i class="fas fa-up-right-from-square" style="font-size: 0.72rem; margin-right: 4px; opacity: 0.85;"></i></span>
-            `}
-        </div>
-        ${unrecognized.length ? `
-            <div class="smart-preview-warning">
-                <i class="fas fa-exclamation-triangle"></i>
-                <div>
-                    <strong>أسماء لم يتم التعرف عليها (${unrecognized.length}):</strong>
-                    <span>${unrecognized.map(escapeHtml).join('، ')}</span>
-                </div>
+
+    if (isOvertimeOnly) {
+        previewEl.innerHTML = `
+            <div class="smart-preview-summary">
+                <span class="preview-badge" style="background: rgba(59, 130, 246, 0.14); color: #2563eb;"><i class="fas fa-layer-group"></i> وضع تحديث السهرات فقط (يحفظ الحضور السابق)</span>
+                <span class="preview-badge badge-overtime-full"><i class="fas fa-moon"></i> سهرة كاملة: ${matchedFull.size}</span>
+                <span class="preview-badge badge-overtime-half"><i class="fas fa-cloud-moon"></i> نصف سهرة: ${matchedHalf.size}</span>
+                ${combinedCount > 0 ? `<span class="preview-badge badge-overtime-combined" style="background: rgba(168, 85, 247, 0.12); color: #7e22ce;"><i class="fas fa-star"></i> يوم ونصف (سهرة + نصف): ${combinedCount}</span>` : ''}
             </div>
-        ` : ''}
-    `;
+            ${unrecognized.length ? `
+                <div class="smart-preview-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong>أسماء لم يتم التعرف عليها (${unrecognized.length}):</strong>
+                        <span>${unrecognized.map(escapeHtml).join('، ')}</span>
+                    </div>
+                </div>
+            ` : ''}
+        `;
+    } else {
+        const absentCount = Math.max(0, activeRows.length - matchedPresent.size);
+        previewEl.innerHTML = `
+            <div class="smart-preview-summary">
+                <span class="preview-badge badge-present"><i class="fas fa-check-circle"></i> حاضرون: ${matchedPresent.size}</span>
+                <span class="preview-badge badge-overtime-full"><i class="fas fa-moon"></i> سهرة كاملة: ${matchedFull.size}</span>
+                <span class="preview-badge badge-overtime-half"><i class="fas fa-cloud-moon"></i> نصف سهرة: ${matchedHalf.size}</span>
+                ${combinedCount > 0 ? `<span class="preview-badge badge-overtime-combined" style="background: rgba(168, 85, 247, 0.12); color: #7e22ce;"><i class="fas fa-star"></i> يوم ونصف (سهرة + نصف): ${combinedCount}</span>` : ''}
+                ${absentCount === 0 ? `
+                    <span class="preview-badge badge-absent-zero" id="smartAbsentPreviewBadge" role="button" tabindex="0" title="اكتمال الحضور - انقر لعرض التفاصيل"><i class="fas fa-circle-check"></i> اكتمال الحضور (0 غياب) 🎉</span>
+                ` : `
+                    <span class="preview-badge badge-absent" id="smartAbsentPreviewBadge" role="button" tabindex="0" title="انقر لعرض قائمة العمال الغائبين بالتفصيل"><i class="fas fa-user-xmark"></i> غياب: ${absentCount} <i class="fas fa-up-right-from-square" style="font-size: 0.72rem; margin-right: 4px; opacity: 0.85;"></i></span>
+                `}
+            </div>
+            ${unrecognized.length ? `
+                <div class="smart-preview-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong>أسماء لم يتم التعرف عليها (${unrecognized.length}):</strong>
+                        <span>${unrecognized.map(escapeHtml).join('، ')}</span>
+                    </div>
+                </div>
+            ` : ''}
+        `;
+    }
 
     const absentModal = document.getElementById('absentWorkersModal');
     if (absentModal && !absentModal.classList.contains('hidden')) {
@@ -2067,15 +2311,17 @@ async function applySmartAttendance() {
         return;
     }
 
+    const isOvertimeOnly = !presentNames.length && (fullOvertimeNames.length > 0 || halfOvertimeNames.length > 0);
+
     const activeRows = state.rows.filter((r) => state.includeArchived ? true : r.is_active);
 
-    const matchedPresentIds = new Set();
+    const matchedDayPresentIds = new Set();
     const unrecognized = [];
 
     presentNames.forEach((name) => {
         const worker = findWorkerByName(name, activeRows);
         if (worker) {
-            matchedPresentIds.add(worker.id);
+            matchedDayPresentIds.add(worker.id);
         } else if (!unrecognized.includes(name)) {
             unrecognized.push(name);
         }
@@ -2086,7 +2332,6 @@ async function applySmartAttendance() {
         const worker = findWorkerByName(name, activeRows);
         if (worker) {
             matchedFullIds.add(worker.id);
-            matchedPresentIds.add(worker.id);
         } else if (!unrecognized.includes(name)) {
             unrecognized.push(name);
         }
@@ -2097,7 +2342,6 @@ async function applySmartAttendance() {
         const worker = findWorkerByName(name, activeRows);
         if (worker) {
             matchedHalfIds.add(worker.id);
-            matchedPresentIds.add(worker.id);
         } else if (!unrecognized.includes(name)) {
             unrecognized.push(name);
         }
@@ -2114,30 +2358,58 @@ async function applySmartAttendance() {
     const dayLabel = dayObj ? dayObj.label : selectedDayKey;
 
     if (existingCount > 0) {
-        const htmlMsg = `
-            <div class="smart-confirm-content">
-                <div class="smart-confirm-banner warning">
-                    <i class="fas fa-calendar-check"></i>
-                    <div>
-                        <strong>يوم (${escapeHtml(dayLabel)}) مسجل به حضور بالفعل</strong>
-                        <span>يحتوي هذا اليوم حالياً على (${existingCount}) عامل مسجلين كحضور.</span>
+        if (isOvertimeOnly) {
+            const htmlMsg = `
+                <div class="smart-confirm-content">
+                    <div class="smart-confirm-banner" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #2563eb;">
+                        <i class="fas fa-layer-group"></i>
+                        <div>
+                            <strong>تحديث سهرات يوم (${escapeHtml(dayLabel)})</strong>
+                            <span>يحتوي هذا اليوم حالياً على (${existingCount}) عامل مسجلين كحضور.</span>
+                        </div>
                     </div>
+                    <p class="smart-confirm-text">سيتم <strong>إضافة وتحديث السهرات</strong> للعمال المحددين (${matchedFullIds.size + matchedHalfIds.size} عامل) مع <strong>الحفاظ الكامل</strong> على حضور باقي عمال اليوم دون تعديلهم.</p>
+                    <div class="smart-confirm-question">هل ترغب في تطبيق هذه السهرات على الجدول؟</div>
                 </div>
-                <p class="smart-confirm-text">تطبيق البيانات الجديدة سيقوم <strong>بتحديث واستبدال</strong> كشف الحضور لهذا اليوم بالأسماء المدخلة حالياً.</p>
-                <div class="smart-confirm-question">هل أنت متأكد من رغبتك في المتابعة واستبدال حضور هذا اليوم؟</div>
-            </div>
-        `;
-        const confirmed = typeof window.showConfirmDialog === 'function'
-            ? await window.showConfirmDialog(htmlMsg, {
-                title: 'تنبيه استبدال الحضور السابق',
-                confirmText: 'نعم، استبدال وتطبيق',
-                cancelText: 'تراجع',
-                isHtml: true
-            })
-            : window.confirm(`تنبيه: يوم (${dayLabel}) يحتوي بالفعل على (${existingCount}) عامل مسجلين كحضور. هل تريد الاستبدال؟`);
+            `;
+            const confirmed = typeof window.showConfirmDialog === 'function'
+                ? await window.showConfirmDialog(htmlMsg, {
+                    title: 'تأكيد إضافة السهرات',
+                    confirmText: 'نعم، تطبيق السهرات',
+                    cancelText: 'تراجع',
+                    isHtml: true
+                })
+                : window.confirm(`تأكيد: إضافة السهرات لعمال يوم (${dayLabel}) مع الحفاظ على الحضور المسجل؟`);
 
-        if (!confirmed) {
-            return;
+            if (!confirmed) {
+                return;
+            }
+        } else {
+            const htmlMsg = `
+                <div class="smart-confirm-content">
+                    <div class="smart-confirm-banner warning">
+                        <i class="fas fa-calendar-check"></i>
+                        <div>
+                            <strong>يوم (${escapeHtml(dayLabel)}) مسجل به حضور بالفعل</strong>
+                            <span>يحتوي هذا اليوم حالياً على (${existingCount}) عامل مسجلين كحضور.</span>
+                        </div>
+                    </div>
+                    <p class="smart-confirm-text">تطبيق البيانات الجديدة سيقوم <strong>بتحديث واستبدال</strong> كشف الحضور لهذا اليوم بالأسماء المدخلة حالياً.</p>
+                    <div class="smart-confirm-question">هل أنت متأكد من رغبتك في المتابعة واستبدال حضور هذا اليوم؟</div>
+                </div>
+            `;
+            const confirmed = typeof window.showConfirmDialog === 'function'
+                ? await window.showConfirmDialog(htmlMsg, {
+                    title: 'تنبيه استبدال الحضور السابق',
+                    confirmText: 'نعم، استبدال وتطبيق',
+                    cancelText: 'تراجع',
+                    isHtml: true
+                })
+                : window.confirm(`تنبيه: يوم (${dayLabel}) يحتوي بالفعل على (${existingCount}) عامل مسجلين كحضور. هل تريد الاستبدال؟`);
+
+            if (!confirmed) {
+                return;
+            }
         }
     }
 
@@ -2177,43 +2449,146 @@ async function applySmartAttendance() {
 
     const isNewLogic = state.weekStart >= '2026-07-11';
     let appliedCount = 0;
+    let overtimeUpdatedCount = 0;
 
     rowElements.forEach((rowElement) => {
         const workerId = Number(rowElement.dataset.workerId);
         const cell = rowElement.querySelector(`.attendance-day-cell[data-day="${selectedDayKey}"]`);
         if (!cell) return;
 
-        const isPresent = matchedPresentIds.has(workerId);
-        let duration = 0;
-        if (isPresent) {
+        const checkbox = cell.querySelector('.attendance-check');
+        const wasPresent = Boolean(checkbox?.checked);
+
+        if (isOvertimeOnly) {
             const hasFull = matchedFullIds.has(workerId);
             const hasHalf = matchedHalfIds.has(workerId);
-            if (hasFull && hasHalf) {
-                duration = 1.5;
-            } else if (hasFull) {
-                duration = 1;
-            } else if (hasHalf) {
-                duration = 0.5;
-            } else {
-                duration = isNewLogic ? 0 : 1;
+
+            if (hasFull || hasHalf) {
+                const baseSelect = cell.querySelector('.attendance-base-duration');
+                const durationSelect = cell.querySelector('.attendance-duration');
+
+                if (wasPresent) {
+                    let duration = 0;
+                    if (hasFull && hasHalf) {
+                        duration = 1.5;
+                    } else if (hasFull) {
+                        duration = 1;
+                    } else if (hasHalf) {
+                        duration = 0.5;
+                    }
+
+                    if (durationSelect) {
+                        durationSelect.value = String(duration);
+                    }
+                } else {
+                    applyAttendanceCellState(cell, true);
+                    if (isNewLogic) {
+                        if (hasFull && hasHalf) {
+                            if (baseSelect) baseSelect.value = '1';
+                            if (durationSelect) durationSelect.value = '0.5';
+                        } else if (hasFull) {
+                            if (baseSelect) baseSelect.value = '1';
+                            if (durationSelect) durationSelect.value = '0';
+                        } else if (hasHalf) {
+                            if (baseSelect) baseSelect.value = '0.5';
+                            if (durationSelect) durationSelect.value = '0';
+                        }
+                    } else {
+                        let duration = 0;
+                        if (hasFull && hasHalf) {
+                            duration = 1.5;
+                        } else if (hasFull) {
+                            duration = 1;
+                        } else if (hasHalf) {
+                            duration = 0.5;
+                        }
+                        if (durationSelect) {
+                            durationSelect.value = String(duration);
+                        }
+                    }
+                }
+
+                updateRowCalculations(rowElement);
+                syncAttendanceStateFromRow(rowElement);
+                overtimeUpdatedCount += 1;
             }
+            if (wasPresent || hasFull || hasHalf) {
+                appliedCount += 1;
+            }
+        } else {
+            const isDayPresent = matchedDayPresentIds.has(workerId);
+            const hasFull = matchedFullIds.has(workerId);
+            const hasHalf = matchedHalfIds.has(workerId);
+            const isPresent = isDayPresent || hasFull || hasHalf;
+
+            applyAttendanceCellState(cell, isPresent);
+
+            const baseSelect = cell.querySelector('.attendance-base-duration');
+            const durationSelect = cell.querySelector('.attendance-duration');
+
+            if (!isPresent) {
+                if (baseSelect) baseSelect.value = '1';
+                if (durationSelect) durationSelect.value = '0';
+            } else if (isDayPresent) {
+                if (baseSelect) {
+                    baseSelect.value = String(baseDuration);
+                }
+                let duration = 0;
+                if (isNewLogic) {
+                    if (hasFull && hasHalf) {
+                        duration = 1.5;
+                    } else if (hasFull) {
+                        duration = 1;
+                    } else if (hasHalf) {
+                        duration = 0.5;
+                    } else {
+                        duration = 0;
+                    }
+                } else {
+                    if (hasFull && hasHalf) {
+                        duration = 1.5;
+                    } else if (hasFull) {
+                        duration = 1;
+                    } else if (hasHalf) {
+                        duration = 0.5;
+                    } else {
+                        duration = 1;
+                    }
+                }
+                if (durationSelect) {
+                    durationSelect.value = String(duration);
+                }
+            } else {
+                if (isNewLogic) {
+                    if (hasFull && hasHalf) {
+                        if (baseSelect) baseSelect.value = '1';
+                        if (durationSelect) durationSelect.value = '0.5';
+                    } else if (hasFull) {
+                        if (baseSelect) baseSelect.value = '1';
+                        if (durationSelect) durationSelect.value = '0';
+                    } else if (hasHalf) {
+                        if (baseSelect) baseSelect.value = '0.5';
+                        if (durationSelect) durationSelect.value = '0';
+                    }
+                } else {
+                    let duration = 0;
+                    if (hasFull && hasHalf) {
+                        duration = 1.5;
+                    } else if (hasFull) {
+                        duration = 1;
+                    } else if (hasHalf) {
+                        duration = 0.5;
+                    }
+                    if (durationSelect) {
+                        durationSelect.value = String(duration);
+                    }
+                }
+            }
+
+            updateRowCalculations(rowElement);
+            syncAttendanceStateFromRow(rowElement);
+            if (isPresent) appliedCount += 1;
         }
-
-        applyAttendanceCellState(cell, isPresent);
-
-        const baseSelect = cell.querySelector('.attendance-base-duration');
-        if (baseSelect) {
-            baseSelect.value = isPresent ? String(baseDuration) : '1';
-        }
-
-        const durationSelect = cell.querySelector('.attendance-duration');
-        if (durationSelect) {
-            durationSelect.value = isPresent ? String(duration) : '0';
-        }
-
-        updateRowCalculations(rowElement);
-        syncAttendanceStateFromRow(rowElement);
-        if (isPresent) appliedCount += 1;
     });
 
     updateSummaryFromTable();
@@ -2221,11 +2596,15 @@ async function applySmartAttendance() {
 
     closeModal('smartAttendanceModal');
 
-    let msg = `تم تطبيق حضور يوم ${dayLabel}: (${appliedCount}) حاضر، (${Math.max(0, rowElements.length - appliedCount)}) غائب`;
-    if (matchedFullIds.size > 0 || matchedHalfIds.size > 0) {
-        msg += ` | السهرات: (${matchedFullIds.size + matchedHalfIds.size})`;
+    if (isOvertimeOnly) {
+        showMessage(`تم تحديث سهرات يوم ${dayLabel} بنجاح: (${overtimeUpdatedCount}) عامل بسهرة، مع الحفاظ على حضور باقي العمال`, 'success');
+    } else {
+        let msg = `تم تطبيق حضور يوم ${dayLabel}: (${appliedCount}) حاضر، (${Math.max(0, rowElements.length - appliedCount)}) غائب`;
+        if (matchedFullIds.size > 0 || matchedHalfIds.size > 0) {
+            msg += ` | السهرات: (${matchedFullIds.size + matchedHalfIds.size})`;
+        }
+        showMessage(msg, 'success');
     }
-    showMessage(msg, 'success');
 
     if (unrecognized.length > 0) {
         setTimeout(() => {
@@ -2331,6 +2710,25 @@ function bindEvents() {
 
     document.getElementById('weekHistorySelect').addEventListener('change', (event) => {
         if (event.target.value) changeWeek(event.target.value);
+    });
+
+    document.getElementById('weekHistoryDropdownBtn')?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleWeekHistoryDropdown();
+    });
+
+    document.getElementById('weekHistoryDropdownMenu')?.addEventListener('click', (event) => {
+        const item = event.target.closest('.dropdown-item');
+        if (item && item.dataset.week) {
+            closeWeekHistoryDropdown();
+            changeWeek(item.dataset.week);
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('#weekHistoryDropdown')) {
+            closeWeekHistoryDropdown();
+        }
     });
 
     document.getElementById('previousWeekBtn').addEventListener('click', () => changeWeek(addDays(state.weekStart, -7)));
@@ -2548,8 +2946,39 @@ function bindEvents() {
         }
     });
 
+    document.getElementById('totalAdvancesCard')?.addEventListener('click', () => {
+        openTotalAdvancesModal();
+    });
+
+    document.getElementById('totalAdvancesSearchInput')?.addEventListener('input', () => {
+        renderTotalAdvancesList();
+    });
+
+    document.getElementById('totalAdvancesFilterSelect')?.addEventListener('change', () => {
+        renderTotalAdvancesList();
+    });
+
+    document.getElementById('totalAdvancesModal')?.addEventListener('click', (event) => {
+        const detailsBtn = event.target.closest('[data-action="open-worker-advance-details"]');
+        if (detailsBtn) {
+            const workerId = Number(detailsBtn.dataset.id);
+            if (workerId) {
+                closeModal('totalAdvancesModal');
+                openAdvanceModal(workerId);
+            }
+        }
+    });
+
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
+        if (!document.getElementById('weekHistoryDropdownMenu')?.classList.contains('hidden')) {
+            closeWeekHistoryDropdown();
+            return;
+        }
+        if (!document.getElementById('totalAdvancesModal')?.classList.contains('hidden')) {
+            closeModal('totalAdvancesModal');
+            return;
+        }
         if (!document.getElementById('lowWageWorkersModal')?.classList.contains('hidden')) {
             closeModal('lowWageWorkersModal');
             return;

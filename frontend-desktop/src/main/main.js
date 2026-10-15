@@ -538,7 +538,7 @@ async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceI
                 p_device_id: deviceId,
                 p_device_name: process.env.COMPUTERNAME || 'Windows-Desktop-POS',
                 p_public_key: publicKeyBase64,
-                p_desktop_version: desktopVersion || (app.getVersion ? app.getVersion() : '10.1.5'),
+                p_desktop_version: desktopVersion || (app.getVersion ? app.getVersion() : '10.1.6'),
                 p_enrollment_token: token || null
             }),
             signal: AbortSignal.timeout(6000)
@@ -628,7 +628,7 @@ ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
                 data.companyName,
                 identity.deviceId,
                 identity.publicKeyBase64,
-                app.getVersion ? app.getVersion() : '10.1.5'
+                app.getVersion ? app.getVersion() : '10.1.6'
             ).catch(() => {});
         }
         return { success: true };
@@ -658,7 +658,7 @@ ipcMain.handle('submit-enrollment-token', async (_event, token) => {
                 compName,
                 identity.deviceId,
                 identity.publicKeyBase64,
-                app.getVersion ? app.getVersion() : '10.1.5',
+                app.getVersion ? app.getVersion() : '10.1.6',
                 cleanToken
             );
             return regResult || { success: false, error: 'تعذر الاتصال بالسحابة' };
@@ -768,7 +768,7 @@ function startBackgroundSyncEngine() {
                 let generatedDelta = false;
                 if (!syncEngineInstance.hasPendingOutbox()) {
                     const nextSeq = syncEngineInstance.getNextSeqNo();
-                    const delta = syncEngineInstance.detectDeltaEvents(nextSeq);
+                    const delta = syncEngineInstance.detectDeltaEvents(nextSeq, Boolean(isManual));
                     if (delta.events && delta.events.length > 0) {
                         generatedDelta = true;
                         syncEngineInstance.queueDeltaBatch(nextSeq, delta.events, delta.projection);
@@ -910,7 +910,7 @@ function startBackgroundSyncEngine() {
             companyId: null,
             deviceId: null,
             companyName: null,
-            desktopVersion: (app.getVersion ? app.getVersion() : '10.1.5'),
+            desktopVersion: (app.getVersion ? app.getVersion() : '10.1.6'),
             severity: 'error',
             module: 'sync_init',
             errorMessage: err.message,

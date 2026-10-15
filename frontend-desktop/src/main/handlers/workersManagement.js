@@ -595,10 +595,11 @@ function register() {
                         } else if (pettyExpenseId) {
                             const existingExpense = db.prepare('SELECT id, treasury_transaction_id FROM petty_expenses WHERE id = ?').get(pettyExpenseId);
                             if (existingExpense) {
+                                db.prepare('UPDATE petty_expenses SET treasury_transaction_id = NULL WHERE id = ?').run(existingExpense.id);
+                                db.prepare('DELETE FROM petty_expenses WHERE id = ?').run(existingExpense.id);
                                 if (existingExpense.treasury_transaction_id) {
                                     db.prepare('DELETE FROM treasury_transactions WHERE id = ?').run(existingExpense.treasury_transaction_id);
                                 }
-                                db.prepare('DELETE FROM petty_expenses WHERE id = ?').run(existingExpense.id);
                             }
                             pettyExpenseId = null;
                         }

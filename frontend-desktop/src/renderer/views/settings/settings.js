@@ -19,21 +19,25 @@ const SETTINGS_TRACKING_FIELDS = [
     { key: 'profileImage', label: 'الشعار' }
 ];
 const CURRENT_CHANGELOG = {
-    version: '10.1.5',
-    title: 'ما الجديد في التحديث الجديد (v10.1.5)',
-    intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار 10.1.5 بنجاح. إليك أهم التحسينات والإصلاحات في هذا الإصدار:',
+    version: '10.1.6',
+    title: 'ما الجديد في التحديث الجديد (v10.1.6)',
+    intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار 10.1.6 بنجاح. إليك أهم التحسينات والإصلاحات في هذا الإصدار:',
     items: [
         {
-            title: 'إصلاح وتعزيز النسخ الاحتياطي السحابي',
-            desc: 'معالجة مشكلة رفع النسخة الاحتياطية إلى السحابة وربط التوقيع الرقمي المشفر مع بوابة الأمان لضمان حفظ النسخ السحابية بنجاح تام وبشكل فوري.'
+            title: 'دقة المزامنة الفورية والتفاضلية للأطراف',
+            desc: 'تطوير رصد التغييرات وتشفير بصمة الأطراف لضمان مزامنة أي تعديل على أسماء وبيانات العملاء والموردين فوراً حتى لو كان حرفاً واحداً، وتفعيل الفحص الإجباري الفوري.'
         },
         {
-            title: 'تحسينات شاشات التحميل ومؤشر التقدم',
-            desc: 'ضمان استقرار شاشة البداية وعرض مؤشر التقدم بدقة وانسيابية عالية عند فتح النظام مع منع الوميض أو الشاشات البيضاء.'
+            title: 'تطوير إدارة العمال وحسابات الشيفتات والسُلف',
+            desc: 'تحسين احتساب الأيام والشيفتات للعمال، وضبط السُلف الإجمالية وإمكانية استعراض التفاصيل بدقة، واختيار اليوم المستهدف تلقائياً، وتحديث قائمة أرشيف الأسابيع التفاعلية.'
         },
         {
-            title: 'تحصينات أمنية واستقرار النظام',
-            desc: 'تشفير وحماية العمليات الداخلية للنظام وحماية البيانات ضد الثغرات وتأمين مفاتيح التشفير المحلية.'
+            title: 'تحصينات أمنية متقدمة للتراخيص وربط العتاد',
+            desc: 'إلزام ربط الأجهزة بجميع أنواع التراخيص حتى في وضع عدم الاتصال (الأوفلاين)، وتأمين النظام ضد محاولات النقل غير المصرح بها أو التلاعب بالساعة.'
+        },
+        {
+            title: 'تحسينات واجهة المستخدم والمتابعة المالية',
+            desc: 'إضافة علامات التحقق الخضراء للفواتير والأقساط المسددة بالكامل في شاشة تحت التحصيل، وتحسين التوافق مع الوضع الليلي (Dark Mode).'
         }
     ]
 };
@@ -856,6 +860,19 @@ async function loadLicenseStatusCard() {
                 statusTextEl.textContent = 'اشتراك رسمي نشط';
             }
         }
+
+        const renewBtn = document.getElementById('openRenewModalBtn');
+        const machineSection = document.querySelector('.license-machine-section');
+        const renewModal = document.getElementById('renewLicenseModal');
+        if (isLifetime) {
+            if (renewBtn) renewBtn.style.display = 'none';
+            if (machineSection) machineSection.style.display = 'none';
+            if (renewModal) renewModal.style.display = 'none';
+        } else {
+            if (renewBtn) renewBtn.style.display = '';
+            if (machineSection) machineSection.style.display = '';
+            if (renewModal) renewModal.style.display = '';
+        }
     } catch (_) {
     }
 }
@@ -1436,7 +1453,7 @@ async function handleBackup() {
         const cloudError = result.cloud && result.cloud.error
             ? result.cloud.error
             : 'تعذر رفع النسخة للسحابة.';
-        setStatus(backupStatusEl, `${localBackupMessage} (فشل الحفظ السحابي: ${cloudError})`);
+        setStatus(backupStatusEl, `${localBackupMessage} (فشل الحفظ السحابي: ${cloudError})`, true);
         if (window.showToast && typeof window.showToast === 'function') {
             window.showToast(`تم الحفظ المحلي بنجاح، لكن فشل الحفظ السحابي: ${cloudError}`, 'warning');
         } else if (window.toast && typeof window.toast.error === 'function') {

@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 let Database;
 try {
     if (process.versions && process.versions.electron) {
@@ -378,7 +379,18 @@ class SyncEngine {
                     (SELECT COALESCE(SUM(total), 0) FROM local_sales) AS ls_sum
             `).get();
 
-            return `${stats.pl_cnt}_${stats.pl_max}_${stats.pl_sum}_${stats.p_cnt}_${stats.p_max}_${stats.p_content_sum}_${stats.si_cnt}_${stats.si_max}_${stats.si_sum}_${stats.pi_cnt}_${stats.pi_max}_${stats.pi_sum}_${stats.tt_cnt}_${stats.tt_max}_${stats.ls_cnt}_${stats.ls_max}_${stats.ls_sum}`;
+            let partyContentHash = '';
+            const partyRows = this.accountingDb.prepare("SELECT id, code, name, phone, address, type, ROUND(balance, 2) AS b FROM parties ORDER BY id ASC").all();
+            if (partyRows && partyRows.length > 0) {
+                const hasher = crypto.createHash('md5');
+                for (let i = 0; i < partyRows.length; i++) {
+                    const p = partyRows[i];
+                    hasher.update(`${p.id}|${p.code || ''}|${p.name || ''}|${p.phone || ''}|${p.address || ''}|${p.type || ''}|${p.b || 0}~`);
+                }
+                partyContentHash = hasher.digest('hex');
+            }
+
+            return `${stats.pl_cnt}_${stats.pl_max}_${stats.pl_sum}_${stats.p_cnt}_${stats.p_max}_${stats.p_content_sum}_${partyContentHash}_${stats.si_cnt}_${stats.si_max}_${stats.si_sum}_${stats.pi_cnt}_${stats.pi_max}_${stats.pi_sum}_${stats.tt_cnt}_${stats.tt_max}_${stats.ls_cnt}_${stats.ls_max}_${stats.ls_sum}`;
         } catch (_) {
             return null;
         }

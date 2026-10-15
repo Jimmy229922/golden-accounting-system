@@ -130,7 +130,7 @@ async function syncLicenseWithCloud(companyId, companyName, machineId, desktopVe
                 p_company_id: companyId,
                 p_company_name: companyName || null,
                 p_machine_id: machineId || '',
-                p_desktop_version: desktopVersion || '10.1.5',
+                p_desktop_version: desktopVersion || '10.1.6',
                 p_trial_days: INVITE_DURATION_DAYS
             }),
             signal: controller.signal
@@ -207,7 +207,7 @@ async function getLicenseStatus(accountingDb) {
     let licenseStatus = map.license_status || (isLegacyClient(accountingDb, map) ? 'lifetime' : 'trial');
     let expiresAt = map.invite_expiry ? new Date(map.invite_expiry) : new Date();
 
-    const appVersion = (app && app.getVersion) ? app.getVersion() : '10.1.5';
+    const appVersion = (app && app.getVersion) ? app.getVersion() : '10.1.6';
 
     const gatewayRes = await callLicenseGateway('check', {
         company_id: map.company_id,
@@ -427,7 +427,7 @@ async function getLicenseStatus(accountingDb) {
         };
     }
 
-    if (!isLegacyClient(accountingDb, map) && licenseStatus !== 'lifetime' && map.bound_machine_id && map.bound_machine_id !== machineId) {
+    if (!isLegacyClient(accountingDb, map) && map.bound_machine_id && map.bound_machine_id !== machineId) {
         return {
             valid: false,
             status: 'unauthorized_device',
@@ -484,6 +484,10 @@ function isLicenseCurrentlyValid(accountingDb) {
         try {
             const cert = JSON.parse(map.license_certificate);
             if (verifyServerCertificate(cert, map.license_signature) && cert.company_id === map.company_id) {
+                const currentMid = getMachineId();
+                if (!isLegacyClient(accountingDb, map) && cert.machine_id && cert.machine_id !== currentMid) {
+                    return false;
+                }
                 if (cert.status === 'suspended') return false;
                 if (cert.status === 'lifetime') return true;
                 const now = new Date();
