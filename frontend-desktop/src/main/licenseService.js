@@ -130,7 +130,7 @@ async function syncLicenseWithCloud(companyId, companyName, machineId, desktopVe
                 p_company_id: companyId,
                 p_company_name: companyName || null,
                 p_machine_id: machineId || '',
-                p_desktop_version: desktopVersion || '10.1.7',
+                p_desktop_version: desktopVersion || '10.1.8',
                 p_trial_days: INVITE_DURATION_DAYS
             }),
             signal: controller.signal
@@ -207,7 +207,7 @@ async function getLicenseStatus(accountingDb) {
     let licenseStatus = map.license_status || (isLegacyClient(accountingDb, map) ? 'lifetime' : 'trial');
     let expiresAt = map.invite_expiry ? new Date(map.invite_expiry) : new Date();
 
-    const appVersion = (app && app.getVersion) ? app.getVersion() : '10.1.7';
+    const appVersion = (app && app.getVersion) ? app.getVersion() : '10.1.8';
 
     const gatewayRes = await callLicenseGateway('check', {
         company_id: map.company_id,

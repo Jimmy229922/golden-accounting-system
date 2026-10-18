@@ -660,25 +660,25 @@ function initDB() {
             daily_wage REAL NOT NULL DEFAULT 0 CHECK (daily_wage >= 0),
             saturday_present INTEGER NOT NULL DEFAULT 0 CHECK (saturday_present IN (0, 1)),
             saturday_base_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_base_duration IN (0, 0.5, 1)),
-            saturday_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_duration IN (0, 0.5, 1, 1.5)),
+            saturday_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
             sunday_present INTEGER NOT NULL DEFAULT 0 CHECK (sunday_present IN (0, 1)),
             sunday_base_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_base_duration IN (0, 0.5, 1)),
-            sunday_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_duration IN (0, 0.5, 1, 1.5)),
+            sunday_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
             monday_present INTEGER NOT NULL DEFAULT 0 CHECK (monday_present IN (0, 1)),
             monday_base_duration REAL NOT NULL DEFAULT 0 CHECK (monday_base_duration IN (0, 0.5, 1)),
-            monday_duration REAL NOT NULL DEFAULT 0 CHECK (monday_duration IN (0, 0.5, 1, 1.5)),
+            monday_duration REAL NOT NULL DEFAULT 0 CHECK (monday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
             tuesday_present INTEGER NOT NULL DEFAULT 0 CHECK (tuesday_present IN (0, 1)),
             tuesday_base_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_base_duration IN (0, 0.5, 1)),
-            tuesday_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_duration IN (0, 0.5, 1, 1.5)),
+            tuesday_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
             wednesday_present INTEGER NOT NULL DEFAULT 0 CHECK (wednesday_present IN (0, 1)),
             wednesday_base_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_base_duration IN (0, 0.5, 1)),
-            wednesday_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_duration IN (0, 0.5, 1, 1.5)),
+            wednesday_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
             thursday_present INTEGER NOT NULL DEFAULT 0 CHECK (thursday_present IN (0, 1)),
             thursday_base_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_base_duration IN (0, 0.5, 1)),
-            thursday_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_duration IN (0, 0.5, 1, 1.5)),
+            thursday_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
             friday_present INTEGER NOT NULL DEFAULT 0 CHECK (friday_present IN (0, 1)),
             friday_base_duration REAL NOT NULL DEFAULT 0 CHECK (friday_base_duration IN (0, 0.5, 1)),
-            friday_duration REAL NOT NULL DEFAULT 0 CHECK (friday_duration IN (0, 0.5, 1, 1.5)),
+            friday_duration REAL NOT NULL DEFAULT 0 CHECK (friday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT,
             UNIQUE (worker_id, week_start_date),
@@ -705,6 +705,74 @@ function initDB() {
         'worker_weekly_attendance',
         'petty_expense_id'
     );
+
+    try {
+        const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='worker_weekly_attendance'").get();
+        if (tableInfo && tableInfo.sql && !tableInfo.sql.includes(', 2,')) {
+            db.exec(`
+                PRAGMA foreign_keys = OFF;
+                CREATE TABLE IF NOT EXISTS worker_weekly_attendance_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    worker_id INTEGER NOT NULL,
+                    week_start_date TEXT NOT NULL,
+                    daily_wage REAL NOT NULL DEFAULT 0 CHECK (daily_wage >= 0),
+                    saturday_present INTEGER NOT NULL DEFAULT 0 CHECK (saturday_present IN (0, 1)),
+                    saturday_base_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_base_duration IN (0, 0.5, 1)),
+                    saturday_duration REAL NOT NULL DEFAULT 0 CHECK (saturday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
+                    sunday_present INTEGER NOT NULL DEFAULT 0 CHECK (sunday_present IN (0, 1)),
+                    sunday_base_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_base_duration IN (0, 0.5, 1)),
+                    sunday_duration REAL NOT NULL DEFAULT 0 CHECK (sunday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
+                    monday_present INTEGER NOT NULL DEFAULT 0 CHECK (monday_present IN (0, 1)),
+                    monday_base_duration REAL NOT NULL DEFAULT 0 CHECK (monday_base_duration IN (0, 0.5, 1)),
+                    monday_duration REAL NOT NULL DEFAULT 0 CHECK (monday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
+                    tuesday_present INTEGER NOT NULL DEFAULT 0 CHECK (tuesday_present IN (0, 1)),
+                    tuesday_base_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_base_duration IN (0, 0.5, 1)),
+                    tuesday_duration REAL NOT NULL DEFAULT 0 CHECK (tuesday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
+                    wednesday_present INTEGER NOT NULL DEFAULT 0 CHECK (wednesday_present IN (0, 1)),
+                    wednesday_base_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_base_duration IN (0, 0.5, 1)),
+                    wednesday_duration REAL NOT NULL DEFAULT 0 CHECK (wednesday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
+                    thursday_present INTEGER NOT NULL DEFAULT 0 CHECK (thursday_present IN (0, 1)),
+                    thursday_base_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_base_duration IN (0, 0.5, 1)),
+                    thursday_duration REAL NOT NULL DEFAULT 0 CHECK (thursday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
+                    friday_present INTEGER NOT NULL DEFAULT 0 CHECK (friday_present IN (0, 1)),
+                    friday_base_duration REAL NOT NULL DEFAULT 0 CHECK (friday_base_duration IN (0, 0.5, 1)),
+                    friday_duration REAL NOT NULL DEFAULT 0 CHECK (friday_duration IN (0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)),
+                    petty_expense_id INTEGER,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT,
+                    UNIQUE (worker_id, week_start_date),
+                    FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE RESTRICT
+                );
+                INSERT INTO worker_weekly_attendance_new (
+                    id, worker_id, week_start_date, daily_wage,
+                    saturday_present, saturday_base_duration, saturday_duration,
+                    sunday_present, sunday_base_duration, sunday_duration,
+                    monday_present, monday_base_duration, monday_duration,
+                    tuesday_present, tuesday_base_duration, tuesday_duration,
+                    wednesday_present, wednesday_base_duration, wednesday_duration,
+                    thursday_present, thursday_base_duration, thursday_duration,
+                    friday_present, friday_base_duration, friday_duration,
+                    petty_expense_id, created_at, updated_at
+                )
+                SELECT
+                    id, worker_id, week_start_date, daily_wage,
+                    saturday_present, COALESCE(saturday_base_duration, 1), saturday_duration,
+                    sunday_present, COALESCE(sunday_base_duration, 1), sunday_duration,
+                    monday_present, COALESCE(monday_base_duration, 1), monday_duration,
+                    tuesday_present, COALESCE(tuesday_base_duration, 1), tuesday_duration,
+                    wednesday_present, COALESCE(wednesday_base_duration, 1), wednesday_duration,
+                    thursday_present, COALESCE(thursday_base_duration, 1), thursday_duration,
+                    friday_present, COALESCE(friday_base_duration, 1), friday_duration,
+                    petty_expense_id, created_at, updated_at
+                FROM worker_weekly_attendance;
+                DROP TABLE worker_weekly_attendance;
+                ALTER TABLE worker_weekly_attendance_new RENAME TO worker_weekly_attendance;
+                CREATE INDEX IF NOT EXISTS idx_worker_weekly_attendance_week ON worker_weekly_attendance(week_start_date);
+                CREATE INDEX IF NOT EXISTS idx_worker_weekly_attendance_worker ON worker_weekly_attendance(worker_id);
+                PRAGMA foreign_keys = ON;
+            `);
+        }
+    } catch (_) {}
 
     try {
         db.prepare("UPDATE workers SET auto_transfer_to_petty = 1 WHERE name LIKE '%محمد منصور%'").run();

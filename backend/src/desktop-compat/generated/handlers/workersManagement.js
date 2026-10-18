@@ -10,7 +10,7 @@ const ATTENDANCE_DAYS = [
     'thursday',
     'friday'
 ];
-const ALLOWED_DURATIONS = new Set([0, 0.5, 1, 1.5]);
+const ALLOWED_DURATIONS = new Set([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]);
 const ALLOWED_BASE_DURATIONS = new Set([0.5, 1]);
 
 function roundMoney(value) {
@@ -117,7 +117,7 @@ function normalizeAttendanceEntry(entry = {}, weekStart = '') {
         const baseDuration = present ? Number(entry[`${day}_base_duration`]) : 0;
 
         if (present && !ALLOWED_DURATIONS.has(duration)) {
-            throw new Error('مدة العمل يجب أن تكون نصف يوم أو يومًا أو يومًا ونصف أو بدون إضافي');
+            throw new Error('مدة العمل يجب أن تكون من نصف يوم حتى 5 أيام إضافي أو بدون إضافي');
         }
 
         if (present && isNewLogic && !ALLOWED_BASE_DURATIONS.has(baseDuration)) {

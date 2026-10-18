@@ -257,7 +257,7 @@ function renderPage() {
                                 <th>#</th>
                                 <th>العامل / الوظيفة</th>
                                 <th>الأجر اليومي</th>
-                                ${ATTENDANCE_DAYS.map((day) => `<th>${day.label}</th>`).join('')}
+                                ${ATTENDANCE_DAYS.map((day) => `<th class="attendance-day-th">${day.label}</th>`).join('')}
                                 <th>إجمالي المدة</th>
                                 <th>إجمالي الأجر</th>
                                 <th>السُلف</th>
@@ -529,27 +529,41 @@ function getDurationLabel(duration, isNewLogic = false) {
     const val = Number(duration);
     if (isNewLogic) {
         if (val === 0) return 'بدون إضافي';
-        if (val === 0.5) return 'نصف يوم إضافي';
-        if (val === 1) return 'يوم كامل إضافي';
-        if (val === 1.5) return 'يوم ونصف إضافي';
+        if (val === 0.5) return '0.5 يوم إضافي';
+        if (val === 1) return '1 يوم كامل إضافي';
+        if (val === 1.5) return '1.5 يوم إضافي';
+        if (val === 2) return '2 يوم إضافي';
+        if (val === 2.5) return '2.5 يوم إضافي';
+        if (val === 3) return '3 أيام إضافي';
+        if (val === 3.5) return '3.5 أيام إضافي';
+        if (val === 4) return '4 أيام إضافي';
+        if (val === 4.5) return '4.5 أيام إضافي';
+        if (val === 5) return '5 أيام إضافي';
         return 'بدون إضافي';
     } else {
-        if (val === 0.5) return 'نصف يوم';
-        if (val === 1.5) return 'يوم ونصف';
-        return 'يوم كامل';
+        if (val === 0.5) return '0.5 يوم';
+        if (val === 1.5) return '1.5 يوم';
+        return '1 يوم كامل';
     }
 }
 
 function buildDurationOptions(selectedDuration, isNewLogic = false) {
     const options = isNewLogic ? [
         { value: 0, label: 'بدون إضافي' },
-        { value: 0.5, label: 'نصف يوم إضافي' },
-        { value: 1, label: 'يوم كامل إضافي' },
-        { value: 1.5, label: 'يوم ونصف إضافي' }
+        { value: 0.5, label: '0.5 يوم إضافي' },
+        { value: 1, label: '1 يوم كامل إضافي' },
+        { value: 1.5, label: '1.5 يوم إضافي' },
+        { value: 2, label: '2 يوم إضافي' },
+        { value: 2.5, label: '2.5 يوم إضافي' },
+        { value: 3, label: '3 أيام إضافي' },
+        { value: 3.5, label: '3.5 أيام إضافي' },
+        { value: 4, label: '4 أيام إضافي' },
+        { value: 4.5, label: '4.5 أيام إضافي' },
+        { value: 5, label: '5 أيام إضافي' }
     ] : [
-        { value: 0.5, label: 'نصف يوم' },
-        { value: 1, label: 'يوم كامل' },
-        { value: 1.5, label: 'يوم ونصف' }
+        { value: 0.5, label: '0.5 يوم' },
+        { value: 1, label: '1 يوم كامل' },
+        { value: 1.5, label: '1.5 يوم' }
     ];
     return options.map((option) => (
         `<option value="${option.value}" ${Number(selectedDuration) === option.value ? 'selected' : ''}>${option.label}</option>`
@@ -578,8 +592,9 @@ function buildAttendanceCell(row, day) {
     const attendance = row.attendance?.[day.key] || { present: false, base_duration: 1, duration: defaultDuration };
     const selectedBaseDuration = attendance.present ? (attendance.base_duration ?? 1) : 1;
     const selectedDuration = attendance.present ? (attendance.duration ?? defaultDuration) : defaultDuration;
+    const durationLabel = getDurationLabel(selectedDuration, isNewLogic);
     const printText = attendance.present
-        ? (isNewLogic ? `حضور - ${getBaseDurationLabel(selectedBaseDuration)} - ${getDurationLabel(selectedDuration, isNewLogic)}` : `حضور - ${getDurationLabel(selectedDuration, isNewLogic)}`)
+        ? (isNewLogic ? `حضور - ${getBaseDurationLabel(selectedBaseDuration)} - ${durationLabel}` : `حضور - ${durationLabel}`)
         : 'غياب';
 
     return `
@@ -591,7 +606,11 @@ function buildAttendanceCell(row, day) {
                         ${buildBaseDurationOptions(selectedBaseDuration)}
                     </select>
                 ` : ''}
-                <select class="workers-select attendance-duration" ${attendance.present ? '' : 'disabled'}>
+                <button type="button" class="workers-select attendance-duration-trigger" ${attendance.present ? '' : 'disabled'}>
+                    <span class="duration-label-text">${durationLabel}</span>
+                    <i class="fas fa-chevron-down duration-arrow"></i>
+                </button>
+                <select class="workers-select attendance-duration" style="display: none !important;" ${attendance.present ? '' : 'disabled'}>
                     ${buildDurationOptions(selectedDuration, isNewLogic)}
                 </select>
             </div>
@@ -601,6 +620,7 @@ function buildAttendanceCell(row, day) {
 }
 
 function renderRows() {
+    closeDurationDropdown();
     const body = document.getElementById('workersTableBody');
     if (!body) return;
 
@@ -707,6 +727,7 @@ function applyAttendanceCellState(cell, isPresent) {
     }
     const baseSelect = cell.querySelector('.attendance-base-duration');
     const select = cell.querySelector('.attendance-duration');
+    const trigger = cell.querySelector('.attendance-duration-trigger');
     if (baseSelect) {
         baseSelect.disabled = !isPresent;
     }
@@ -717,6 +738,9 @@ function applyAttendanceCellState(cell, isPresent) {
             select.value = '1';
         }
     }
+    if (trigger) {
+        trigger.disabled = !isPresent;
+    }
     cell.classList.toggle('is-present', isPresent);
     cell.classList.toggle('is-absent', !isPresent);
 }
@@ -726,12 +750,19 @@ function updateAttendancePrintText(cell) {
     const checkbox = cell.querySelector('.attendance-check');
     const baseSelect = cell.querySelector('.attendance-base-duration');
     const select = cell.querySelector('.attendance-duration');
+    const trigger = cell.querySelector('.attendance-duration-trigger');
     const printText = cell.querySelector('.print-attendance');
     if (!checkbox || !select || !printText) return;
 
     const isNewLogic = state.weekStart >= '2026-07-11';
+    const labelText = getDurationLabel(Number(select.value), isNewLogic);
+    const triggerLabel = trigger?.querySelector('.duration-label-text');
+    if (triggerLabel) {
+        triggerLabel.textContent = labelText;
+    }
+
     printText.textContent = checkbox.checked
-        ? (isNewLogic ? `حضور - ${getBaseDurationLabel(Number(baseSelect?.value) || 1)} - ${getDurationLabel(Number(select.value), isNewLogic)}` : `حضور - ${getDurationLabel(Number(select.value), isNewLogic)}`)
+        ? (isNewLogic ? `حضور - ${getBaseDurationLabel(Number(baseSelect?.value) || 1)} - ${labelText}` : `حضور - ${labelText}`)
         : 'غياب';
 }
 
@@ -1016,6 +1047,113 @@ function toggleWeekHistoryDropdown(forceOpen) {
 
 function closeWeekHistoryDropdown() {
     toggleWeekHistoryDropdown(false);
+}
+
+let activeDurationDropdown = null;
+
+function closeDurationDropdown() {
+    if (activeDurationDropdown) {
+        if (activeDurationDropdown.trigger) {
+            activeDurationDropdown.trigger.classList.remove('is-open');
+        }
+        if (activeDurationDropdown.menu) {
+            activeDurationDropdown.menu.remove();
+        }
+        activeDurationDropdown = null;
+    }
+}
+
+function openDurationDropdown(trigger, cell) {
+    if (activeDurationDropdown && activeDurationDropdown.trigger === trigger) {
+        closeDurationDropdown();
+        return;
+    }
+
+    closeDurationDropdown();
+    if (!trigger || !cell || trigger.disabled) return;
+
+    const select = cell.querySelector('.attendance-duration');
+    if (!select) return;
+
+    const isNewLogic = state.weekStart >= '2026-07-11';
+    const currentValue = Number(select.value);
+
+    const options = isNewLogic ? [
+        { value: 0, label: 'بدون إضافي' },
+        { value: 0.5, label: '0.5 يوم إضافي' },
+        { value: 1, label: '1 يوم كامل إضافي' },
+        { value: 1.5, label: '1.5 يوم إضافي' },
+        { value: 2, label: '2 يوم إضافي' },
+        { value: 2.5, label: '2.5 يوم إضافي' },
+        { value: 3, label: '3 أيام إضافي' },
+        { value: 3.5, label: '3.5 أيام إضافي' },
+        { value: 4, label: '4 أيام إضافي' },
+        { value: 4.5, label: '4.5 أيام إضافي' },
+        { value: 5, label: '5 أيام إضافي' }
+    ] : [
+        { value: 0.5, label: '0.5 يوم' },
+        { value: 1, label: '1 يوم كامل' },
+        { value: 1.5, label: '1.5 يوم' }
+    ];
+
+    const rect = trigger.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'attendance-duration-floating-menu';
+
+    const menuHeight = 160;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < menuHeight && rect.top > menuHeight) {
+        menu.style.bottom = `${window.innerHeight - rect.top + 2}px`;
+    } else {
+        menu.style.top = `${rect.bottom + 2}px`;
+    }
+
+    const minW = Math.max(rect.width, 185);
+    menu.style.minWidth = `${minW}px`;
+
+    const rightOffset = window.innerWidth - rect.right;
+    if (rightOffset + minW <= window.innerWidth) {
+        menu.style.right = `${rightOffset}px`;
+        menu.style.left = 'auto';
+    } else {
+        menu.style.left = `${Math.max(10, rect.left)}px`;
+        menu.style.right = 'auto';
+    }
+
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'dropdown-items-scroll';
+
+    options.forEach((opt) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = `dropdown-item${opt.value === currentValue ? ' is-selected' : ''}`;
+        item.innerHTML = `
+            <span class="item-label">${opt.label}</span>
+            ${opt.value === currentValue ? '<i class="fas fa-check item-check"></i>' : ''}
+        `;
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            select.value = String(opt.value);
+            const labelSpan = trigger.querySelector('.duration-label-text');
+            if (labelSpan) {
+                labelSpan.textContent = opt.label;
+            }
+            closeDurationDropdown();
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        scrollContainer.appendChild(item);
+    });
+
+    menu.appendChild(scrollContainer);
+    document.body.appendChild(menu);
+
+    trigger.classList.add('is-open');
+    activeDurationDropdown = { trigger, menu };
+
+    const selectedEl = scrollContainer.querySelector('.is-selected');
+    if (selectedEl) {
+        selectedEl.scrollIntoView({ block: 'nearest' });
+    }
 }
 
 async function loadWeeksHistory() {
@@ -2729,6 +2867,23 @@ function bindEvents() {
         if (!event.target.closest('#weekHistoryDropdown')) {
             closeWeekHistoryDropdown();
         }
+        if (!event.target.closest('.attendance-duration-trigger') && !event.target.closest('.attendance-duration-floating-menu')) {
+            closeDurationDropdown();
+        }
+    });
+
+    window.addEventListener('resize', closeDurationDropdown);
+    window.addEventListener('scroll', (event) => {
+        if (event.target && event.target.closest && event.target.closest('.attendance-duration-floating-menu')) {
+            return;
+        }
+        closeDurationDropdown();
+    }, true);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeWeekHistoryDropdown();
+            closeDurationDropdown();
+        }
     });
 
     document.getElementById('previousWeekBtn').addEventListener('click', () => changeWeek(addDays(state.weekStart, -7)));
@@ -2843,10 +2998,18 @@ function bindEvents() {
             return;
         }
 
-        if (event.target.closest('select') || event.target.closest('button')) return;
-
         const cell = event.target.closest('.attendance-day-cell');
         if (!cell) return;
+
+        const durationTrigger = event.target.closest('.attendance-duration-trigger');
+        if (durationTrigger) {
+            if (!durationTrigger.disabled) {
+                openDurationDropdown(durationTrigger, cell);
+            }
+            return;
+        }
+
+        if (event.target.closest('select') || event.target.closest('button')) return;
 
         if (!event.target.classList.contains('attendance-check')) {
             const checkbox = cell.querySelector('.attendance-check');
