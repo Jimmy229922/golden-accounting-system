@@ -454,6 +454,62 @@ function initDB() {
     runAddColumnMigration("ALTER TABLE factory_petty_expenses ADD COLUMN category TEXT DEFAULT 'factory'", 'factory_petty_expenses', 'category');
 
     db.exec(`
+        CREATE TABLE IF NOT EXISTS external_work_shipments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shipment_number TEXT UNIQUE,
+            shipment_date TEXT DEFAULT CURRENT_DATE,
+            client_name TEXT DEFAULT '',
+            item_description TEXT,
+            swift_reference TEXT,
+            advance_amount_usd REAL DEFAULT 0,
+            advance_rate REAL DEFAULT 0,
+            advance_amount_egp REAL DEFAULT 0,
+            final_amount_usd REAL DEFAULT 0,
+            final_rate REAL DEFAULT 0,
+            final_amount_egp REAL DEFAULT 0,
+            total_amount_usd REAL DEFAULT 0,
+            total_amount_egp REAL DEFAULT 0,
+            purchase_cost_egp REAL DEFAULT 0,
+            shipping_expenses_egp REAL DEFAULT 0,
+            bank_commission_egp REAL DEFAULT 0,
+            agent_commission_egp REAL DEFAULT 0,
+            quantity_tons REAL DEFAULT 0,
+            cost_per_ton_egp REAL DEFAULT 0,
+            total_costs_egp REAL DEFAULT 0,
+            net_profit_egp REAL DEFAULT 0,
+            statement TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    runAddColumnMigration("ALTER TABLE external_work_shipments ADD COLUMN quantity_tons REAL DEFAULT 0", 'external_work_shipments', 'quantity_tons');
+    runAddColumnMigration("ALTER TABLE external_work_shipments ADD COLUMN cost_per_ton_egp REAL DEFAULT 0", 'external_work_shipments', 'cost_per_ton_egp');
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS external_work_sales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_number TEXT UNIQUE,
+            sale_date TEXT DEFAULT CURRENT_DATE,
+            customer_name TEXT NOT NULL,
+            shipment_id INTEGER NOT NULL,
+            shipment_number TEXT,
+            item_description TEXT,
+            quantity_tons REAL DEFAULT 0,
+            unit_price_egp REAL DEFAULT 0,
+            total_amount_egp REAL DEFAULT 0,
+            cost_per_ton_egp REAL DEFAULT 0,
+            total_cost_egp REAL DEFAULT 0,
+            net_profit_egp REAL DEFAULT 0,
+            statement TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.exec(`
         CREATE TABLE IF NOT EXISTS under_collection_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             document_number TEXT UNIQUE,
@@ -1399,6 +1455,11 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_petty_expenses_date ON petty_expenses(expense_date)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_factory_petty_expenses_category ON factory_petty_expenses(category)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_factory_petty_expenses_date ON factory_petty_expenses(expense_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_external_work_shipments_date ON external_work_shipments(shipment_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_external_work_shipments_number ON external_work_shipments(shipment_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_external_work_sales_date ON external_work_sales(sale_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_external_work_sales_number ON external_work_sales(sale_number)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_external_work_sales_shipment ON external_work_sales(shipment_id)`);
 
     console.log('Database initialized at:', dbPath);
 }

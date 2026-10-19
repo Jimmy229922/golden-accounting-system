@@ -164,6 +164,14 @@ function buildTopNavItems(prefix) {
                 { key: '', fallback: 'نثريات المصنع', href: withPrefix('factory-petty-expenses/index.html') }
             ]
         },
+        {
+            key: '',
+            fallback: 'شغل خارجي',
+            children: [
+                { key: '', fallback: 'المشتريات', href: withPrefix('external-work/index.html') },
+                { key: '', fallback: 'المبيعات', href: withPrefix('external-work/sales.html') }
+            ]
+        },
         { key: 'common.nav.settings', fallback: 'Settings', href: withPrefix('settings/index.html') }
     ];
 }

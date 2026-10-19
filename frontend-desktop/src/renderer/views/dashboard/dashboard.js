@@ -799,36 +799,36 @@ window.showSyncLogModal = async function() {
 
     modal.innerHTML = `
         <div class="confirm-dialog-card" style="width: min(880px, 94%); max-height: 88vh; padding: 0; display: flex; flex-direction: column;">
-            <div class="confirm-dialog-header" style="background: var(--nav-bg, #0f172a); border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08)); display: flex; justify-content: space-between; align-items: center; padding: 16px 22px;">
+            <div class="confirm-dialog-header" style="background: var(--secondary-bg, #f8fafc); border-bottom: 1px solid var(--border-color, #e2e8f0); display: flex; justify-content: space-between; align-items: center; padding: 16px 22px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <i class="fas fa-cloud-arrow-up" style="color: #38bdf8; font-size: 1.3rem;"></i>
+                    <i class="fas fa-cloud-arrow-up" style="color: #0284c7; font-size: 1.3rem;"></i>
                     <div>
-                        <div style="font-size: 1.15rem; font-weight: 700; color: #f8fafc;">سجل وتشخيص المزامنة السحابية</div>
-                        <div style="font-size: 0.8rem; color: #94a3b8;">متابعة حالة الربط اللحظي بين البرنامج وتطبيق الموبايل</div>
+                        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-color, #0f172a);">سجل وتشخيص المزامنة السحابية</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted, #64748b);">متابعة حالة الربط اللحظي بين البرنامج وتطبيق الموبايل</div>
                     </div>
                 </div>
-                <button id="syncModalCloseTopBtn" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 1.25rem; padding: 4px 8px; border-radius: 6px;"><i class="fas fa-times"></i></button>
+                <button id="syncModalCloseTopBtn" style="background: none; border: none; color: var(--text-muted, #64748b); cursor: pointer; font-size: 1.25rem; padding: 4px 8px; border-radius: 6px;"><i class="fas fa-times"></i></button>
             </div>
             
             <div id="syncLogModalContent" style="padding: 20px; overflow-y: auto; flex: 1;">
-                <div style="text-align: center; padding: 50px 20px; color: #94a3b8;">
-                    <i class="fas fa-circle-notch fa-spin" style="font-size: 2.2rem; color: #38bdf8; margin-bottom: 14px;"></i>
+                <div style="text-align: center; padding: 50px 20px; color: var(--text-muted, #64748b);">
+                    <i class="fas fa-circle-notch fa-spin" style="font-size: 2.2rem; color: #0284c7; margin-bottom: 14px;"></i>
                     <div style="font-size: 0.95rem;">جاري قراءة سجلات المزامنة وفحص حالة الخادم السحابي...</div>
                 </div>
             </div>
 
-            <div class="confirm-dialog-actions" style="border-top: 1px solid var(--border-color, rgba(255,255,255,0.08)); padding: 12px 22px; display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.4);">
-                <div style="font-size: 0.8rem; color: #64748b;" id="syncModalFooterInfo">
+            <div class="confirm-dialog-actions" style="border-top: 1px solid var(--border-color, #e2e8f0); padding: 12px 22px; display: flex; justify-content: space-between; align-items: center; background: var(--secondary-bg, #f8fafc);">
+                <div style="font-size: 0.8rem; color: var(--text-muted, #64748b);" id="syncModalFooterInfo">
                     تعمل المزامنة التلقائية كل 30 ثانية
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button id="syncModalReportBtn" class="confirm-dialog-btn" style="background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); padding: 8px 14px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <button id="syncModalReportBtn" class="confirm-dialog-btn" style="background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.25); padding: 8px 14px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                         <i class="fas fa-paper-plane"></i> إرسال تقرير فني للدعم
                     </button>
                     <button id="syncModalTriggerBtn" class="confirm-dialog-btn confirm" style="background: #0284c7; color: #fff; padding: 8px 18px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px;">
                         <i class="fas fa-rotate"></i> مزامنة فورية الآن
                     </button>
-                    <button id="syncModalCloseBottomBtn" class="confirm-dialog-btn" style="background: rgba(255,255,255,0.06); color: #cbd5e1; padding: 8px 16px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);">
+                    <button id="syncModalCloseBottomBtn" class="confirm-dialog-btn" style="background: var(--card-bg, #ffffff); color: var(--text-color, #334155); padding: 8px 16px; font-size: 0.88rem; border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color, #cbd5e1);">
                         إغلاق
                     </button>
                 </div>
@@ -879,15 +879,15 @@ window.showSyncLogModal = async function() {
 
             if (!hasError) {
                 reportBtn.innerHTML = '<i class="fas fa-check-circle"></i> لا توجد أخطاء بالمزامنة لإرسالها';
-                reportBtn.style.color = '#38bdf8';
-                reportBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-                reportBtn.style.background = 'rgba(56, 189, 248, 0.15)';
+                reportBtn.style.color = '#0284c7';
+                reportBtn.style.borderColor = 'rgba(2, 132, 199, 0.3)';
+                reportBtn.style.background = 'rgba(2, 132, 199, 0.1)';
                 setTimeout(() => {
                     if (reportBtn) {
                         reportBtn.innerHTML = '<i class="fas fa-paper-plane"></i> إرسال تقرير فني للدعم';
-                        reportBtn.style.color = '#fca5a5';
-                        reportBtn.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-                        reportBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+                        reportBtn.style.color = '#dc2626';
+                        reportBtn.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                        reportBtn.style.background = 'rgba(239, 68, 68, 0.1)';
                     }
                 }, 3000);
                 return;
@@ -900,14 +900,14 @@ window.showSyncLogModal = async function() {
                     const sendRes = await window.electronAPI.sendSyncDiagnosticReport();
                     if (sendRes && sendRes.noError) {
                         reportBtn.innerHTML = '<i class="fas fa-check-circle"></i> لا توجد أخطاء للإرسال';
-                        reportBtn.style.color = '#38bdf8';
-                        reportBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-                        reportBtn.style.background = 'rgba(56, 189, 248, 0.15)';
+                        reportBtn.style.color = '#0284c7';
+                        reportBtn.style.borderColor = 'rgba(2, 132, 199, 0.3)';
+                        reportBtn.style.background = 'rgba(2, 132, 199, 0.1)';
                     } else {
                         reportBtn.innerHTML = '<i class="fas fa-check"></i> تم إرسال تقرير العطل بنجاح';
-                        reportBtn.style.color = '#86efac';
-                        reportBtn.style.borderColor = 'rgba(34, 197, 94, 0.4)';
-                        reportBtn.style.background = 'rgba(34, 197, 94, 0.15)';
+                        reportBtn.style.color = '#16a34a';
+                        reportBtn.style.borderColor = 'rgba(22, 163, 74, 0.3)';
+                        reportBtn.style.background = 'rgba(22, 163, 74, 0.1)';
                     }
                 }
             } catch (_) {
@@ -917,9 +917,9 @@ window.showSyncLogModal = async function() {
                     if (reportBtn) {
                         reportBtn.disabled = false;
                         reportBtn.innerHTML = '<i class="fas fa-paper-plane"></i> إرسال تقرير فني للدعم';
-                        reportBtn.style.color = '#fca5a5';
-                        reportBtn.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-                        reportBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+                        reportBtn.style.color = '#dc2626';
+                        reportBtn.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                        reportBtn.style.background = 'rgba(239, 68, 68, 0.1)';
                     }
                 }, 4000);
             }
@@ -951,7 +951,7 @@ window.showSyncLogModal = async function() {
         } catch (err) {
             if (contentEl) {
                 contentEl.innerHTML = `
-                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 18px; color: #fca5a5; text-align: center;">
+                    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 18px; color: #dc2626; text-align: center;">
                         <i class="fas fa-exclamation-triangle" style="font-size: 1.6rem; margin-bottom: 8px;"></i>
                         <div>تعذر قراءة بيانات المزامنة: ${err.message || 'خطأ غير متوقع'}</div>
                     </div>
@@ -976,15 +976,15 @@ window.showSyncLogModal = async function() {
 };
 
 function formatSyncSampleInfo(raw) {
-    if (!raw || typeof raw !== 'string') return '<span style="color: #64748b;">تحديثات محاسبية تفاضلية</span>';
+    if (!raw || typeof raw !== 'string') return '<span style="color: var(--text-muted, #64748b);">تحديثات محاسبية تفاضلية</span>';
 
     const DOC_MAP = {
-        'purchase_invoice': { label: 'فاتورة مشتريات', color: '#fb923c' },
-        'sales_invoice': { label: 'فاتورة مبيعات', color: '#34d399' },
-        'voucher_payment': { label: 'سند صرف', color: '#f43f5e' },
-        'voucher_receipt': { label: 'سند قبض', color: '#38bdf8' },
-        'opening_balance': { label: 'رصيد افتتاحي', color: '#c084fc' },
-        'local_sale': { label: 'مبيعات نقدية', color: '#a3e635' }
+        'purchase_invoice': { label: 'فاتورة مشتريات', color: '#ea580c' },
+        'sales_invoice': { label: 'فاتورة مبيعات', color: '#16a34a' },
+        'voucher_payment': { label: 'سند صرف', color: '#e11d48' },
+        'voucher_receipt': { label: 'سند قبض', color: '#0284c7' },
+        'opening_balance': { label: 'رصيد افتتاحي', color: '#9333ea' },
+        'local_sale': { label: 'مبيعات نقدية', color: '#65a30d' }
     };
 
     let text = raw.trim();
@@ -994,7 +994,7 @@ function formatSyncSampleInfo(raw) {
             const parts = text.split(/[،,]\s*/);
             const otherParts = parts.filter(p => p !== key && !DOC_MAP[p] && p.trim() !== '');
             if (otherParts.length > 0) {
-                return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: #f8fafc; font-weight: 500;">${otherParts.join('، ')}</span>`;
+                return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: var(--text-color, #1e293b); font-weight: 500;">${otherParts.join('، ')}</span>`;
             }
             return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}</span>`;
         }
@@ -1003,19 +1003,19 @@ function formatSyncSampleInfo(raw) {
     for (const [, meta] of Object.entries(DOC_MAP)) {
         if (text.startsWith(meta.label + ':') || text.startsWith(meta.label + ' -')) {
             const remainder = text.slice(meta.label.length + 1).trim();
-            return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: #f8fafc; font-weight: 500;">${remainder.replace(/^[:\-\s]+/, '')}</span>`;
+            return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: var(--text-color, #1e293b); font-weight: 500;">${remainder.replace(/^[:\-\s]+/, '')}</span>`;
         }
         if (text.includes(meta.label)) {
             const parts = text.split(/[،,]\s*/);
             const otherParts = parts.filter(p => p !== meta.label && p.trim() !== '');
             if (otherParts.length > 0) {
-                return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: #f8fafc; font-weight: 500;">${otherParts.join('، ')}</span>`;
+                return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}:</span> <span style="color: var(--text-color, #1e293b); font-weight: 500;">${otherParts.join('، ')}</span>`;
             }
             return `<span style="color: ${meta.color}; font-weight: 700;">${meta.label}</span>`;
         }
     }
 
-    return `<span style="color: #cbd5e1;">${text}</span>`;
+    return `<span style="color: var(--text-color, #1e293b);">${text}</span>`;
 }
 
 function renderSyncDiagnostics(res) {
@@ -1033,21 +1033,21 @@ function renderSyncDiagnostics(res) {
     let bannerHTML = '';
     if (res?.disabled) {
         bannerHTML = `
-            <div style="background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
-                <i class="fas fa-cloud-slash" style="color: #94a3b8; font-size: 1.5rem;"></i>
+            <div style="background: rgba(100, 116, 139, 0.08); border: 1px solid var(--border-color, #cbd5e1); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
+                <i class="fas fa-cloud-slash" style="color: var(--text-muted, #64748b); font-size: 1.5rem;"></i>
                 <div>
-                    <div style="font-weight: 700; color: #cbd5e1; font-size: 0.95rem;">المزامنة السحابية غير مفعلة حالياً</div>
-                    <div style="font-size: 0.82rem; color: #94a3b8;">${res.reason || 'المزامنة معطلة من إعدادات النظام'}</div>
+                    <div style="font-weight: 700; color: var(--text-color, #1e293b); font-size: 0.95rem;">المزامنة السحابية غير مفعلة حالياً</div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted, #64748b);">${res.reason || 'المزامنة معطلة من إعدادات النظام'}</div>
                 </div>
             </div>
         `;
     } else if (counts.pending > 0 && counts.failed === 0 && !res?.error) {
         bannerHTML = `
-            <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
-                <i class="fas fa-cloud-arrow-up" style="color: #38bdf8; font-size: 1.5rem;"></i>
+            <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
+                <i class="fas fa-cloud-arrow-up" style="color: #0284c7; font-size: 1.5rem;"></i>
                 <div>
-                    <div style="font-weight: 700; color: #38bdf8; font-size: 0.95rem;">جاري رفع حركات جديدة للسحابة...</div>
-                    <div style="font-size: 0.82rem; color: #bae6fd;">يتم الآن إرسال الدفعات وتحديث كشف الحساب وتطبيق الموبايل لحظياً.</div>
+                    <div style="font-weight: 700; color: #0284c7; font-size: 0.95rem;">جاري رفع حركات جديدة للسحابة...</div>
+                    <div style="font-size: 0.82rem; color: var(--text-color, #0369a1);">يتم الآن إرسال الدفعات وتحديث كشف الحساب وتطبيق الموبايل لحظياً.</div>
                 </div>
             </div>
         `;
@@ -1069,24 +1069,24 @@ function renderSyncDiagnostics(res) {
         }
 
         bannerHTML = `
-            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;">
+            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;">
                 <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
-                    <i class="fas fa-circle-exclamation" style="color: #f87171; font-size: 1.4rem;"></i>
-                    <div style="font-weight: 700; color: #f87171; font-size: 0.95rem;">تنبيه: تعثر في الاتصال بالسحابة أو توجد حزم معلقة</div>
+                    <i class="fas fa-circle-exclamation" style="color: #dc2626; font-size: 1.4rem;"></i>
+                    <div style="font-weight: 700; color: #dc2626; font-size: 0.95rem;">تنبيه: تعثر في الاتصال بالسحابة أو توجد حزم معلقة</div>
                 </div>
-                <div style="font-size: 0.85rem; color: #fca5a5; line-height: 1.6; margin-inline-start: 32px;">
+                <div style="font-size: 0.85rem; color: #b91c1c; line-height: 1.6; margin-inline-start: 32px;">
                     <div>${humanReason}</div>
-                    <div style="font-size: 0.78rem; color: #f87171; margin-top: 4px; opacity: 0.9;"><strong>التفاصيل الفنية:</strong> ${errorDetail}</div>
+                    <div style="font-size: 0.78rem; color: #dc2626; margin-top: 4px; opacity: 0.9;"><strong>التفاصيل الفنية:</strong> ${errorDetail}</div>
                 </div>
             </div>
         `;
     } else {
         bannerHTML = `
-            <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
-                <i class="fas fa-circle-check" style="color: #22c55e; font-size: 1.5rem;"></i>
+            <div style="background: rgba(22, 163, 74, 0.08); border: 1px solid rgba(22, 163, 74, 0.25); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;">
+                <i class="fas fa-circle-check" style="color: #16a34a; font-size: 1.5rem;"></i>
                 <div>
-                    <div style="font-weight: 700; color: #4ade80; font-size: 0.95rem;">المزامنة السحابية متصلة ومستقرة تماماً</div>
-                    <div style="font-size: 0.82rem; color: #86efac;">كافة حركات كشف الحساب وأرصدة العملاء والموردين مطابقة بنسبة 100% مع تطبيق الموبايل.</div>
+                    <div style="font-weight: 700; color: #15803d; font-size: 0.95rem;">المزامنة السحابية متصلة ومستقرة تماماً</div>
+                    <div style="font-size: 0.82rem; color: #16a34a;">كافة حركات كشف الحساب وأرصدة العملاء والموردين مطابقة بنسبة 100% مع تطبيق الموبايل.</div>
                 </div>
             </div>
         `;
@@ -1094,71 +1094,71 @@ function renderSyncDiagnostics(res) {
 
     const cardsHTML = `
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
-                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-clock" style="color: #38bdf8;"></i> آخر مزامنة</div>
-                <div style="font-size: 0.92rem; font-weight: 700; color: #f8fafc;">${lastSyncStr}</div>
+            <div style="background: var(--secondary-bg, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: var(--text-muted, #64748b); margin-bottom: 4px;"><i class="fas fa-clock" style="color: #0284c7;"></i> آخر مزامنة</div>
+                <div style="font-size: 0.92rem; font-weight: 700; color: var(--text-color, #0f172a);">${lastSyncStr}</div>
             </div>
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
-                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-check-double" style="color: #22c55e;"></i> دفعات ناجحة</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #22c55e;">${counts.synced}</div>
+            <div style="background: var(--secondary-bg, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: var(--text-muted, #64748b); margin-bottom: 4px;"><i class="fas fa-check-double" style="color: #16a34a;"></i> دفعات ناجحة</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #16a34a;">${counts.synced}</div>
             </div>
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
-                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-hourglass-half" style="color: #f59e0b;"></i> دفعات معلقة</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: ${counts.pending > 0 ? '#f59e0b' : '#94a3b8'};">${counts.pending}</div>
+            <div style="background: var(--secondary-bg, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: var(--text-muted, #64748b); margin-bottom: 4px;"><i class="fas fa-hourglass-half" style="color: #d97706;"></i> دفعات معلقة</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: ${counts.pending > 0 ? '#d97706' : 'var(--text-muted, #64748b)'};">${counts.pending}</div>
             </div>
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
-                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-users" style="color: #a855f7;"></i> أطراف متزامنة</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #c084fc;">${shadowCounts.parties}</div>
+            <div style="background: var(--secondary-bg, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: var(--text-muted, #64748b); margin-bottom: 4px;"><i class="fas fa-users" style="color: #9333ea;"></i> أطراف متزامنة</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #9333ea;">${shadowCounts.parties}</div>
             </div>
-            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px; text-align: center;">
-                <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 4px;"><i class="fas fa-file-invoice-dollar" style="color: #38bdf8;"></i> حركات أستاذ</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #38bdf8;">${shadowCounts.ledger}</div>
+            <div style="background: var(--secondary-bg, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.78rem; color: var(--text-muted, #64748b); margin-bottom: 4px;"><i class="fas fa-file-invoice-dollar" style="color: #0284c7;"></i> حركات أستاذ</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #0284c7;">${shadowCounts.ledger}</div>
             </div>
         </div>
     `;
 
     let tableRows = '';
     if (batches.length === 0) {
-        tableRows = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: #64748b;">لا توجد عمليات مسجلة في السجل حالياً</td></tr>`;
+        tableRows = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted, #64748b);">لا توجد عمليات مسجلة في السجل حالياً</td></tr>`;
     } else {
         tableRows = batches.map(b => {
             let statusBadge = '';
             if (b.status === 'synced') {
-                statusBadge = `<span style="background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-check"></i> ناجحة</span>`;
+                statusBadge = `<span style="background: rgba(22,163,74,0.12); color: #16a34a; border: 1px solid rgba(22,163,74,0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-check"></i> ناجحة</span>`;
             } else if (b.status === 'idle') {
-                statusBadge = `<span style="background: rgba(148, 163, 184, 0.12); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-minus"></i> لا توجد تغييرات</span>`;
+                statusBadge = `<span style="background: rgba(100, 116, 139, 0.1); color: var(--text-muted, #64748b); border: 1px solid rgba(100, 116, 139, 0.2); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-minus"></i> لا توجد تغييرات</span>`;
             } else if (b.status === 'pending') {
-                statusBadge = `<span style="background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-clock"></i> قيد الإرسال</span>`;
+                statusBadge = `<span style="background: rgba(217,119,6,0.12); color: #d97706; border: 1px solid rgba(217,119,6,0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-clock"></i> قيد الإرسال</span>`;
             } else {
-                statusBadge = `<span style="background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-times"></i> متعثرة</span>`;
+                statusBadge = `<span style="background: rgba(220,38,38,0.12); color: #dc2626; border: 1px solid rgba(220,38,38,0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;"><i class="fas fa-times"></i> متعثرة</span>`;
             }
 
             const timeStr = b.created_at ? new Date(b.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—';
             let detailText = b.last_error
-                ? `<span style="color: #f87171;" title="${b.last_error}"><i class="fas fa-triangle-exclamation" style="margin-inline-end: 4px;"></i>${b.sample_info ? formatSyncSampleInfo(b.sample_info) + ' — ' : ''}${b.last_error.length > 45 ? b.last_error.slice(0, 45) + '...' : b.last_error}</span>`
+                ? `<span style="color: #dc2626;" title="${b.last_error}"><i class="fas fa-triangle-exclamation" style="margin-inline-end: 4px;"></i>${b.sample_info ? formatSyncSampleInfo(b.sample_info) + ' — ' : ''}${b.last_error.length > 45 ? b.last_error.slice(0, 45) + '...' : b.last_error}</span>`
                 : formatSyncSampleInfo(b.sample_info);
 
             let seqBadge = '';
             if (b.sync_type === 'manual_check') {
-                seqBadge = `<span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.76rem;"><i class="fas fa-hand-pointer"></i> فحص فوري</span>`;
+                seqBadge = `<span style="background: rgba(2, 132, 199, 0.12); color: #0284c7; border: 1px solid rgba(2, 132, 199, 0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.76rem;"><i class="fas fa-hand-pointer"></i> فحص فوري</span>`;
             } else if (b.sync_type === 'auto_idle' || b.sync_type === 'auto_check') {
-                seqBadge = `<span style="background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.76rem;"><i class="fas fa-clock-rotate-left"></i> فحص دوري</span>`;
+                seqBadge = `<span style="background: rgba(100, 116, 139, 0.1); color: var(--text-color, #1e293b); border: 1px solid rgba(100, 116, 139, 0.2); padding: 2px 8px; border-radius: 4px; font-size: 0.76rem;"><i class="fas fa-clock-rotate-left"></i> فحص دوري</span>`;
             } else {
-                seqBadge = `<span style="font-weight: 700; color: #38bdf8;">#${b.seq_no || '—'}</span>`;
+                seqBadge = `<span style="font-weight: 700; color: #0284c7;">#${b.seq_no || '—'}</span>`;
             }
 
             const sizeText = (b.sync_type === 'auto_idle' || b.status === 'idle')
-                ? `<span style="color: #64748b; font-size: 0.78rem;">لا توجد بيانات</span>`
+                ? `<span style="color: var(--text-muted, #64748b); font-size: 0.78rem;">لا توجد بيانات</span>`
                 : (b.sync_type === 'manual_check'
-                    ? `<span style="color: #94a3b8; font-size: 0.78rem;">مطابقة تامة</span>`
-                    : `<span style="color: #cbd5e1; font-weight: 600;">${b.events_count} حدث</span>`);
+                    ? `<span style="color: var(--text-muted, #64748b); font-size: 0.78rem;">مطابقة تامة</span>`
+                    : `<span style="color: var(--text-color, #1e293b); font-weight: 600;">${b.events_count} حدث</span>`);
 
             return `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.85rem;">
+                <tr style="border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.06)); font-size: 0.85rem;">
                     <td style="padding: 10px 12px;">${seqBadge}</td>
                     <td style="padding: 10px 12px;">${statusBadge}</td>
                     <td style="padding: 10px 12px;">${sizeText}</td>
-                    <td style="padding: 10px 12px; color: #94a3b8;">${timeStr}</td>
+                    <td style="padding: 10px 12px; color: var(--text-muted, #64748b);">${timeStr}</td>
                     <td style="padding: 10px 12px;">${detailText}</td>
                 </tr>
             `;
@@ -1166,15 +1166,15 @@ function renderSyncDiagnostics(res) {
     }
 
     const tableHTML = `
-        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; overflow: hidden;">
-            <div style="padding: 12px 16px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 700; color: #cbd5e1; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center;">
-                <span><i class="fas fa-list-check" style="color: #38bdf8; margin-inline-end: 6px;"></i> سجل آخر عمليات ودفعات المزامنة اللحظية</span>
-                <span style="font-size: 0.78rem; color: #64748b;">يعرض آخر ${batches.length} عملية</span>
+        <div style="background: var(--card-bg, #ffffff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; overflow: hidden;">
+            <div style="padding: 12px 16px; background: var(--table-header-bg, #f8fafc); border-bottom: 1px solid var(--border-color, #e2e8f0); font-weight: 700; color: var(--text-color, #1e293b); font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center;">
+                <span><i class="fas fa-list-check" style="color: #0284c7; margin-inline-end: 6px;"></i> سجل آخر عمليات ودفعات المزامنة اللحظية</span>
+                <span style="font-size: 0.78rem; color: var(--text-muted, #64748b);">يعرض آخر ${batches.length} عملية</span>
             </div>
             <div id="syncHistoryTableWrapper" style="max-height: 280px; overflow-y: auto;">
                 <table style="width: 100%; border-collapse: collapse; text-align: start;">
                     <thead>
-                        <tr style="background: rgba(255,255,255,0.03); color: #94a3b8; font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                        <tr style="background: var(--secondary-bg, #f1f5f9); color: var(--text-muted, #64748b); font-size: 0.8rem; border-bottom: 1px solid var(--border-color, #e2e8f0);">
                             <th style="padding: 8px 12px;">رقم العملية</th>
                             <th style="padding: 8px 12px;">الحالة</th>
                             <th style="padding: 8px 12px;">الحجم</th>
@@ -1221,9 +1221,9 @@ function renderSyncDiagnostics(res) {
         }
         .confirm-dialog-overlay.show { opacity: 1; }
         .confirm-dialog-card {
-            background: var(--card-bg, #0f172a); border: 1px solid var(--border-color, rgba(255,255,255,0.1));
-            border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-            max-height: 90vh; overflow-y: auto; color: var(--text-color, #fff); direction: rtl;
+            background: var(--card-bg, #ffffff); border: 1px solid var(--border-color, #e2e8f0);
+            border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+            max-height: 90vh; overflow-y: auto; color: var(--text-color, #1e293b); direction: rtl;
         }
         .interactive-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-color: rgba(56, 189, 248, 0.4) !important; }
         `;

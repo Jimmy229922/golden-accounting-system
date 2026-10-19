@@ -1,0 +1,223 @@
+.stat-profit-card {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.05) 100%);
+    border-color: rgba(16, 185, 129, 0.25);
+}
+
+.stat-profit-card .stat-icon {
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+}
+
+.stat-profit-card .stat-value {
+    color: #059669;
+}
+
+.badge-shipment-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(2, 132, 199, 0.1);
+    color: #0284c7;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.badge-shipment-link:hover {
+    background: rgba(2, 132, 199, 0.2);
+    color: #0369a1;
+}
+
+.badge-customer {
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.profit-text-positive {
+    color: #059669;
+    font-weight: 800;
+}
+
+.profit-text-negative {
+    color: #dc2626;
+    font-weight: 800;
+}
+
+.available-stock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(147, 51, 234, 0.08);
+    border: 1px solid rgba(147, 51, 234, 0.2);
+    color: #9333ea;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.available-stock-badge.warning {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #dc2626;
+}
+
+#saleForm {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.searchable-select-wrap {
+    position: relative;
+    width: 100%;
+}
+
+.searchable-select-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.searchable-select-input {
+    width: 100%;
+    height: 42px;
+    padding: 8px 14px 8px 38px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg, #fff);
+    color: var(--text-color);
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.searchable-select-input:focus {
+    border-color: #0284c7;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.searchable-select-toggle {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.searchable-select-toggle:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-color);
+}
+
+.searchable-select-wrap.is-open .searchable-select-toggle {
+    transform: translateY(-50%) rotate(180deg);
+    color: #0284c7;
+}
+
+.searchable-select-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    left: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--card-bg, #ffffff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+    z-index: 1050;
+    display: none;
+    padding: 6px;
+    flex-direction: column;
+    gap: 4px;
+    animation: comboboxFadeIn 0.16s ease;
+}
+
+@keyframes comboboxFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.searchable-select-wrap.is-open .searchable-select-dropdown {
+    display: flex;
+}
+
+.combobox-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    font-size: 0.9rem;
+    gap: 10px;
+}
+
+.combobox-item:hover,
+.combobox-item.is-highlighted {
+    background: rgba(2, 132, 199, 0.08);
+}
+
+.combobox-item.is-selected {
+    background: rgba(2, 132, 199, 0.14);
+    font-weight: 700;
+}
+
+.combobox-item-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.combobox-item-number {
+    font-weight: 700;
+    color: #0284c7;
+    background: rgba(2, 132, 199, 0.1);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.combobox-item-desc {
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.combobox-item-stock {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #9333ea;
+    background: rgba(147, 51, 234, 0.08);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.combobox-empty {
+    padding: 14px 12px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
