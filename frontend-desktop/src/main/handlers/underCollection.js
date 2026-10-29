@@ -52,6 +52,66 @@ function normalizeDate(value) {
     return text || new Date().toISOString().slice(0, 10);
 }
 
+function ensureCustomItemsRegistered(itemsJson) {
+    if (!itemsJson || typeof itemsJson !== 'string') return;
+    let parsed = null;
+    try {
+        parsed = JSON.parse(itemsJson);
+    } catch (_) {
+        return;
+    }
+    if (!Array.isArray(parsed) || !parsed.length) return;
+
+    let unitRow = db.prepare("SELECT id FROM units WHERE name LIKE '%طن%' OR name LIKE '%كيلو%' OR name LIKE '%كجم%' ORDER BY id ASC LIMIT 1").get();
+    if (!unitRow) {
+        unitRow = db.prepare('SELECT id FROM units ORDER BY id ASC LIMIT 1').get();
+    }
+    if (!unitRow) {
+        try {
+            const info = db.prepare("INSERT INTO units (name) VALUES ('طن')").run();
+            unitRow = { id: info.lastInsertRowid };
+        } catch (_) {}
+    }
+    const defaultUnitId = unitRow ? unitRow.id : null;
+    const findItemStmt = db.prepare('SELECT id, is_deleted FROM items WHERE LOWER(TRIM(name)) = LOWER(?) LIMIT 1');
+    const restoreItemStmt = db.prepare('UPDATE items SET is_deleted = 0 WHERE id = ?');
+    const getNextAutoBarcodeStmt = db.prepare(`
+        SELECT COALESCE(MAX(CAST(TRIM(barcode) AS INTEGER)), 999) + 1 AS next_barcode
+        FROM items
+        WHERE barcode IS NOT NULL
+          AND TRIM(barcode) <> ''
+          AND TRIM(barcode) NOT GLOB '*[^0-9]*'
+          AND CAST(TRIM(barcode) AS INTEGER) >= 1000
+          AND CAST(TRIM(barcode) AS INTEGER) <= 999999
+    `);
+    const insertItemStmt = db.prepare(`
+        INSERT INTO items (name, barcode, unit_id, cost_price, sale_price, stock_quantity, reorder_level, is_deleted)
+        VALUES (@name, @barcode, @unit_id, 0, 0, 0, 0, 0)
+    `);
+
+    for (const item of parsed) {
+        const cleanName = String(item?.name ?? item?.item_name ?? '').trim();
+        if (!cleanName) continue;
+        const existing = findItemStmt.get(cleanName);
+        if (existing) {
+            if (Number(existing.is_deleted) === 1) {
+                restoreItemStmt.run(existing.id);
+            }
+            continue;
+        }
+        const nextBarcodeRow = getNextAutoBarcodeStmt.get();
+        const nextBarcodeVal = Number(nextBarcodeRow?.next_barcode);
+        const barcode = String(Number.isFinite(nextBarcodeVal) ? nextBarcodeVal : 1000);
+        try {
+            insertItemStmt.run({
+                name: cleanName,
+                barcode,
+                unit_id: defaultUnitId
+            });
+        } catch (_) {}
+    }
+}
+
 function normalizePayload(data = {}) {
     const containerCount = Math.max(0, Math.floor(Number(data.container_count) || 0));
     const isContainer20 = data.container_20 ? 1 : 0;
@@ -69,9 +129,42 @@ function normalizePayload(data = {}) {
 
     let itemsJson = null;
     if (typeof data.items_json === 'string' && data.items_json.trim()) {
-        itemsJson = data.items_json.trim();
+        try {
+            const parsed = JSON.parse(data.items_json);
+            if (Array.isArray(parsed)) {
+                itemsJson = JSON.stringify(parsed.map((item) => {
+                    const itemName = String(item?.name ?? item?.item_name ?? '').trim();
+                    const itemTons = Number(item?.tons) || 0;
+                    const itemPrice = roundMoney(Number(item?.price) || 0);
+                    const itemTotal = roundMoney(Number(item?.total) > 0 ? Number(item.total) : (itemTons * itemPrice));
+                    return {
+                        name: itemName,
+                        item_name: itemName,
+                        tons: itemTons,
+                        price: itemPrice,
+                        total: itemTotal
+                    };
+                }));
+            } else {
+                itemsJson = data.items_json.trim();
+            }
+        } catch (_) {
+            itemsJson = data.items_json.trim();
+        }
     } else if (Array.isArray(data.items_json) && data.items_json.length) {
-        itemsJson = JSON.stringify(data.items_json);
+        itemsJson = JSON.stringify(data.items_json.map((item) => {
+            const itemName = String(item?.name ?? item?.item_name ?? '').trim();
+            const itemTons = Number(item?.tons) || 0;
+            const itemPrice = roundMoney(Number(item?.price) || 0);
+            const itemTotal = roundMoney(Number(item?.total) > 0 ? Number(item.total) : (itemTons * itemPrice));
+            return {
+                name: itemName,
+                item_name: itemName,
+                tons: itemTons,
+                price: itemPrice,
+                total: itemTotal
+            };
+        }));
     }
 
     return {
@@ -162,7 +255,7 @@ function register() {
             }
 
             if (params.statement && String(params.statement).trim()) {
-                where.push('u.statement LIKE @statement');
+                where.push("(u.statement LIKE @statement OR COALESCE(u.items_json, '') LIKE @statement)");
                 args.statement = `%${String(params.statement).trim()}%`;
             }
 
@@ -265,9 +358,34 @@ function register() {
                 LIMIT @limit OFFSET @offset
             `).all({ ...args, limit: pageSize, offset });
 
+            const itemRows = db.prepare(`
+                SELECT items_json
+                FROM under_collection_records
+                WHERE items_json IS NOT NULL AND TRIM(items_json) != ''
+                ORDER BY id DESC
+            `).all();
+            const customItemNames = [];
+            const seenItemNames = new Set();
+            for (const r of itemRows) {
+                try {
+                    ensureCustomItemsRegistered(r.items_json);
+                    const parsed = JSON.parse(r.items_json);
+                    if (Array.isArray(parsed)) {
+                        for (const it of parsed) {
+                            const n = String(it?.name ?? it?.item_name ?? '').trim();
+                            if (n && !seenItemNames.has(n.toLowerCase())) {
+                                seenItemNames.add(n.toLowerCase());
+                                customItemNames.push(n);
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+
             return {
                 success: true,
                 rows,
+                customItemNames,
                 total,
                 totalAmount: roundMoney(totalAmount),
                 totalCollected: roundMoney(totalCollected),
@@ -298,6 +416,7 @@ function register() {
             }
 
             const tx = db.transaction(() => {
+                ensureCustomItemsRegistered(payload.items_json);
                 const documentNumber = getNextDocumentNumber();
                 const info = db.prepare(`
                     INSERT INTO under_collection_records (
@@ -392,6 +511,7 @@ function register() {
             }
 
             const tx = db.transaction(() => {
+                ensureCustomItemsRegistered(payload.items_json);
                 db.prepare(`
                     UPDATE under_collection_records
                     SET record_date = @record_date,

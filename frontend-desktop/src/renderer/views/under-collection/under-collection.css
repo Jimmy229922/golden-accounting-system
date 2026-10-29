@@ -384,14 +384,14 @@
 
 .item-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 40px;
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.1fr) 40px;
     gap: 10px;
     align-items: center;
 }
 
 .item-row-header {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 40px;
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.1fr) 40px;
     gap: 10px;
     font-size: 0.82rem;
     font-weight: 700;
@@ -553,4 +553,261 @@
     align-items: center;
     gap: 6px;
     line-height: 1.5;
+}
+
+
+.uc-item-dropdown-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.uc-item-dropdown-wrap .item-name {
+    width: 100%;
+    padding-inline-end: 36px !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.uc-item-dropdown-wrap.is-open .item-name {
+    border-color: var(--primary-color, #2563eb);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.uc-item-dropdown-arrow {
+    position: absolute;
+    inset-inline-end: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted, #64748b);
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.78rem;
+}
+
+.uc-item-dropdown-arrow:hover {
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--primary-color, #2563eb);
+}
+
+.uc-item-dropdown-arrow i {
+    transition: transform 0.2s ease;
+}
+
+.uc-item-dropdown-arrow.is-open {
+    color: var(--primary-color, #2563eb);
+}
+
+.uc-item-dropdown-arrow.is-open i {
+    transform: rotate(180deg);
+}
+
+.uc-product-dropdown {
+    position: fixed;
+    z-index: 100020;
+    background: var(--card-bg, #ffffff);
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 12px;
+    box-shadow: 0 14px 34px -6px rgba(15, 23, 42, 0.22), 0 6px 14px -4px rgba(15, 23, 42, 0.12);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px;
+    direction: rtl;
+    text-align: right;
+    backdrop-filter: blur(10px);
+}
+
+.uc-product-dropdown.hidden {
+    display: none !important;
+}
+
+.uc-product-dropdown.drop-down {
+    transform-origin: top center;
+    animation: ucDropdownFadeDown 0.14s ease-out;
+}
+
+.uc-product-dropdown.drop-up {
+    transform-origin: bottom center;
+    animation: ucDropdownFadeUp 0.14s ease-out;
+}
+
+@keyframes ucDropdownFadeDown {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes ucDropdownFadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.uc-product-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.uc-product-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 4px 0;
+}
+
+.uc-product-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.45);
+    border-radius: 999px;
+}
+
+.uc-product-dropdown::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.7);
+}
+
+.uc-product-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color, #1e293b);
+    cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease;
+    user-select: none;
+}
+
+.uc-product-option + .uc-product-option {
+    margin-top: 2px;
+}
+
+.uc-product-option-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.uc-product-option-icon {
+    font-size: 0.82rem;
+    color: var(--text-muted, #64748b);
+    flex-shrink: 0;
+    transition: color 0.14s ease;
+}
+
+.uc-product-option-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.uc-product-option-check {
+    font-size: 0.8rem;
+    color: var(--primary-color, #2563eb);
+    flex-shrink: 0;
+}
+
+.uc-product-option:hover,
+.uc-product-option.is-highlighted {
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--primary-color, #2563eb);
+}
+
+.uc-product-option:hover .uc-product-option-icon,
+.uc-product-option.is-highlighted .uc-product-option-icon {
+    color: var(--primary-color, #2563eb);
+}
+
+.uc-product-option.is-selected {
+    background: rgba(37, 99, 235, 0.12);
+    color: var(--primary-color, #2563eb);
+    font-weight: 700;
+}
+
+.uc-product-option.is-selected .uc-product-option-icon {
+    color: var(--primary-color, #2563eb);
+}
+
+.uc-product-custom-option {
+    border: 1px dashed rgba(37, 99, 235, 0.35);
+    background: rgba(37, 99, 235, 0.04);
+    margin-bottom: 4px;
+}
+
+.uc-product-custom-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.12);
+    color: var(--primary-color, #2563eb);
+    flex-shrink: 0;
+}
+
+.uc-product-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 12px;
+    color: var(--text-muted, #64748b);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+[data-theme="dark"] .uc-product-dropdown {
+    background: #1e293b;
+    border-color: #334155;
+    box-shadow: 0 16px 38px -6px rgba(0, 0, 0, 0.55), 0 6px 16px -4px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .uc-product-option {
+    color: #f1f5f9;
+}
+
+[data-theme="dark"] .uc-product-option:hover,
+[data-theme="dark"] .uc-product-option.is-highlighted {
+    background: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+}
+
+[data-theme="dark"] .uc-product-option:hover .uc-product-option-icon,
+[data-theme="dark"] .uc-product-option.is-highlighted .uc-product-option-icon,
+[data-theme="dark"] .uc-product-option.is-selected .uc-product-option-icon,
+[data-theme="dark"] .uc-product-option-check {
+    color: #60a5fa;
+}
+
+[data-theme="dark"] .uc-product-option.is-selected {
+    background: rgba(59, 130, 246, 0.24);
+    color: #60a5fa;
+}
+
+[data-theme="dark"] .uc-product-custom-option {
+    border-color: rgba(96, 165, 250, 0.4);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+[data-theme="dark"] .uc-product-custom-badge {
+    background: rgba(59, 130, 246, 0.22);
+    color: #93c5fd;
 }

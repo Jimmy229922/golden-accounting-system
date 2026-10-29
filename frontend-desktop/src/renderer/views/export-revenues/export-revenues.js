@@ -15,6 +15,7 @@ const state = {
 };
 
 let invoiceLookupTimeout = null;
+let modalRateItems = [];
 
 function buildTopNavHTML() {
     if (window.navManager && typeof window.navManager.getTopNavHTML === 'function') {
@@ -126,21 +127,52 @@ function formatWeekday(dateValue) {
     return date.toLocaleDateString('ar-EG', { weekday: 'long' });
 }
 
-function updateEgyptianAmount() {
-    const amount = parseNumberInput(document.getElementById('amountInput').value);
-    const rate = parseNumberInput(document.getElementById('exchangeRateInput').value);
-    const egyptianInput = document.getElementById('amountEgp');
-
-    if (!Number.isFinite(amount) || !Number.isFinite(rate)) {
-        egyptianInput.value = '';
-        return;
-    }
-
-    const total = amount * rate;
-    egyptianInput.value = formatNumber(total);
+function roundMoney(value) {
+    const n = Number(value) || 0;
+    return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-function attachNumberFormatting(input) {
+function initModalRateItems(initialItems) {
+    if (Array.isArray(initialItems) && initialItems.length) {
+        modalRateItems = initialItems.map((item) => {
+            const rawAmount = item.amount !== undefined && item.amount !== null && item.amount !== '' ? Number(item.amount) : NaN;
+            const rawRate = item.exchange_rate !== undefined && item.exchange_rate !== null && item.exchange_rate !== '' ? Number(item.exchange_rate) : NaN;
+            const amountStr = Number.isFinite(rawAmount) && rawAmount > 0 ? formatNumber(rawAmount) : '';
+            const rateStr = Number.isFinite(rawRate) && rawRate > 0 ? formatNumber(rawRate) : '';
+            const currency = String(item.currency || 'دولار').trim() || 'دولار';
+            const egpVal = (Number.isFinite(rawAmount) && Number.isFinite(rawRate)) ? roundMoney(rawAmount * rawRate) : 0;
+            return {
+                amount: amountStr,
+                currency,
+                exchange_rate: rateStr,
+                amount_egp: egpVal
+            };
+        });
+    } else {
+        modalRateItems = [{ amount: '', currency: 'دولار', exchange_rate: '', amount_egp: 0 }];
+    }
+    renderModalRateItems();
+}
+
+function syncRateItemsFromDOM() {
+    const container = document.getElementById('rateItemsContainer');
+    if (!container) return;
+    container.querySelectorAll('.item-row').forEach((rowEl) => {
+        const idx = Number(rowEl.dataset.index);
+        if (!modalRateItems[idx]) return;
+        const amountEl = rowEl.querySelector('.item-amount');
+        const currencyEl = rowEl.querySelector('.item-currency');
+        const rateEl = rowEl.querySelector('.item-rate');
+        if (amountEl) modalRateItems[idx].amount = amountEl.value;
+        if (currencyEl) modalRateItems[idx].currency = String(currencyEl.value || 'دولار').trim() || 'دولار';
+        if (rateEl) modalRateItems[idx].exchange_rate = rateEl.value;
+        const a = parseNumberInput(modalRateItems[idx].amount);
+        const r = parseNumberInput(modalRateItems[idx].exchange_rate);
+        modalRateItems[idx].amount_egp = (Number.isFinite(a) && Number.isFinite(r) && a > 0 && r > 0) ? roundMoney(a * r) : 0;
+    });
+}
+
+function attachRowNumberFormatting(input, onUpdate) {
     input.addEventListener('input', () => {
         const val = input.value || '';
         const oldCursor = input.selectionStart ?? val.length;
@@ -160,8 +192,9 @@ function attachNumberFormatting(input) {
             }
         }
         try { input.setSelectionRange(newCursor, newCursor); } catch (_) {}
-        updateEgyptianAmount();
+        if (typeof onUpdate === 'function') onUpdate();
     });
+
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace') {
             const start = input.selectionStart;
@@ -177,8 +210,189 @@ function attachNumberFormatting(input) {
     });
 }
 
+function renderModalRateItems() {
+    const container = document.getElementById('rateItemsContainer');
+    if (!container) return;
+
+    const canDelete = modalRateItems.length > 1;
+    container.innerHTML = modalRateItems.map((item, index) => `
+        <div class="item-row" data-index="${index}">
+            <div>
+                <input type="text" class="form-control number-input item-amount" data-index="${index}" placeholder="0" value="${escapeHtml(item.amount || '')}" required>
+            </div>
+            <div>
+                <input type="text" class="form-control item-currency" data-index="${index}" placeholder="مثال: دولار" value="${escapeHtml(item.currency || 'دولار')}" required>
+            </div>
+            <div>
+                <input type="text" class="form-control number-input item-rate" data-index="${index}" placeholder="0" value="${escapeHtml(item.exchange_rate || '')}" required>
+            </div>
+            <div>
+                <input type="text" class="form-control number-input item-egp uneditable" value="${item.amount_egp > 0 ? formatNumber(item.amount_egp) : '0.00'}" readonly>
+            </div>
+            <button type="button" class="btn btn-outline remove-item-btn" data-index="${index}" style="${canDelete ? '' : 'visibility: hidden;'}" title="حذف هذا السعر">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `).join('');
+
+    const updateRowCalculation = (idx) => {
+        if (!modalRateItems[idx]) return;
+        const rowEl = container.querySelector(`.item-row[data-index="${idx}"]`);
+        const amountEl = rowEl?.querySelector('.item-amount');
+        const rateEl = rowEl?.querySelector('.item-rate');
+        const egpEl = rowEl?.querySelector('.item-egp');
+        modalRateItems[idx].amount = amountEl ? amountEl.value : '';
+        modalRateItems[idx].exchange_rate = rateEl ? rateEl.value : '';
+        const amountVal = parseNumberInput(modalRateItems[idx].amount);
+        const rateVal = parseNumberInput(modalRateItems[idx].exchange_rate);
+        const egpVal = (Number.isFinite(amountVal) && Number.isFinite(rateVal) && amountVal > 0 && rateVal > 0)
+            ? roundMoney(amountVal * rateVal)
+            : 0;
+        modalRateItems[idx].amount_egp = egpVal;
+        if (egpEl) {
+            egpEl.value = egpVal > 0 ? formatNumber(egpVal) : '0.00';
+        }
+        updateEgyptianAmount();
+    };
+
+    container.querySelectorAll('.item-amount').forEach((input) => {
+        const idx = Number(input.dataset.index);
+        attachRowNumberFormatting(input, () => updateRowCalculation(idx));
+    });
+
+    container.querySelectorAll('.item-rate').forEach((input) => {
+        const idx = Number(input.dataset.index);
+        attachRowNumberFormatting(input, () => updateRowCalculation(idx));
+    });
+
+    container.querySelectorAll('.item-currency').forEach((input) => {
+        input.addEventListener('input', (e) => {
+            const idx = Number(e.target.dataset.index);
+            if (modalRateItems[idx]) {
+                modalRateItems[idx].currency = e.target.value;
+            }
+        });
+    });
+
+    container.querySelectorAll('.remove-item-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const idx = Number(btn.dataset.index);
+            if (modalRateItems.length > 1) {
+                syncRateItemsFromDOM();
+                modalRateItems.splice(idx, 1);
+                renderModalRateItems();
+                updateEgyptianAmount();
+            }
+        });
+    });
+
+    updateEgyptianAmount();
+}
+
+function updateEgyptianAmount() {
+    let totalAmount = 0;
+    let totalEgp = 0;
+
+    modalRateItems.forEach((item) => {
+        const a = parseNumberInput(item.amount);
+        const r = parseNumberInput(item.exchange_rate);
+        if (Number.isFinite(a) && a > 0) {
+            totalAmount += a;
+            if (Number.isFinite(r) && r > 0) {
+                totalEgp += roundMoney(a * r);
+            }
+        }
+    });
+
+    totalAmount = roundMoney(totalAmount);
+    totalEgp = roundMoney(totalEgp);
+    const avgRate = totalAmount > 0 ? roundMoney(totalEgp / totalAmount) : 0;
+
+    const amountInput = document.getElementById('amountInput');
+    if (amountInput) {
+        amountInput.value = totalAmount > 0 ? formatNumber(totalAmount) : '0.00';
+    }
+
+    const rateInput = document.getElementById('exchangeRateInput');
+    if (rateInput) {
+        rateInput.value = avgRate > 0 ? formatNumber(avgRate) : '0.00';
+    }
+
+    const egyptianInput = document.getElementById('amountEgp');
+    if (egyptianInput) {
+        egyptianInput.value = totalEgp > 0 ? formatNumber(totalEgp) : '0.00';
+    }
+
+    updateUnderCollectionLiveStats();
+}
+
 function getRowById(id) {
     return state.rows.find((row) => String(row.id) === String(id));
+}
+
+const EXR_SPLITS_CACHE_KEY = 'exr_items_splits_cache_v1';
+
+function cacheExportRevenueItems(id, docNum, items) {
+    if (!Array.isArray(items) || !items.length) return;
+    try {
+        const raw = localStorage.getItem(EXR_SPLITS_CACHE_KEY);
+        const map = raw ? JSON.parse(raw) : {};
+        const serialized = JSON.stringify(items);
+        if (id) map[`id:${id}`] = serialized;
+        if (docNum) map[`doc:${docNum}`] = serialized;
+        localStorage.setItem(EXR_SPLITS_CACHE_KEY, JSON.stringify(map));
+    } catch (_) {}
+}
+
+function parseRowItems(row) {
+    if (!row) return null;
+    let rawJson = row.items_json;
+    if (!rawJson) {
+        try {
+            const rawCache = localStorage.getItem(EXR_SPLITS_CACHE_KEY);
+            if (rawCache) {
+                const map = JSON.parse(rawCache);
+                rawJson = (row.id && map[`id:${row.id}`]) || (row.document_number && map[`doc:${row.document_number}`]) || null;
+            }
+        } catch (_) {}
+    }
+    if (!rawJson) return null;
+    try {
+        const parsed = JSON.parse(rawJson);
+        if (Array.isArray(parsed) && parsed.length) {
+            return parsed;
+        }
+    } catch (_) {}
+    return null;
+}
+
+function getAmountCellDisplay(row) {
+    const items = parseRowItems(row);
+    if (Array.isArray(items) && items.length > 1) {
+        return `
+            <div>
+                <div><strong>${formatNumber(row.amount)}</strong> <span class="rate-splits-badge">(${items.length} شرائح)</span></div>
+                <div class="rate-splits-sub">${items.map((it) => formatNumber(it.amount)).join(' + ')}</div>
+            </div>
+        `;
+    }
+    return formatNumber(row.amount);
+}
+
+function getExchangeRateCellDisplay(row) {
+    const items = parseRowItems(row);
+    if (Array.isArray(items) && items.length > 1) {
+        const details = items
+            .map((it) => `${formatNumber(it.amount)} ${escapeHtml(it.currency || 'دولار')} × ${formatNumber(it.exchange_rate)}`)
+            .join(' | ');
+        return `
+            <div>
+                <div><strong>${formatNumber(row.exchange_rate)}</strong> <span class="rate-avg-hint">(متوسط)</span></div>
+                <div class="rate-splits-sub" dir="rtl">${details}</div>
+            </div>
+        `;
+    }
+    return formatNumber(row.exchange_rate);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -342,25 +556,37 @@ function renderPage() {
 
                             <div id="underCollectionInfoCard" class="under-collection-info-card" style="display: none;"></div>
 
-                            <div class="petty-modal-row three-cols">
-                                <div class="form-group">
-                                    <label><i class="fas fa-coins text-icon"></i> المبلغ <span class="required-asterisk">*</span></label>
-                                    <input type="text" id="amountInput" class="form-control number-input" placeholder="0" required>
+                            <div class="items-breakdown-card" style="grid-column: 1 / -1;">
+                                <div class="items-breakdown-header">
+                                    <label style="margin: 0; font-weight: 800; display: inline-flex; align-items: center; gap: 6px;">
+                                        <i class="fas fa-coins text-icon"></i> تفاصيل المبالغ وأسعار الصرف <span class="required-asterisk">*</span>
+                                    </label>
+                                    <button type="button" class="btn btn-outline add-item-btn" id="addRateRowBtn">
+                                        <i class="fas fa-plus"></i> إضافة سعر صرف آخر
+                                    </button>
                                 </div>
-                                <div class="form-group">
-                                    <label><i class="fas fa-dollar-sign text-icon"></i> العملة <span class="required-asterisk">*</span></label>
-                                    <input type="text" id="currencyInput" class="form-control" value="دولار" placeholder="مثال: دولار" required>
+                                <div class="item-row-header">
+                                    <div>المبلغ</div>
+                                    <div>العملة</div>
+                                    <div>سعر الصرف</div>
+                                    <div>المصري (ج.م)</div>
+                                    <div></div>
                                 </div>
-                                <div class="form-group">
-                                    <label><i class="fas fa-exchange-alt text-icon"></i> الصرف <span class="required-asterisk">*</span></label>
-                                    <input type="text" id="exchangeRateInput" class="form-control number-input" placeholder="0" required>
-                                </div>
+                                <div id="rateItemsContainer" class="items-table-wrapper"></div>
                             </div>
 
-                            <div class="petty-modal-row">
+                            <div class="petty-modal-row four-cols">
                                 <div class="form-group">
-                                    <label><i class="fas fa-sack-dollar text-icon"></i> المصري</label>
-                                    <input type="text" id="amountEgp" class="form-control uneditable number-input" readonly>
+                                    <label><i class="fas fa-coins text-icon"></i> إجمالي المبلغ</label>
+                                    <input type="text" id="amountInput" class="form-control uneditable number-input" value="0.00" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-exchange-alt text-icon"></i> متوسط الصرف</label>
+                                    <input type="text" id="exchangeRateInput" class="form-control uneditable number-input" value="0.00" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-sack-dollar text-icon"></i> إجمالي المصري</label>
+                                    <input type="text" id="amountEgp" class="form-control uneditable number-input" value="0.00" readonly>
                                 </div>
                                 <div class="form-group">
                                     <label><i class="fas fa-pen text-icon"></i> البيان</label>
@@ -406,7 +632,7 @@ function renderPage() {
 
 function bindEvents() {
     document.getElementById('exportRevenuesForm').addEventListener('submit', saveRecord);
-    
+
     const triggerSearch = () => {
         state.page = 1;
         loadRecords();
@@ -436,17 +662,23 @@ function bindEvents() {
     });
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
 
+    document.getElementById('addRateRowBtn')?.addEventListener('click', () => {
+        syncRateItemsFromDOM();
+        const defaultCurrency = modalRateItems[modalRateItems.length - 1]?.currency || 'دولار';
+        modalRateItems.push({ amount: '', currency: defaultCurrency, exchange_rate: '', amount_egp: 0 });
+        renderModalRateItems();
+    });
+
     const modal = document.getElementById('addRecordModal');
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
         state.editingId = null;
         state.currentLinkedInvoice = null;
         document.getElementById('exportRevenuesForm').reset();
         document.getElementById('recordDate').value = today();
-        document.getElementById('currencyInput').value = 'دولار';
-        document.getElementById('amountEgp').value = '';
         document.getElementById('invoiceNumberInput').value = '';
         renderUnderCollectionInfoCard(null);
         closeInvoiceDropdown();
+        initModalRateItems([{ amount: '', currency: 'دولار', exchange_rate: '', amount_egp: 0 }]);
         await refreshDocumentNumber();
         await loadUnderCollectionInvoices();
         modal.classList.remove('hidden');
@@ -463,9 +695,6 @@ function bindEvents() {
     modal.addEventListener('click', (e) => {
         if (e.target === modal) closeModal();
     });
-
-    attachNumberFormatting(document.getElementById('amountInput'));
-    attachNumberFormatting(document.getElementById('exchangeRateInput'));
 
     const invoiceInput = document.getElementById('invoiceNumberInput');
     invoiceInput?.addEventListener('input', () => {
@@ -647,6 +876,61 @@ async function onInvoiceNumberInput() {
     }, 200);
 }
 
+function updateUnderCollectionLiveStats() {
+    const inv = state.currentLinkedInvoice;
+    if (!inv || inv.notFound) return;
+
+    let currentEnteredAmount = 0;
+    modalRateItems.forEach((item) => {
+        const a = parseNumberInput(item.amount);
+        if (Number.isFinite(a) && a > 0) {
+            currentEnteredAmount += a;
+        }
+    });
+    currentEnteredAmount = roundMoney(currentEnteredAmount);
+
+    const discountEl = document.getElementById('invoiceDiscountInput');
+    const liveDiscount = discountEl && discountEl.value !== ''
+        ? Math.max(0, Number(discountEl.value) || 0)
+        : (Number(inv.discount_usd) || 0);
+    const totalUsd = Number(inv.total_usd) || 0;
+    const liveNet = Math.max(0, roundMoney(totalUsd - liveDiscount));
+    const paidBefore = roundMoney(Number(inv.paidBefore) || 0);
+    const liveTotalPaid = roundMoney(paidBefore + currentEnteredAmount);
+    const liveRemaining = Math.max(0, roundMoney(liveNet - liveTotalPaid));
+    const livePercent = liveNet > 0 ? roundMoney((liveRemaining / liveNet) * 100) : 0;
+    const isFullyCollected = liveRemaining <= 0 && liveNet > 0;
+
+    const statusEl = document.getElementById('ucLiveStatusBadge');
+    if (statusEl) {
+        statusEl.className = `uc-status ${isFullyCollected ? 'collected' : 'pending'}`;
+        statusEl.textContent = isFullyCollected ? 'مكتملة التحصيل' : 'تحت التحصيل';
+    }
+
+    const netEl = document.getElementById('ucLiveNetVal');
+    if (netEl) {
+        netEl.textContent = `${formatNumber(liveNet)} $`;
+    }
+
+    const paidLabelEl = document.getElementById('ucLivePaidLabel');
+    const paidEl = document.getElementById('ucLivePaidVal');
+    if (paidEl) {
+        if (currentEnteredAmount > 0) {
+            if (paidLabelEl) paidLabelEl.textContent = 'المسدد (شامل الدفعة):';
+            paidEl.textContent = `${formatNumber(liveTotalPaid)} $`;
+        } else {
+            if (paidLabelEl) paidLabelEl.textContent = 'المسدد سابقاً:';
+            paidEl.textContent = `${formatNumber(paidBefore)} $`;
+        }
+    }
+
+    const remEl = document.getElementById('ucLiveRemainingVal');
+    if (remEl) {
+        remEl.textContent = `${formatNumber(liveRemaining)} $ (${livePercent}%)`;
+        remEl.style.color = isFullyCollected ? '#10b981' : '#f59e0b';
+    }
+}
+
 function renderUnderCollectionInfoCard(inv) {
     const card = document.getElementById('underCollectionInfoCard');
     if (!card) return;
@@ -673,24 +957,24 @@ function renderUnderCollectionInfoCard(inv) {
         <div class="uc-linked-box">
             <div class="uc-linked-header">
                 <span class="uc-badge"><i class="fas fa-link"></i> مرتبطة بفاتورة تحت التحصيل (${escapeHtml(inv.document_number)})</span>
-                <span class="uc-status ${inv.is_collected ? 'collected' : 'pending'}">${inv.is_collected ? 'مكتملة التحصيل' : 'تحت التحصيل'}</span>
+                <span id="ucLiveStatusBadge" class="uc-status ${inv.is_collected ? 'collected' : 'pending'}">${inv.is_collected ? 'مكتملة التحصيل' : 'تحت التحصيل'}</span>
             </div>
             <div class="uc-linked-grid">
                 <div class="uc-linked-item">
                     <span class="uc-item-label">إجمالي الفاتورة:</span>
-                    <span class="uc-item-val">${formatNumber(inv.total_usd)} $</span>
+                    <span id="ucLiveTotalVal" class="uc-item-val">${formatNumber(inv.total_usd)} $</span>
                 </div>
                 <div class="uc-linked-item">
                     <span class="uc-item-label">الصافي الحالي:</span>
-                    <span class="uc-item-val">${formatNumber(inv.net_usd)} $</span>
+                    <span id="ucLiveNetVal" class="uc-item-val">${formatNumber(inv.net_usd)} $</span>
                 </div>
                 <div class="uc-linked-item">
-                    <span class="uc-item-label">المسدد سابقاً:</span>
-                    <span class="uc-item-val" style="color: #10b981;">${formatNumber(inv.paidBefore)} $</span>
+                    <span id="ucLivePaidLabel" class="uc-item-label">المسدد سابقاً:</span>
+                    <span id="ucLivePaidVal" class="uc-item-val" style="color: #10b981;">${formatNumber(inv.paidBefore)} $</span>
                 </div>
                 <div class="uc-linked-item">
                     <span class="uc-item-label">المتبقي الحالي:</span>
-                    <span class="uc-item-val" style="color: #f59e0b;">${formatNumber(inv.remainingBefore)} $ (${inv.remainingPercentBefore}%)</span>
+                    <span id="ucLiveRemainingVal" class="uc-item-val" style="color: #f59e0b;">${formatNumber(inv.remainingBefore)} $ (${inv.remainingPercentBefore}%)</span>
                 </div>
             </div>
             <div class="uc-linked-discount">
@@ -699,6 +983,12 @@ function renderUnderCollectionInfoCard(inv) {
             </div>
         </div>
     `;
+
+    const discountInput = document.getElementById('invoiceDiscountInput');
+    discountInput?.addEventListener('input', () => {
+        updateUnderCollectionLiveStats();
+    });
+    updateUnderCollectionLiveStats();
 }
 
 function openInvoiceSyncPreview() {
@@ -719,10 +1009,33 @@ function openInvoiceSyncPreview() {
         return;
     }
 
+    syncRateItemsFromDOM();
     const inv = state.currentLinkedInvoice;
-    const currentAmount = parseNumberInput(document.getElementById('amountInput').value) || 0;
-    const currentRate = parseNumberInput(document.getElementById('exchangeRateInput').value) || 0;
-    const currentAmountEgp = roundMoney(currentAmount * currentRate);
+
+    let currentAmount = 0;
+    let currentAmountEgp = 0;
+    const activeSplits = [];
+
+    modalRateItems.forEach((item) => {
+        const a = parseNumberInput(item.amount);
+        const r = parseNumberInput(item.exchange_rate);
+        const curr = String(item.currency || 'دولار').trim() || 'دولار';
+        if (Number.isFinite(a) && a > 0) {
+            currentAmount += a;
+            const egp = (Number.isFinite(r) && r > 0) ? roundMoney(a * r) : 0;
+            currentAmountEgp += egp;
+            activeSplits.push({
+                amount: roundMoney(a),
+                currency: curr,
+                exchange_rate: Number.isFinite(r) && r > 0 ? roundMoney(r) : 0,
+                amount_egp: egp
+            });
+        }
+    });
+
+    currentAmount = roundMoney(currentAmount);
+    currentAmountEgp = roundMoney(currentAmountEgp);
+    const currentRate = currentAmount > 0 ? roundMoney(currentAmountEgp / currentAmount) : 0;
 
     const discountEl = document.getElementById('invoiceDiscountInput');
     const newDiscount = discountEl && discountEl.value !== '' ? Math.max(0, Number(discountEl.value) || 0) : Number(inv.discount_usd) || 0;
@@ -732,6 +1045,10 @@ function openInvoiceSyncPreview() {
     const newRemaining = Math.max(0, roundMoney(newNet - newTotalPaid));
     const newPercent = newNet > 0 ? roundMoney((newRemaining / newNet) * 100) : 0;
     const newIsCollected = (newRemaining <= 0 && newNet > 0);
+
+    const splitsSummaryHtml = activeSplits.length > 1
+        ? `<div style="margin-top: 6px; font-size: 0.82rem; color: var(--text-muted);">${activeSplits.map((s) => `${formatNumber(s.amount)} ${escapeHtml(s.currency)} × ${formatNumber(s.exchange_rate)} = ${formatNumber(s.amount_egp)} ج.م`).join(' | ')}</div>`
+        : '';
 
     content.innerHTML = `
         <div class="sync-preview-header-card">
@@ -803,9 +1120,12 @@ function openInvoiceSyncPreview() {
             </table>
         </div>
 
-        <div class="sync-preview-footer-note">
-            <i class="fas fa-calculator text-icon"></i>
-            <span>قيد إيراد التصدير الجديد: تسجيل <strong>${formatNumber(currentAmount)} $</strong> بسعر صرف <strong>${formatNumber(currentRate)}</strong> = <strong>${formatNumber(currentAmountEgp)} ج.م</strong> مصري.</span>
+        <div class="sync-preview-footer-note" style="flex-direction: column; align-items: flex-start;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-calculator text-icon"></i>
+                <span>قيد إيراد التصدير الجديد: تسجيل إجمالي <strong>${formatNumber(currentAmount)} $</strong> بمتوسط صرف <strong>${formatNumber(currentRate)}</strong> = <strong>${formatNumber(currentAmountEgp)} ج.م</strong> مصري.</span>
+            </div>
+            ${splitsSummaryHtml}
         </div>
     `;
 
@@ -814,11 +1134,6 @@ function openInvoiceSyncPreview() {
 
 function closeInvoiceSyncPreview() {
     document.getElementById('invoiceSyncPreviewModal')?.classList.add('hidden');
-}
-
-function roundMoney(value) {
-    const n = Number(value) || 0;
-    return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 async function refreshDocumentNumber() {
@@ -885,9 +1200,9 @@ function renderRows() {
             <td>${escapeHtml(formatWeekday(row.record_date))}</td>
             <td>${escapeHtml(row.record_date || '')}</td>
             <td><strong>${escapeHtml(row.invoice_number || '-')}</strong></td>
-            <td class="amount-cell">${formatNumber(row.amount)}</td>
+            <td class="amount-cell">${getAmountCellDisplay(row)}</td>
             <td class="currency-cell">${escapeHtml(row.currency || '')}</td>
-            <td class="rate-cell">${formatNumber(row.exchange_rate)}</td>
+            <td class="rate-cell">${getExchangeRateCellDisplay(row)}</td>
             <td class="egp-cell">${formatNumber(row.amount_egp)}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
             <td>
@@ -930,12 +1245,19 @@ async function openEditModal(id) {
     state.editingId = row.id;
     document.getElementById('documentNumber').value = row.document_number || '';
     document.getElementById('recordDate').value = row.record_date || today();
-    document.getElementById('amountInput').value = formatNumber(row.amount);
-    document.getElementById('currencyInput').value = row.currency || 'دولار';
-    document.getElementById('exchangeRateInput').value = formatNumber(row.exchange_rate);
-    document.getElementById('amountEgp').value = formatNumber(row.amount_egp);
     document.getElementById('statementInput').value = row.statement || '';
     document.getElementById('invoiceNumberInput').value = row.invoice_number || '';
+
+    let items = parseRowItems(row);
+    if (!Array.isArray(items) || !items.length) {
+        items = [{
+            amount: row.amount,
+            currency: row.currency || 'دولار',
+            exchange_rate: row.exchange_rate,
+            amount_egp: row.amount_egp
+        }];
+    }
+    initModalRateItems(items);
 
     closeInvoiceDropdown();
     await loadUnderCollectionInvoices();
@@ -974,15 +1296,52 @@ async function saveRecord(event) {
     event.preventDefault();
     if (state.isSaving) return;
 
+    syncRateItemsFromDOM();
+
+    const cleanItems = [];
+    let totalAmount = 0;
+    let totalEgp = 0;
+
+    modalRateItems.forEach((item) => {
+        const amountVal = parseNumberInput(item.amount);
+        const rateVal = parseNumberInput(item.exchange_rate);
+        const currencyVal = String(item.currency || 'دولار').trim() || 'دولار';
+        if (Number.isFinite(amountVal) && amountVal > 0 && Number.isFinite(rateVal) && rateVal > 0) {
+            const roundedAmount = roundMoney(amountVal);
+            const roundedRate = roundMoney(rateVal);
+            const roundedEgp = roundMoney(roundedAmount * roundedRate);
+            totalAmount += roundedAmount;
+            totalEgp += roundedEgp;
+            cleanItems.push({
+                amount: roundedAmount,
+                currency: currencyVal,
+                exchange_rate: roundedRate,
+                amount_egp: roundedEgp
+            });
+        }
+    });
+
+    if (!cleanItems.length || totalAmount <= 0) {
+        showMessage('يرجى إدخال المبلغ وسعر الصرف بشكل صحيح', 'error');
+        return;
+    }
+
+    totalAmount = roundMoney(totalAmount);
+    totalEgp = roundMoney(totalEgp);
+    const avgRate = roundMoney(totalEgp / totalAmount);
+    const uniqueCurrencies = Array.from(new Set(cleanItems.map((it) => it.currency).filter(Boolean)));
+    const mergedCurrency = uniqueCurrencies.length ? uniqueCurrencies.join(' / ') : 'دولار';
+
     const discountEl = document.getElementById('invoiceDiscountInput');
     const payload = {
         record_date: document.getElementById('recordDate').value || today(),
-        amount: parseNumberInput(document.getElementById('amountInput').value),
-        currency: document.getElementById('currencyInput').value,
-        exchange_rate: parseNumberInput(document.getElementById('exchangeRateInput').value),
+        amount: totalAmount,
+        currency: mergedCurrency,
+        exchange_rate: avgRate,
         statement: document.getElementById('statementInput').value,
         invoice_number: document.getElementById('invoiceNumberInput')?.value?.trim() || '',
-        discount_usd: discountEl && discountEl.value !== '' ? Number(discountEl.value) : undefined
+        discount_usd: discountEl && discountEl.value !== '' ? Number(discountEl.value) : undefined,
+        items_json: JSON.stringify(cleanItems)
     };
 
     state.isSaving = true;
@@ -996,11 +1355,13 @@ async function saveRecord(event) {
                 return;
             }
 
+            cacheExportRevenueItems(state.editingId, document.getElementById('documentNumber')?.value, cleanItems);
             showMessage('تم تعديل السجل وتحديث الفاتورة المرتبطة بنجاح', 'success');
             state.editingId = null;
             state.currentLinkedInvoice = null;
             document.getElementById('addRecordModal').classList.add('hidden');
             document.getElementById('exportRevenuesForm').reset();
+            initModalRateItems([{ amount: '', currency: 'دولار', exchange_rate: '', amount_egp: 0 }]);
             await loadRecords();
             return;
         }
@@ -1011,11 +1372,12 @@ async function saveRecord(event) {
             return;
         }
 
+        cacheExportRevenueItems(result.id, result.documentNumber || document.getElementById('documentNumber')?.value, cleanItems);
         showMessage('تم حفظ السجل وتحديث حالة الفاتورة تحت التحصيل بنجاح', 'success');
         document.getElementById('addRecordModal').classList.add('hidden');
         document.getElementById('exportRevenuesForm').reset();
         document.getElementById('recordDate').value = today();
-        document.getElementById('amountEgp').value = '';
+        initModalRateItems([{ amount: '', currency: 'دولار', exchange_rate: '', amount_egp: 0 }]);
         state.currentLinkedInvoice = null;
         await refreshDocumentNumber();
         state.page = 1;

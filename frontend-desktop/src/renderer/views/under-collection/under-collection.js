@@ -11,7 +11,8 @@ const state = {
     totalAmount: 0,
     totalCollected: 0,
     totalRemaining: 0,
-    totalCount: 0
+    totalCount: 0,
+    customItemNames: []
 };
 
 function buildTopNavHTML() {
@@ -82,6 +83,331 @@ function getContainerText(row) {
 }
 
 let modalItems = [];
+let availableItemsList = [];
+let activeProductDropdownIndex = null;
+let highlightedProductOptionIndex = -1;
+
+async function syncCustomItemsToMasterItems(rawNames = []) {
+    try {
+        if (!window.electronAPI || typeof window.electronAPI.getItems !== 'function') return;
+        const currentItems = await window.electronAPI.getItems();
+        if (Array.isArray(currentItems)) {
+            availableItemsList = currentItems;
+        }
+        const existingSet = new Set(
+            (Array.isArray(availableItemsList) ? availableItemsList : [])
+                .map((it) => String(it?.name || '').trim().toLowerCase())
+                .filter(Boolean)
+        );
+
+        const candidateNames = [];
+        const pushCandidate = (val) => {
+            const clean = String(val || '').trim();
+            if (!clean) return;
+            const key = clean.toLowerCase();
+            if (existingSet.has(key)) return;
+            existingSet.add(key);
+            candidateNames.push(clean);
+        };
+
+        if (Array.isArray(rawNames)) {
+            rawNames.forEach(pushCandidate);
+        }
+        if (Array.isArray(state.customItemNames)) {
+            state.customItemNames.forEach(pushCandidate);
+        }
+        if (Array.isArray(state.rows)) {
+            state.rows.forEach((row) => {
+                if (!row || !row.items_json) return;
+                try {
+                    const parsed = JSON.parse(row.items_json);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach((it) => {
+                            if (it) pushCandidate(it.name || it.item_name);
+                        });
+                    }
+                } catch (_) {}
+            });
+        }
+
+        if (!candidateNames.length || typeof window.electronAPI.addItem !== 'function') return;
+
+        let defaultUnitId = null;
+        if (typeof window.electronAPI.getUnits === 'function') {
+            const units = await window.electronAPI.getUnits();
+            if (Array.isArray(units) && units.length) {
+                const preferred = units.find((u) => /طن|كجم|كيلو/i.test(String(u?.name || ''))) || units[0];
+                defaultUnitId = preferred ? preferred.id : null;
+            } else if (typeof window.electronAPI.addUnit === 'function') {
+                const addedUnit = await window.electronAPI.addUnit('طن');
+                if (addedUnit && addedUnit.id) {
+                    defaultUnitId = addedUnit.id;
+                }
+            }
+        }
+
+        for (const cleanName of candidateNames) {
+            try {
+                await window.electronAPI.addItem({
+                    name: cleanName,
+                    barcode: '',
+                    unit_id: defaultUnitId,
+                    cost_price: 0,
+                    sale_price: 0,
+                    stock_quantity: 0,
+                    reorder_level: 0
+                });
+            } catch (_) {}
+        }
+
+        const updatedItems = await window.electronAPI.getItems();
+        if (Array.isArray(updatedItems)) {
+            availableItemsList = updatedItems;
+        }
+    } catch (_) {}
+}
+
+async function loadAvailableItems() {
+    try {
+        if (window.electronAPI && typeof window.electronAPI.getItems === 'function') {
+            const items = await window.electronAPI.getItems();
+            if (Array.isArray(items)) {
+                availableItemsList = items;
+            }
+        }
+        await syncCustomItemsToMasterItems();
+    } catch (_) {}
+}
+
+function getMergedProductNames() {
+    const seen = new Set();
+    const names = [];
+    const pushName = (raw) => {
+        const clean = String(raw || '').trim();
+        if (!clean) return;
+        const key = clean.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        names.push(clean);
+    };
+
+    if (Array.isArray(availableItemsList)) {
+        availableItemsList.forEach((item) => {
+            if (item && item.name) pushName(item.name);
+        });
+    }
+
+    if (Array.isArray(state.customItemNames)) {
+        state.customItemNames.forEach(pushName);
+    }
+
+    if (Array.isArray(state.rows)) {
+        state.rows.forEach((row) => {
+            if (!row || !row.items_json) return;
+            try {
+                const parsed = JSON.parse(row.items_json);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach((it) => {
+                        if (it) pushName(it.name || it.item_name);
+                    });
+                }
+            } catch (_) {}
+        });
+    }
+
+    return names;
+}
+
+function positionProductDropdown(inputEl) {
+    const portal = document.getElementById('ucProductDropdownPortal');
+    if (!portal || !inputEl || portal.classList.contains('hidden')) return;
+
+    const wrap = inputEl.closest('.uc-item-dropdown-wrap') || inputEl;
+    const rect = wrap.getBoundingClientRect();
+    if (!rect.width && !rect.height) {
+        closeProductDropdown();
+        return;
+    }
+
+    const viewportH = window.innerHeight || document.documentElement.clientHeight || 800;
+    const viewportW = window.innerWidth || document.documentElement.clientWidth || 1200;
+    const margin = 12;
+    const gap = 6;
+    const preferredMaxH = 250;
+
+    const spaceBelow = viewportH - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+    const openUpward = spaceBelow < 210 && spaceAbove > spaceBelow;
+
+    const maxH = Math.max(120, Math.min(preferredMaxH, (openUpward ? spaceAbove : spaceBelow) - gap));
+    const width = Math.max(rect.width, 200);
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, viewportW - width - 8));
+
+    portal.style.width = `${width}px`;
+    portal.style.left = `${left}px`;
+    portal.style.maxHeight = `${maxH}px`;
+
+    if (openUpward) {
+        portal.style.top = 'auto';
+        portal.style.bottom = `${Math.max(8, viewportH - rect.top + gap)}px`;
+        portal.classList.add('drop-up');
+        portal.classList.remove('drop-down');
+    } else {
+        portal.style.bottom = 'auto';
+        portal.style.top = `${rect.bottom + gap}px`;
+        portal.classList.add('drop-down');
+        portal.classList.remove('drop-up');
+    }
+}
+
+function closeProductDropdown() {
+    const portal = document.getElementById('ucProductDropdownPortal');
+    if (portal) {
+        portal.classList.add('hidden');
+        portal.classList.remove('drop-up', 'drop-down');
+        portal.innerHTML = '';
+    }
+    document.querySelectorAll('.uc-item-dropdown-wrap.is-open, .uc-item-dropdown-arrow.is-open').forEach((el) => {
+        el.classList.remove('is-open');
+    });
+    activeProductDropdownIndex = null;
+    highlightedProductOptionIndex = -1;
+}
+
+function highlightProductOption(options) {
+    options.forEach((opt, idx) => {
+        if (idx === highlightedProductOptionIndex) {
+            opt.classList.add('is-highlighted');
+            opt.scrollIntoView({ block: 'nearest' });
+        } else {
+            opt.classList.remove('is-highlighted');
+        }
+    });
+}
+
+function selectProductOption(rowIndex, value) {
+    const cleanVal = String(value ?? '').trim();
+    if (modalItems[rowIndex]) {
+        modalItems[rowIndex].name = cleanVal;
+        modalItems[rowIndex].item_name = cleanVal;
+    }
+    const container = document.getElementById('itemsContainer');
+    const input = container?.querySelector(`.item-name[data-index="${rowIndex}"]`);
+    if (input) {
+        input.value = cleanVal;
+    }
+    closeProductDropdown();
+}
+
+function openProductDropdown(rowIndex, filterText = '', showAll = false) {
+    const container = document.getElementById('itemsContainer');
+    const inputEl = container?.querySelector(`.item-name[data-index="${rowIndex}"]`);
+    const portal = document.getElementById('ucProductDropdownPortal');
+    if (!inputEl || !portal) return;
+
+    const allNames = getMergedProductNames();
+    const rawQuery = String(filterText ?? '').trim();
+    const queryLower = rawQuery.toLowerCase();
+
+    const filtered = showAll || !queryLower
+        ? allNames
+        : allNames.filter((name) => name.toLowerCase().includes(queryLower));
+
+    const exactMatch = rawQuery
+        ? allNames.some((name) => name.toLowerCase() === queryLower)
+        : true;
+
+    activeProductDropdownIndex = rowIndex;
+    highlightedProductOptionIndex = -1;
+
+    document.querySelectorAll('.uc-item-dropdown-wrap.is-open, .uc-item-dropdown-arrow.is-open').forEach((el) => {
+        el.classList.remove('is-open');
+    });
+    const wrap = inputEl.closest('.uc-item-dropdown-wrap');
+    const arrowBtn = wrap?.querySelector('.uc-item-dropdown-arrow');
+    wrap?.classList.add('is-open');
+    arrowBtn?.classList.add('is-open');
+
+    const currentValTrimmed = String(inputEl.value || '').trim();
+    let html = '';
+
+    if (rawQuery && !exactMatch) {
+        html += `
+            <div class="uc-product-option uc-product-custom-option" role="option" data-value="${escapeHtml(rawQuery)}">
+                <span class="uc-product-option-main">
+                    <i class="fas fa-plus-circle uc-product-option-icon"></i>
+                    <span class="uc-product-option-text">اعتماد الاسم: <strong>${escapeHtml(rawQuery)}</strong></span>
+                </span>
+                <span class="uc-product-custom-badge">اسم مخصص</span>
+            </div>
+        `;
+    }
+
+    if (filtered.length) {
+        html += filtered.map((name) => {
+            const isSelected = currentValTrimmed && currentValTrimmed.toLowerCase() === name.toLowerCase();
+            return `
+                <div class="uc-product-option ${isSelected ? 'is-selected' : ''}" role="option" data-value="${escapeHtml(name)}">
+                    <span class="uc-product-option-main">
+                        <i class="fas fa-cube uc-product-option-icon"></i>
+                        <span class="uc-product-option-text">${escapeHtml(name)}</span>
+                    </span>
+                    ${isSelected ? '<i class="fas fa-check uc-product-option-check"></i>' : ''}
+                </div>
+            `;
+        }).join('');
+    } else if (!rawQuery) {
+        html = `
+            <div class="uc-product-empty">
+                <i class="fas fa-box-open"></i>
+                <span>اكتب اسم المنتج مباشرة أو أضف أصنافاً من الإعدادات</span>
+            </div>
+        `;
+    }
+
+    portal.innerHTML = html;
+    portal.classList.remove('hidden');
+    positionProductDropdown(inputEl);
+
+    const optionEls = Array.from(portal.querySelectorAll('.uc-product-option'));
+    optionEls.forEach((optEl, idx) => {
+        optEl.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            selectProductOption(rowIndex, optEl.dataset.value || '');
+        });
+        optEl.addEventListener('mouseenter', () => {
+            highlightedProductOptionIndex = idx;
+            highlightProductOption(optionEls);
+        });
+    });
+}
+
+function syncModalItemsFromDOM() {
+    const container = document.getElementById('itemsContainer');
+    if (!container) return;
+    const rows = container.querySelectorAll('.item-row');
+    rows.forEach((rowEl) => {
+        const idx = Number(rowEl.dataset.index);
+        if (!modalItems[idx]) return;
+        const nameInput = rowEl.querySelector('.item-name');
+        const tonsInput = rowEl.querySelector('.item-tons');
+        const priceInput = rowEl.querySelector('.item-price');
+        if (nameInput) {
+            const cleanName = String(nameInput.value || '').trim();
+            modalItems[idx].name = cleanName;
+            modalItems[idx].item_name = cleanName;
+        }
+        if (tonsInput) {
+            modalItems[idx].tons = tonsInput.value;
+        }
+        if (priceInput) {
+            modalItems[idx].price = priceInput.value;
+        }
+        const tons = Number(modalItems[idx].tons) || 0;
+        const price = Number(modalItems[idx].price) || 0;
+        modalItems[idx].total = roundMoney(tons * price);
+    });
+}
 
 function roundMoney(value) {
     const n = Number(value) || 0;
@@ -89,15 +415,17 @@ function roundMoney(value) {
 }
 
 function initModalItems(initialItems) {
+    closeProductDropdown();
     if (Array.isArray(initialItems) && initialItems.length) {
         modalItems = initialItems.map((item) => {
+            const name = item.name !== undefined && item.name !== null ? item.name : (item.item_name || '');
             const tons = item.tons !== undefined && item.tons !== null ? item.tons : '';
             const price = item.price !== undefined && item.price !== null ? item.price : '';
             const total = roundMoney((Number(tons) || 0) * (Number(price) || 0));
-            return { tons, price, total };
+            return { name, item_name: name, tons, price, total };
         });
     } else {
-        modalItems = [{ tons: '', price: '', total: 0 }];
+        modalItems = [{ name: '', item_name: '', tons: '', price: '', total: 0 }];
     }
     renderModalItems();
 }
@@ -106,9 +434,16 @@ function renderModalItems() {
     const container = document.getElementById('itemsContainer');
     if (!container) return;
 
+    closeProductDropdown();
     const canDelete = modalItems.length > 1;
     container.innerHTML = modalItems.map((item, index) => `
         <div class="item-row" data-index="${index}">
+            <div class="uc-item-dropdown-wrap" data-index="${index}">
+                <input type="text" class="form-control item-name" data-index="${index}" placeholder="اسم المنتج (اختر أو اكتب)..." value="${escapeHtml(item.name || item.item_name || '')}" autocomplete="off">
+                <button type="button" class="uc-item-dropdown-arrow" data-index="${index}" tabindex="-1" aria-label="عرض قائمة المنتجات">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
             <div class="input-with-unit">
                 <input type="number" class="form-control item-tons" data-index="${index}" min="0" step="any" placeholder="عدد الأطنان" value="${item.tons}" required>
                 <span class="unit-badge">طن</span>
@@ -126,6 +461,98 @@ function renderModalItems() {
             </button>
         </div>
     `).join('');
+
+    container.querySelectorAll('.item-name').forEach((input) => {
+        input.addEventListener('focus', (e) => {
+            const idx = Number(e.target.dataset.index);
+            openProductDropdown(idx, e.target.value, true);
+        });
+
+        input.addEventListener('click', (e) => {
+            const idx = Number(e.target.dataset.index);
+            const portal = document.getElementById('ucProductDropdownPortal');
+            if (portal?.classList.contains('hidden') || activeProductDropdownIndex !== idx) {
+                openProductDropdown(idx, e.target.value, true);
+            }
+        });
+
+        input.addEventListener('input', (e) => {
+            const idx = Number(e.target.dataset.index);
+            if (modalItems[idx]) {
+                modalItems[idx].name = e.target.value;
+                modalItems[idx].item_name = e.target.value;
+            }
+            openProductDropdown(idx, e.target.value, false);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const idx = Number(e.target.dataset.index);
+            const portal = document.getElementById('ucProductDropdownPortal');
+            const isOpen = portal && !portal.classList.contains('hidden') && activeProductDropdownIndex === idx;
+            const options = isOpen ? Array.from(portal.querySelectorAll('.uc-product-option')) : [];
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (!isOpen) {
+                    openProductDropdown(idx, e.target.value, true);
+                    return;
+                }
+                if (options.length) {
+                    highlightedProductOptionIndex = (highlightedProductOptionIndex + 1) % options.length;
+                    highlightProductOption(options);
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (!isOpen) {
+                    openProductDropdown(idx, e.target.value, true);
+                    return;
+                }
+                if (options.length) {
+                    highlightedProductOptionIndex = highlightedProductOptionIndex <= 0 ? options.length - 1 : highlightedProductOptionIndex - 1;
+                    highlightProductOption(options);
+                }
+            } else if (e.key === 'Enter') {
+                if (isOpen) {
+                    e.preventDefault();
+                    if (highlightedProductOptionIndex >= 0 && options[highlightedProductOptionIndex]) {
+                        selectProductOption(idx, options[highlightedProductOptionIndex].dataset.value || '');
+                    } else {
+                        closeProductDropdown();
+                    }
+                }
+            } else if (e.key === 'Escape') {
+                if (isOpen) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeProductDropdown();
+                }
+            } else if (e.key === 'Tab') {
+                closeProductDropdown();
+            }
+        });
+    });
+
+    container.querySelectorAll('.uc-item-dropdown-arrow').forEach((btn) => {
+        btn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+        });
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const idx = Number(btn.dataset.index);
+            const portal = document.getElementById('ucProductDropdownPortal');
+            const isOpenForRow = portal && !portal.classList.contains('hidden') && activeProductDropdownIndex === idx;
+            if (isOpenForRow) {
+                closeProductDropdown();
+                return;
+            }
+            const input = container.querySelector(`.item-name[data-index="${idx}"]`);
+            if (input) {
+                input.focus();
+                openProductDropdown(idx, input.value, true);
+            }
+        });
+    });
 
     container.querySelectorAll('.item-tons').forEach((input) => {
         input.addEventListener('input', (e) => {
@@ -222,7 +649,13 @@ function getTonsPriceDisplay(row) {
         } catch (_) {}
     }
     if (Array.isArray(items) && items.length > 1) {
-        return `<div><strong>${formatQuantity(row.tons_count)} طن</strong> <span class="discount-badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; margin-inline-start: 4px;">(${items.length} أصناف)</span></div>`;
+        const itemNames = items.map((it) => (it && (it.name || it.item_name)) || '').filter(Boolean);
+        const subtitle = itemNames.length ? `<div style="font-size: 0.82rem; font-weight: 700; color: #0284c7; margin-top: 4px;"><i class="fas fa-cube" style="font-size: 0.74rem; margin-inline-end: 4px;"></i>${escapeHtml(itemNames.join(' ، '))}</div>` : '';
+        return `<div><strong>${formatQuantity(row.tons_count)} طن</strong> <span class="discount-badge" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; margin-inline-start: 4px;">(${items.length} أصناف)</span>${subtitle}</div>`;
+    }
+    const singleName = (Array.isArray(items) && items[0] && (items[0].name || items[0].item_name)) || '';
+    if (singleName) {
+        return `<div><div><strong>${formatQuantity(row.tons_count)} طن</strong> × ${formatMoney(row.ton_price)} $</div><div style="font-size: 0.82rem; font-weight: 700; color: #0284c7; margin-top: 4px;"><i class="fas fa-cube" style="font-size: 0.74rem; margin-inline-end: 4px;"></i>${escapeHtml(singleName)}</div></div>`;
     }
     return `${formatQuantity(row.tons_count)} طن × ${formatMoney(row.ton_price)} $`;
 }
@@ -249,6 +682,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('recordDate').value = today();
     await refreshDocumentNumber();
     await loadRecords();
+    await loadAvailableItems();
 });
 
 function renderPage() {
@@ -436,6 +870,7 @@ function renderPage() {
                                     </button>
                                 </div>
                                 <div class="item-row-header">
+                                    <div>اسم المنتج</div>
                                     <div>عدد الأطنان</div>
                                     <div>سعر الطن ($)</div>
                                     <div>الإجمالي ($)</div>
@@ -525,11 +960,33 @@ function renderPage() {
                 </div>
             </div>
         </div>
+        <div id="ucProductDropdownPortal" class="uc-product-dropdown hidden" role="listbox"></div>
     `;
 }
 
 function bindEvents() {
     document.getElementById('underCollectionForm').addEventListener('submit', saveRecord);
+
+    document.addEventListener('mousedown', (e) => {
+        const portal = document.getElementById('ucProductDropdownPortal');
+        if (!portal || portal.classList.contains('hidden')) return;
+        if (portal.contains(e.target) || e.target.closest('.uc-item-dropdown-wrap')) return;
+        closeProductDropdown();
+    });
+
+    window.addEventListener('resize', () => {
+        if (activeProductDropdownIndex === null) return;
+        const input = document.querySelector(`#itemsContainer .item-name[data-index="${activeProductDropdownIndex}"]`);
+        if (input) positionProductDropdown(input);
+    });
+
+    window.addEventListener('scroll', (e) => {
+        const portal = document.getElementById('ucProductDropdownPortal');
+        if (!portal || portal.classList.contains('hidden') || activeProductDropdownIndex === null) return;
+        if (e.target === portal || portal.contains(e.target)) return;
+        const input = document.querySelector(`#itemsContainer .item-name[data-index="${activeProductDropdownIndex}"]`);
+        if (input) positionProductDropdown(input);
+    }, true);
 
     const triggerSearch = () => {
         state.page = 1;
@@ -565,12 +1022,14 @@ function bindEvents() {
     document.getElementById('discountUsd')?.addEventListener('input', updateTotalPreview);
 
     document.getElementById('addItemRowBtn')?.addEventListener('click', () => {
-        modalItems.push({ tons: '', price: '', total: 0 });
+        syncModalItemsFromDOM();
+        modalItems.push({ name: '', item_name: '', tons: '', price: '', total: 0 });
         renderModalItems();
     });
 
     const modal = document.getElementById('addRecordModal');
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
+        closeProductDropdown();
         state.editingId = null;
         document.getElementById('underCollectionForm').reset();
         document.getElementById('recordDate').value = today();
@@ -578,12 +1037,16 @@ function bindEvents() {
         document.getElementById('remainingType').value = 'percent';
         const alertEl = document.getElementById('underCollectionLinkedAlert');
         if (alertEl) alertEl.style.display = 'none';
-        initModalItems([{ tons: '', price: '', total: 0 }]);
+        if (!availableItemsList.length) {
+            await loadAvailableItems();
+        }
+        initModalItems([{ name: '', item_name: '', tons: '', price: '', total: 0 }]);
         await refreshDocumentNumber();
         modal.classList.remove('hidden');
     });
 
     const closeModal = () => {
+        closeProductDropdown();
         state.editingId = null;
         modal.classList.add('hidden');
     };
@@ -614,20 +1077,15 @@ function bindEvents() {
     });
 }
 
-function escapeHtml(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
 function openOperationPreview() {
+    closeProductDropdown();
+    syncModalItemsFromDOM();
     let totalTons = 0;
+    const itemNames = [];
     modalItems.forEach((item) => {
         totalTons += Number(item.tons) || 0;
+        const n = String(item.name || item.item_name || '').trim();
+        if (n) itemNames.push(n);
     });
     totalTons = Math.round((totalTons + Number.EPSILON) * 1000) / 1000;
 
@@ -684,6 +1142,12 @@ function openOperationPreview() {
                 <span class="op-preview-label"><i class="fas fa-box text-icon"></i> الحاويات</span>
                 <span class="op-preview-val">${escapeHtml(containerText)}</span>
             </div>
+            ${itemNames.length ? `
+            <div class="op-preview-item full-width">
+                <span class="op-preview-label"><i class="fas fa-cubes text-icon"></i> المنتجات / الأصناف</span>
+                <span class="op-preview-val">${escapeHtml(itemNames.join('، '))}</span>
+            </div>
+            ` : ''}
             <div class="op-preview-item full-width">
                 <span class="op-preview-label"><i class="fas fa-pen text-icon"></i> البيان المسجل في التشغيل</span>
                 <span class="op-preview-val">${escapeHtml(statement)}</span>
@@ -733,6 +1197,7 @@ async function loadRecords() {
     }
 
     state.rows = Array.isArray(result.rows) ? result.rows : [];
+    state.customItemNames = Array.isArray(result.customItemNames) ? result.customItemNames : state.customItemNames;
     state.page = Number(result.page) || state.page;
     state.pageSize = Number(result.pageSize) || state.pageSize;
     state.totalPages = Number(result.totalPages) || 1;
@@ -838,6 +1303,11 @@ async function openEditModal(id) {
         return;
     }
 
+    closeProductDropdown();
+    if (!availableItemsList.length) {
+        await loadAvailableItems();
+    }
+
     state.editingId = row.id;
     document.getElementById('documentNumber').value = row.document_number || '';
     document.getElementById('recordDate').value = row.record_date || today();
@@ -866,6 +1336,8 @@ async function openEditModal(id) {
     }
     if (!Array.isArray(items) || !items.length) {
         items = [{
+            name: '',
+            item_name: '',
             tons: row.tons_count ?? '',
             price: row.ton_price ?? '',
             total: row.total_usd ?? 0
@@ -916,6 +1388,9 @@ async function saveRecord(event) {
     event.preventDefault();
     if (state.isSaving) return;
 
+    closeProductDropdown();
+    syncModalItemsFromDOM();
+
     let totalTons = 0;
     let totalUsd = 0;
     const cleanItems = [];
@@ -923,11 +1398,14 @@ async function saveRecord(event) {
     modalItems.forEach((item) => {
         const tons = Number(item.tons) || 0;
         const price = Number(item.price) || 0;
+        const name = String(item.name || item.item_name || '').trim();
         if (tons > 0 && price > 0) {
             const itemTotal = roundMoney(tons * price);
             totalTons += tons;
             totalUsd += itemTotal;
             cleanItems.push({
+                name,
+                item_name: name,
                 tons,
                 price: roundMoney(price),
                 total: itemTotal
@@ -963,6 +1441,8 @@ async function saveRecord(event) {
     state.isSaving = true;
     setSubmitButtonLoading(true);
     try {
+        await syncCustomItemsToMasterItems(cleanItems.map((it) => it.name));
+
         if (state.editingId) {
             payload.id = state.editingId;
             const result = await window.electronAPI.updateUnderCollectionRecord(payload);
@@ -975,7 +1455,9 @@ async function saveRecord(event) {
             state.editingId = null;
             document.getElementById('addRecordModal').classList.add('hidden');
             document.getElementById('underCollectionForm').reset();
+            initModalItems([{ name: '', tons: '', price: '', total: 0 }]);
             await loadRecords();
+            await loadAvailableItems();
             return;
         }
 
@@ -991,11 +1473,13 @@ async function saveRecord(event) {
         document.getElementById('recordDate').value = today();
         document.getElementById('discountUsd').value = '';
         document.getElementById('remainingType').value = 'percent';
+        initModalItems([{ name: '', tons: '', price: '', total: 0 }]);
         updateTotalPreview();
         await refreshDocumentNumber();
         document.getElementById('statement').focus();
         state.page = 1;
         await loadRecords();
+        await loadAvailableItems();
     } finally {
         state.isSaving = false;
         setSubmitButtonLoading(false);

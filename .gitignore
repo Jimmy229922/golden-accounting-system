@@ -67,3 +67,5 @@ APP_JS.zip
 
 # Backup files
 *.bak
+
+.agents

@@ -29,9 +29,61 @@ function normalizeDate(value) {
 }
 
 function normalizePayload(data = {}) {
-    const amount = Number(data.amount) || 0;
-    const exchangeRate = Number(data.exchange_rate) || 0;
-    const amountEgp = roundMoney(amount * exchangeRate);
+    let rawItems = null;
+    if (typeof data.items_json === 'string' && data.items_json.trim()) {
+        try {
+            const parsed = JSON.parse(data.items_json);
+            if (Array.isArray(parsed)) {
+                rawItems = parsed;
+            }
+        } catch (_) {}
+    } else if (Array.isArray(data.items_json)) {
+        rawItems = data.items_json;
+    }
+
+    const normalizedItems = [];
+    if (Array.isArray(rawItems) && rawItems.length) {
+        rawItems.forEach((item) => {
+            const itemAmount = roundMoney(Number(item?.amount) || 0);
+            const itemRate = roundMoney(Number(item?.exchange_rate) || 0);
+            const itemCurrency = String(item?.currency || data.currency || 'دولار').trim() || 'دولار';
+            if (itemAmount > 0 && itemRate > 0) {
+                const itemEgp = roundMoney(itemAmount * itemRate);
+                normalizedItems.push({
+                    amount: itemAmount,
+                    currency: itemCurrency,
+                    exchange_rate: itemRate,
+                    amount_egp: itemEgp
+                });
+            }
+        });
+    }
+
+    let amount = Number(data.amount) || 0;
+    let exchangeRate = Number(data.exchange_rate) || 0;
+    let amountEgp = roundMoney(amount * exchangeRate);
+    let currency = String(data.currency || 'دولار').trim() || 'دولار';
+    let itemsJson = null;
+
+    if (normalizedItems.length) {
+        amount = roundMoney(normalizedItems.reduce((sum, it) => sum + it.amount, 0));
+        amountEgp = roundMoney(normalizedItems.reduce((sum, it) => sum + it.amount_egp, 0));
+        exchangeRate = amount > 0 ? roundMoney(amountEgp / amount) : normalizedItems[0].exchange_rate;
+        const uniqueCurrencies = Array.from(new Set(normalizedItems.map((it) => it.currency).filter(Boolean)));
+        currency = uniqueCurrencies.length ? uniqueCurrencies.join(' / ') : 'دولار';
+        itemsJson = JSON.stringify(normalizedItems);
+    } else if (amount > 0 && exchangeRate > 0) {
+        const singleAmount = roundMoney(amount);
+        const singleRate = roundMoney(exchangeRate);
+        const singleEgp = roundMoney(singleAmount * singleRate);
+        itemsJson = JSON.stringify([{
+            amount: singleAmount,
+            currency,
+            exchange_rate: singleRate,
+            amount_egp: singleEgp
+        }]);
+    }
+
     const invoiceNumber = String(data.invoice_number || '').trim();
     const underCollectionId = data.under_collection_id ? Number(data.under_collection_id) : null;
     const discountUsd = (data.discount_usd !== undefined && data.discount_usd !== null && data.discount_usd !== '')
@@ -41,13 +93,14 @@ function normalizePayload(data = {}) {
     return {
         record_date: normalizeDate(data.record_date),
         amount: roundMoney(amount),
-        currency: String(data.currency || 'دولار').trim(),
+        currency,
         exchange_rate: roundMoney(exchangeRate),
         amount_egp: amountEgp,
         statement: String(data.statement || '').trim(),
         invoice_number: invoiceNumber,
         under_collection_id: underCollectionId,
-        discount_usd: discountUsd
+        discount_usd: discountUsd,
+        items_json: itemsJson
     };
 }
 
@@ -121,6 +174,10 @@ function syncUnderCollectionForInvoice(invoiceNumber, optionalDiscountUsd) {
 }
 
 function register() {
+    try {
+        db.exec('ALTER TABLE export_revenues ADD COLUMN items_json TEXT');
+    } catch (_) {}
+
     ipcMain.handle('get-next-export-revenue-number', () => {
         try {
             return { success: true, documentNumber: getNextDocumentNumber() };
@@ -168,7 +225,7 @@ function register() {
             `).get(args);
             const rows = db.prepare(`
                 SELECT id, document_number, record_date, amount, currency,
-                       exchange_rate, amount_egp, statement, invoice_number, under_collection_id, created_at
+                       exchange_rate, amount_egp, statement, invoice_number, under_collection_id, items_json, created_at
                 FROM export_revenues
                 ${whereSql}
                 ORDER BY datetime(created_at) DESC, id DESC
@@ -214,11 +271,11 @@ function register() {
                 const info = db.prepare(`
                     INSERT INTO export_revenues (
                         document_number, record_date, amount, currency,
-                        exchange_rate, amount_egp, statement, invoice_number, under_collection_id
+                        exchange_rate, amount_egp, statement, invoice_number, under_collection_id, items_json
                     )
                     VALUES (
                         @document_number, @record_date, @amount, @currency,
-                        @exchange_rate, @amount_egp, @statement, @invoice_number, @under_collection_id
+                        @exchange_rate, @amount_egp, @statement, @invoice_number, @under_collection_id, @items_json
                     )
                 `).run({
                     document_number: documentNumber,
@@ -229,7 +286,8 @@ function register() {
                     amount_egp: payload.amount_egp,
                     statement: payload.statement,
                     invoice_number: payload.invoice_number || null,
-                    under_collection_id: payload.under_collection_id || null
+                    under_collection_id: payload.under_collection_id || null,
+                    items_json: payload.items_json || null
                 });
 
                 resultId = info.lastInsertRowid;
@@ -280,7 +338,8 @@ function register() {
                         amount_egp = @amount_egp,
                         statement = @statement,
                         invoice_number = @invoice_number,
-                        under_collection_id = @under_collection_id
+                        under_collection_id = @under_collection_id,
+                        items_json = @items_json
                     WHERE id = @id
                 `).run({
                     record_date: payload.record_date,
@@ -291,6 +350,7 @@ function register() {
                     statement: payload.statement,
                     invoice_number: payload.invoice_number || null,
                     under_collection_id: payload.under_collection_id || null,
+                    items_json: payload.items_json || null,
                     id
                 });
 

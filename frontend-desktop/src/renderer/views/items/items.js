@@ -443,9 +443,90 @@ async function loadUnits() {
     }
 }
 
+async function syncUnderCollectionCustomItems(existingItems = []) {
+    try {
+        if (!window.electronAPI || typeof window.electronAPI.getUnderCollectionRecords !== 'function' || typeof window.electronAPI.addItem !== 'function') {
+            return false;
+        }
+        const ucResult = await window.electronAPI.getUnderCollectionRecords({ page: 1, pageSize: 500 });
+        if (!ucResult || !ucResult.success) return false;
+
+        const existingSet = new Set(
+            (Array.isArray(existingItems) ? existingItems : [])
+                .map((it) => String(it?.name || '').trim().toLowerCase())
+                .filter(Boolean)
+        );
+
+        const missingNames = [];
+        const pushMissing = (val) => {
+            const clean = String(val || '').trim();
+            if (!clean) return;
+            const key = clean.toLowerCase();
+            if (existingSet.has(key)) return;
+            existingSet.add(key);
+            missingNames.push(clean);
+        };
+
+        if (Array.isArray(ucResult.customItemNames)) {
+            ucResult.customItemNames.forEach(pushMissing);
+        }
+        if (Array.isArray(ucResult.rows)) {
+            ucResult.rows.forEach((row) => {
+                if (!row || !row.items_json) return;
+                try {
+                    const parsed = JSON.parse(row.items_json);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach((it) => {
+                            if (it) pushMissing(it.name || it.item_name);
+                        });
+                    }
+                } catch (_) {}
+            });
+        }
+
+        if (!missingNames.length) return false;
+
+        let unitsList = Array.isArray(allUnits) && allUnits.length ? allUnits : [];
+        if (!unitsList.length && typeof window.electronAPI.getUnits === 'function') {
+            unitsList = await window.electronAPI.getUnits();
+        }
+        let defaultUnitId = null;
+        if (Array.isArray(unitsList) && unitsList.length) {
+            const preferred = unitsList.find((u) => /طن|كجم|كيلو/i.test(String(u?.name || ''))) || unitsList[0];
+            defaultUnitId = preferred ? preferred.id : null;
+        } else if (typeof window.electronAPI.addUnit === 'function') {
+            const addedUnit = await window.electronAPI.addUnit('طن');
+            if (addedUnit && addedUnit.id) {
+                defaultUnitId = addedUnit.id;
+            }
+        }
+
+        for (const cleanName of missingNames) {
+            try {
+                await window.electronAPI.addItem({
+                    name: cleanName,
+                    barcode: '',
+                    unit_id: defaultUnitId,
+                    cost_price: 0,
+                    sale_price: 0,
+                    stock_quantity: 0,
+                    reorder_level: 0
+                });
+            } catch (_) {}
+        }
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 async function loadItems() {
     try {
         allItems = await window.electronAPI.getItems();
+        const didSync = await syncUnderCollectionCustomItems(allItems);
+        if (didSync) {
+            allItems = await window.electronAPI.getItems();
+        }
         syncAutoBarcodeField();
         currentFilteredItems = [...allItems];
         renderTable();
@@ -511,7 +592,7 @@ function renderTable() {
     const regex = searchTerm ? new RegExp(`(${searchTerm})`, 'gi') : null;
 
     pageItems.forEach((item, index) => {
-        const unitName = allUnits.find(u => u.id == item.unit_id)?.name || '-';
+        const unitName = item.unit_name || allUnits.find(u => u.id == item.unit_id)?.name || '-';
         const safeUnitName = escapeHtml(unitName);
         
         let displayName = escapeHtml(item.name);
