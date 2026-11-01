@@ -541,3 +541,35 @@
         display: none;
     }
 }
+
+
+.uc-header-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.uc-surplus-badge,
+.surplus-badge,
+.invoice-drop-badge.badge-surplus {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    background: rgba(139, 92, 246, 0.14);
+    color: #7c3aed;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    white-space: nowrap;
+}
+
+[data-theme="dark"] .uc-surplus-badge,
+[data-theme="dark"] .surplus-badge,
+[data-theme="dark"] .invoice-drop-badge.badge-surplus {
+    background: rgba(167, 139, 250, 0.2);
+    color: #c4b5fd;
+    border-color: rgba(167, 139, 250, 0.35);
+}

@@ -263,11 +263,24 @@ function register() {
             const summary = db.prepare(`
                 SELECT 
                     COUNT(*) as totalCount,
-                    COALESCE(SUM(CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END), 0) as totalAmount,
+                    COALESCE(SUM(CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END), 0) as totalBaseAmount,
+                    COALESCE(SUM(
+                        MAX(
+                            (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END),
+                            COALESCE(exp.total_paid, 0)
+                        )
+                    ), 0) as totalAmount,
+                    COALESCE(SUM(
+                        CASE 
+                            WHEN COALESCE(exp.total_paid, 0) > (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) THEN 
+                                COALESCE(exp.total_paid, 0) - (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END)
+                            ELSE 0
+                        END
+                    ), 0) as totalSurplus,
                     COALESCE(SUM(
                         CASE 
                             WHEN COALESCE(exp.total_paid, 0) > 0 THEN 
-                                MIN(COALESCE(exp.total_paid, 0), (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END))
+                                COALESCE(exp.total_paid, 0)
                             WHEN u.is_collected = 1 THEN 
                                 CASE 
                                     WHEN u.remaining_usd > 0 THEN MAX(0, (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) - u.remaining_usd)
@@ -287,20 +300,90 @@ function register() {
                                 END
                             ELSE (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END)
                         END
-                    ), 0) as totalRemaining
+                    ), 0) as totalRemaining,
+                    COALESCE(SUM(COALESCE(u.discount_usd, 0)), 0) as totalDiscount,
+                    COUNT(CASE WHEN COALESCE(u.discount_usd, 0) > 0 THEN 1 END) as discountedCount
                 FROM under_collection_records u
                 LEFT JOIN (
-                    SELECT LOWER(TRIM(invoice_number)) as inv_clean, SUM(amount) as total_paid
-                    FROM export_revenues
-                    WHERE invoice_number IS NOT NULL AND TRIM(invoice_number) != ''
-                    GROUP BY LOWER(TRIM(invoice_number))
-                ) exp ON LOWER(TRIM(u.invoice_number)) = exp.inv_clean
+                    SELECT 
+                        CASE 
+                            WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                                THEN e.under_collection_id
+                            ELSE (
+                                SELECT u_fb.id
+                                FROM under_collection_records u_fb
+                                WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                                ORDER BY u_fb.id DESC
+                                LIMIT 1
+                            )
+                        END as target_uc_id,
+                        SUM(e.amount) as total_paid
+                    FROM export_revenues e
+                    WHERE (e.under_collection_id IS NOT NULL) OR (e.invoice_number IS NOT NULL AND TRIM(e.invoice_number) != '')
+                    GROUP BY target_uc_id
+                ) exp ON u.id = exp.target_uc_id
                 ${whereSql}
             `).get(args) || {};
             const total = summary.totalCount || 0;
+            const totalBaseAmount = summary.totalBaseAmount || 0;
             const totalAmount = summary.totalAmount || 0;
+            const totalSurplus = summary.totalSurplus || 0;
             const totalCollected = summary.totalCollected || 0;
             const totalRemaining = summary.totalRemaining || 0;
+            const totalDiscount = summary.totalDiscount || 0;
+            const discountedCount = summary.discountedCount || 0;
+            const discountedWhereSql = where.length
+                ? `WHERE ${where.join(' AND ')} AND COALESCE(u.discount_usd, 0) > 0`
+                : 'WHERE COALESCE(u.discount_usd, 0) > 0';
+            const discountedRows = db.prepare(`
+                SELECT 
+                    u.id,
+                    u.document_number,
+                    u.record_date,
+                    u.statement,
+                    u.invoice_number,
+                    u.tons_count,
+                    u.ton_price,
+                    u.total_usd,
+                    u.discount_usd,
+                    CASE 
+                        WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd 
+                        ELSE u.total_usd 
+                    END as net_usd,
+                    COALESCE(exp.total_paid, 0) as total_paid,
+                    CASE 
+                        WHEN COALESCE(exp.total_paid, 0) > 0 THEN 
+                            MAX(0, (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) - COALESCE(exp.total_paid, 0))
+                        WHEN u.is_collected = 1 AND u.remaining_usd > 0 THEN u.remaining_usd
+                        WHEN u.is_collected = 1 AND u.remaining_usd = 0 THEN 0
+                        ELSE (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END)
+                    END as remaining_usd,
+                    CASE 
+                        WHEN COALESCE(exp.total_paid, 0) > 0 THEN 1 
+                        ELSE u.is_collected 
+                    END as is_collected
+                FROM under_collection_records u
+                LEFT JOIN (
+                    SELECT 
+                        CASE 
+                            WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                                THEN e.under_collection_id
+                            ELSE (
+                                SELECT u_fb.id
+                                FROM under_collection_records u_fb
+                                WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                                ORDER BY u_fb.id DESC
+                                LIMIT 1
+                            )
+                        END as target_uc_id,
+                        SUM(e.amount) as total_paid
+                    FROM export_revenues e
+                    WHERE (e.under_collection_id IS NOT NULL) OR (e.invoice_number IS NOT NULL AND TRIM(e.invoice_number) != '')
+                    GROUP BY target_uc_id
+                ) exp ON u.id = exp.target_uc_id
+                ${discountedWhereSql}
+                ORDER BY u.record_date DESC, u.id DESC
+            `).all(args);
             const rows = db.prepare(`
                 SELECT 
                     u.id, 
@@ -311,6 +394,13 @@ function register() {
                     u.container_40,
                     u.statement, 
                     u.invoice_number, 
+                    (
+                        SELECT COUNT(*)
+                        FROM under_collection_records u_dup
+                        WHERE u.invoice_number IS NOT NULL
+                          AND TRIM(u.invoice_number) != ''
+                          AND LOWER(TRIM(u_dup.invoice_number)) = LOWER(TRIM(u.invoice_number))
+                    ) as duplicate_count,
                     u.tons_count, 
                     u.ton_price, 
                     u.total_usd,
@@ -320,6 +410,11 @@ function register() {
                         ELSE u.total_usd 
                     END as net_usd,
                     COALESCE(exp.total_paid, 0) as total_paid,
+                    CASE 
+                        WHEN COALESCE(exp.total_paid, 0) > (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) THEN 
+                            ROUND(COALESCE(exp.total_paid, 0) - (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END), 2)
+                        ELSE 0
+                    END as surplus_usd,
                     CASE 
                         WHEN COALESCE(exp.total_paid, 0) > 0 THEN 
                             MAX(0, (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) - COALESCE(exp.total_paid, 0))
@@ -348,11 +443,23 @@ function register() {
                     u.created_at
                 FROM under_collection_records u
                 LEFT JOIN (
-                    SELECT LOWER(TRIM(invoice_number)) as inv_clean, SUM(amount) as total_paid
-                    FROM export_revenues
-                    WHERE invoice_number IS NOT NULL AND TRIM(invoice_number) != ''
-                    GROUP BY LOWER(TRIM(invoice_number))
-                ) exp ON LOWER(TRIM(u.invoice_number)) = exp.inv_clean
+                    SELECT 
+                        CASE 
+                            WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                                THEN e.under_collection_id
+                            ELSE (
+                                SELECT u_fb.id
+                                FROM under_collection_records u_fb
+                                WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                                ORDER BY u_fb.id DESC
+                                LIMIT 1
+                            )
+                        END as target_uc_id,
+                        SUM(e.amount) as total_paid
+                    FROM export_revenues e
+                    WHERE (e.under_collection_id IS NOT NULL) OR (e.invoice_number IS NOT NULL AND TRIM(e.invoice_number) != '')
+                    GROUP BY target_uc_id
+                ) exp ON u.id = exp.target_uc_id
                 ${whereSql}
                 ORDER BY u.record_date DESC, u.id DESC
                 LIMIT @limit OFFSET @offset
@@ -385,11 +492,16 @@ function register() {
             return {
                 success: true,
                 rows,
+                discountedRows,
                 customItemNames,
                 total,
+                totalBaseAmount: roundMoney(totalBaseAmount),
                 totalAmount: roundMoney(totalAmount),
+                totalSurplus: roundMoney(totalSurplus),
                 totalCollected: roundMoney(totalCollected),
                 totalRemaining: roundMoney(totalRemaining),
+                totalDiscount: roundMoney(totalDiscount),
+                discountedCount: Number(discountedCount) || 0,
                 page,
                 pageSize,
                 totalPages: Math.max(1, Math.ceil(total / pageSize))

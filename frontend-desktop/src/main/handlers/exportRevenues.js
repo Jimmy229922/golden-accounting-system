@@ -120,31 +120,58 @@ function validatePayload(payload) {
     return '';
 }
 
-function syncUnderCollectionForInvoice(invoiceNumber, optionalDiscountUsd) {
+function syncUnderCollectionForInvoice(invoiceNumber, optionalDiscountUsd, underCollectionId) {
     const inv = String(invoiceNumber || '').trim();
-    if (!inv) return;
+    const targetId = Number(underCollectionId) > 0 ? Number(underCollectionId) : null;
+    if (!inv && !targetId) return;
 
-    const underRecords = db.prepare(`
-        SELECT id, total_usd, discount_usd, net_usd
-        FROM under_collection_records
-        WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
-        ORDER BY id ASC
-    `).all(inv);
+    const underRecords = targetId && !inv
+        ? db.prepare(`
+            SELECT id, total_usd, discount_usd, net_usd
+            FROM under_collection_records
+            WHERE id = ?
+        `).all(targetId)
+        : db.prepare(`
+            SELECT id, total_usd, discount_usd, net_usd
+            FROM under_collection_records
+            WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
+               OR (? IS NOT NULL AND id = ?)
+            ORDER BY id ASC
+        `).all(inv, targetId, targetId);
 
     if (!underRecords.length) return;
 
-    const paidRow = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) as totalPaid
-        FROM export_revenues
-        WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
-    `).get(inv);
-
-    const totalPaid = roundMoney(Number(paidRow?.totalPaid) || 0);
-    const isCollected = totalPaid > 0 ? 1 : 0;
+    const discountTargetId = targetId || underRecords[underRecords.length - 1].id;
 
     for (const underRecord of underRecords) {
+        const paidRow = db.prepare(`
+            SELECT COALESCE(SUM(e.amount), 0) as totalPaid
+            FROM export_revenues e
+            WHERE (
+                CASE
+                    WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                        THEN e.under_collection_id
+                    ELSE (
+                        SELECT u_fb.id
+                        FROM under_collection_records u_fb
+                        WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                        ORDER BY u_fb.id DESC
+                        LIMIT 1
+                    )
+                END
+            ) = ?
+        `).get(underRecord.id);
+
+        const totalPaid = roundMoney(Number(paidRow?.totalPaid) || 0);
+        const isCollected = totalPaid > 0 ? 1 : 0;
+
         let discountUsd = Number(underRecord.discount_usd) || 0;
-        if (optionalDiscountUsd !== undefined && Number.isFinite(optionalDiscountUsd) && optionalDiscountUsd >= 0) {
+        if (
+            Number(underRecord.id) === Number(discountTargetId) &&
+            optionalDiscountUsd !== undefined &&
+            Number.isFinite(optionalDiscountUsd) &&
+            optionalDiscountUsd >= 0
+        ) {
             discountUsd = roundMoney(optionalDiscountUsd);
         }
 
@@ -224,12 +251,59 @@ function register() {
                 ${whereSql}
             `).get(args);
             const rows = db.prepare(`
-                SELECT id, document_number, record_date, amount, currency,
-                       exchange_rate, amount_egp, statement, invoice_number, under_collection_id, items_json, created_at
-                FROM export_revenues
-                ${whereSql}
-                ORDER BY datetime(created_at) DESC, id DESC
-                LIMIT @limit OFFSET @offset
+                SELECT e.id, e.document_number, e.record_date, e.amount, e.currency,
+                       e.exchange_rate, e.amount_egp, e.statement, e.invoice_number,
+                       COALESCE(uc.id, e.under_collection_id) as under_collection_id,
+                       uc.document_number as uc_document_number,
+                       e.items_json, e.created_at,
+                       CASE
+                           WHEN uc.net_usd IS NOT NULL AND COALESCE(exp_tot.total_paid, 0) > uc.net_usd THEN
+                               ROUND(COALESCE(exp_tot.total_paid, 0) - uc.net_usd, 2)
+                           ELSE 0
+                       END as invoice_surplus_usd
+                FROM (
+                    SELECT id, document_number, record_date, amount, currency,
+                           exchange_rate, amount_egp, statement, invoice_number, under_collection_id, items_json, created_at,
+                           CASE
+                               WHEN under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = export_revenues.under_collection_id)
+                                   THEN under_collection_id
+                               ELSE (
+                                   SELECT u_fb.id
+                                   FROM under_collection_records u_fb
+                                   WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(export_revenues.invoice_number))
+                                   ORDER BY u_fb.id DESC
+                                   LIMIT 1
+                               )
+                           END as resolved_uc_id
+                    FROM export_revenues
+                    ${whereSql}
+                    ORDER BY datetime(created_at) DESC, id DESC
+                    LIMIT @limit OFFSET @offset
+                ) e
+                LEFT JOIN (
+                    SELECT id, document_number,
+                           CASE WHEN net_usd > 0 OR discount_usd > 0 THEN net_usd ELSE total_usd END as net_usd
+                    FROM under_collection_records
+                ) uc ON uc.id = e.resolved_uc_id
+                LEFT JOIN (
+                    SELECT 
+                        CASE
+                            WHEN er.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = er.under_collection_id)
+                                THEN er.under_collection_id
+                            ELSE (
+                                SELECT u_fb.id
+                                FROM under_collection_records u_fb
+                                WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(er.invoice_number))
+                                ORDER BY u_fb.id DESC
+                                LIMIT 1
+                            )
+                        END as target_uc_id,
+                        SUM(er.amount) as total_paid
+                    FROM export_revenues er
+                    WHERE (er.under_collection_id IS NOT NULL) OR (er.invoice_number IS NOT NULL AND TRIM(er.invoice_number) != '')
+                    GROUP BY target_uc_id
+                ) exp_tot ON exp_tot.target_uc_id = e.resolved_uc_id
+                ORDER BY datetime(e.created_at) DESC, e.id DESC
             `).all({ ...args, limit: pageSize, offset });
 
             return {
@@ -255,8 +329,20 @@ function register() {
                 return { success: false, error: validationError };
             }
 
+            if (payload.under_collection_id) {
+                const underById = db.prepare('SELECT id, invoice_number FROM under_collection_records WHERE id = ?').get(payload.under_collection_id);
+                if (underById) {
+                    payload.under_collection_id = underById.id;
+                    if (!payload.invoice_number) {
+                        payload.invoice_number = String(underById.invoice_number || '').trim();
+                    }
+                } else {
+                    payload.under_collection_id = null;
+                }
+            }
+
             if (payload.invoice_number && !payload.under_collection_id) {
-                const under = db.prepare('SELECT id FROM under_collection_records WHERE TRIM(invoice_number) = ? ORDER BY id DESC LIMIT 1').get(payload.invoice_number);
+                const under = db.prepare('SELECT id FROM under_collection_records WHERE LOWER(TRIM(invoice_number)) = LOWER(TRIM(?)) ORDER BY is_collected ASC, id DESC LIMIT 1').get(payload.invoice_number);
                 if (under) {
                     payload.under_collection_id = under.id;
                 }
@@ -292,8 +378,8 @@ function register() {
 
                 resultId = info.lastInsertRowid;
 
-                if (payload.invoice_number) {
-                    syncUnderCollectionForInvoice(payload.invoice_number, payload.discount_usd);
+                if (payload.invoice_number || payload.under_collection_id) {
+                    syncUnderCollectionForInvoice(payload.invoice_number, payload.discount_usd, payload.under_collection_id);
                 }
             })();
 
@@ -316,15 +402,31 @@ function register() {
                 return { success: false, error: validationError };
             }
 
-            const existing = db.prepare('SELECT id, document_number, invoice_number FROM export_revenues WHERE id = ?').get(id);
+            const existing = db.prepare('SELECT id, document_number, invoice_number, under_collection_id FROM export_revenues WHERE id = ?').get(id);
             if (!existing) {
                 return { success: false, error: 'لم يتم العثور على السجل' };
             }
 
+            if (payload.under_collection_id) {
+                const underById = db.prepare('SELECT id, invoice_number FROM under_collection_records WHERE id = ?').get(payload.under_collection_id);
+                if (underById) {
+                    payload.under_collection_id = underById.id;
+                    if (!payload.invoice_number) {
+                        payload.invoice_number = String(underById.invoice_number || '').trim();
+                    }
+                } else {
+                    payload.under_collection_id = null;
+                }
+            }
+
             if (payload.invoice_number && !payload.under_collection_id) {
-                const under = db.prepare('SELECT id FROM under_collection_records WHERE TRIM(invoice_number) = ? ORDER BY id DESC LIMIT 1').get(payload.invoice_number);
-                if (under) {
-                    payload.under_collection_id = under.id;
+                if (existing.under_collection_id && String(existing.invoice_number || '').trim().toLowerCase() === payload.invoice_number.toLowerCase()) {
+                    payload.under_collection_id = existing.under_collection_id;
+                } else {
+                    const under = db.prepare('SELECT id FROM under_collection_records WHERE LOWER(TRIM(invoice_number)) = LOWER(TRIM(?)) ORDER BY is_collected ASC, id DESC LIMIT 1').get(payload.invoice_number);
+                    if (under) {
+                        payload.under_collection_id = under.id;
+                    }
                 }
             }
 
@@ -354,12 +456,15 @@ function register() {
                     id
                 });
 
-                if (payload.invoice_number) {
-                    syncUnderCollectionForInvoice(payload.invoice_number, payload.discount_usd);
+                if (payload.invoice_number || payload.under_collection_id) {
+                    syncUnderCollectionForInvoice(payload.invoice_number, payload.discount_usd, payload.under_collection_id);
                 }
 
-                if (existing.invoice_number && existing.invoice_number !== payload.invoice_number) {
-                    syncUnderCollectionForInvoice(existing.invoice_number);
+                if (
+                    (existing.invoice_number && existing.invoice_number !== payload.invoice_number) ||
+                    (existing.under_collection_id && existing.under_collection_id !== payload.under_collection_id)
+                ) {
+                    syncUnderCollectionForInvoice(existing.invoice_number, undefined, existing.under_collection_id);
                 }
             })();
 
@@ -376,7 +481,7 @@ function register() {
                 return { success: false, error: 'معرف السجل غير صحيح' };
             }
 
-            const existing = db.prepare('SELECT id, invoice_number FROM export_revenues WHERE id = ?').get(id);
+            const existing = db.prepare('SELECT id, invoice_number, under_collection_id FROM export_revenues WHERE id = ?').get(id);
             if (!existing) {
                 return { success: false, error: 'لم يتم العثور على السجل' };
             }
@@ -384,8 +489,8 @@ function register() {
             db.transaction(() => {
                 db.prepare('DELETE FROM export_revenues WHERE id = ?').run(id);
 
-                if (existing.invoice_number) {
-                    syncUnderCollectionForInvoice(existing.invoice_number);
+                if (existing.invoice_number || existing.under_collection_id) {
+                    syncUnderCollectionForInvoice(existing.invoice_number, undefined, existing.under_collection_id);
                 }
             })();
 
@@ -395,42 +500,79 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-under-collection-invoice-details', (event, { invoiceNumber, exportRevenueId } = {}) => {
+    ipcMain.handle('get-under-collection-invoice-details', (event, { invoiceNumber, underCollectionId, exportRevenueId } = {}) => {
         try {
             const inv = String(invoiceNumber || '').trim();
-            if (!inv) {
+            const reqUcId = Number(underCollectionId) > 0 ? Number(underCollectionId) : null;
+            if (!inv && !reqUcId) {
                 return { success: true, found: false };
             }
 
-            const underRecord = db.prepare(`
-                SELECT id, document_number, record_date, container_count, container_20, container_40,
-                       statement, invoice_number, tons_count, ton_price, total_usd,
-                       discount_usd, net_usd, remaining_type, remaining_value, remaining_usd, is_collected
-                FROM under_collection_records
-                WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
-                ORDER BY id DESC
-                LIMIT 1
-            `).get(inv);
+            let underRecord = null;
+            if (reqUcId) {
+                underRecord = db.prepare(`
+                    SELECT id, document_number, record_date, container_count, container_20, container_40,
+                           statement, invoice_number, tons_count, ton_price, total_usd,
+                           discount_usd, net_usd, remaining_type, remaining_value, remaining_usd, is_collected
+                    FROM under_collection_records
+                    WHERE id = ?
+                    LIMIT 1
+                `).get(reqUcId);
+            }
+
+            if (!underRecord && inv) {
+                underRecord = db.prepare(`
+                    SELECT id, document_number, record_date, container_count, container_20, container_40,
+                           statement, invoice_number, tons_count, ton_price, total_usd,
+                           discount_usd, net_usd, remaining_type, remaining_value, remaining_usd, is_collected
+                    FROM under_collection_records
+                    WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
+                    ORDER BY is_collected ASC, id DESC
+                    LIMIT 1
+                `).get(inv);
+            }
 
             if (!underRecord) {
                 return { success: true, found: false };
             }
 
+            const siblingRecords = db.prepare(`
+                SELECT id, document_number, record_date, statement, invoice_number,
+                       CASE WHEN net_usd > 0 OR discount_usd > 0 THEN net_usd ELSE total_usd END as net_usd,
+                       is_collected
+                FROM under_collection_records
+                WHERE LOWER(TRIM(invoice_number)) = LOWER(TRIM(?))
+                ORDER BY id DESC
+            `).all(underRecord.invoice_number);
+
             const excludeId = Number(exportRevenueId) || null;
             const paidRow = db.prepare(`
-                SELECT COALESCE(SUM(amount), 0) as paidBefore
-                FROM export_revenues
-                WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
-                  AND (? IS NULL OR id != ?)
-            `).get(inv, excludeId, excludeId);
+                SELECT COALESCE(SUM(e.amount), 0) as paidBefore
+                FROM export_revenues e
+                WHERE (
+                    CASE
+                        WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                            THEN e.under_collection_id
+                        ELSE (
+                            SELECT u_fb.id
+                            FROM under_collection_records u_fb
+                            WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                            ORDER BY u_fb.id DESC
+                            LIMIT 1
+                        )
+                    END
+                ) = ?
+                  AND (? IS NULL OR e.id != ?)
+            `).get(underRecord.id, excludeId, excludeId);
 
             const totalUsd = Number(underRecord.total_usd) || 0;
             const discountUsd = Number(underRecord.discount_usd) || 0;
-            const netUsd = underRecord.net_usd !== undefined && underRecord.net_usd !== null && Number(underRecord.net_usd) > 0
+            const netUsd = underRecord.net_usd !== undefined && underRecord.net_usd !== null && (Number(underRecord.net_usd) > 0 || discountUsd > 0)
                 ? Number(underRecord.net_usd)
                 : Math.max(0, roundMoney(totalUsd - discountUsd));
             const paidBefore = roundMoney(Number(paidRow?.paidBefore) || 0);
             const remainingBefore = Math.max(0, roundMoney(netUsd - paidBefore));
+            const surplusBefore = Math.max(0, roundMoney(paidBefore - netUsd));
             const remainingPercentBefore = netUsd > 0 ? roundMoney((remainingBefore / netUsd) * 100) : 0;
 
             return {
@@ -448,8 +590,10 @@ function register() {
                     net_usd: netUsd,
                     paidBefore,
                     remainingBefore,
+                    surplusBefore,
                     remainingPercentBefore,
-                    is_collected: Number(underRecord.is_collected) || 0
+                    is_collected: Number(underRecord.is_collected) || 0,
+                    siblings: siblingRecords
                 }
             };
         } catch (error) {
@@ -458,6 +602,20 @@ function register() {
     });
 
     try {
+        db.prepare(`
+            UPDATE export_revenues
+            SET under_collection_id = (
+                SELECT u.id
+                FROM under_collection_records u
+                WHERE LOWER(TRIM(u.invoice_number)) = LOWER(TRIM(export_revenues.invoice_number))
+                ORDER BY u.id DESC
+                LIMIT 1
+            )
+            WHERE under_collection_id IS NULL
+              AND invoice_number IS NOT NULL
+              AND TRIM(invoice_number) != ''
+        `).run();
+
         const linkedInvoices = db.prepare(`
             SELECT DISTINCT TRIM(invoice_number) as inv
             FROM export_revenues
@@ -488,6 +646,11 @@ function register() {
                     END as net_usd,
                     COALESCE(exp.total_paid, 0) as total_paid,
                     CASE 
+                        WHEN COALESCE(exp.total_paid, 0) > (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) THEN 
+                            ROUND(COALESCE(exp.total_paid, 0) - (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END), 2)
+                        ELSE 0
+                    END as surplus_usd,
+                    CASE 
                         WHEN u.is_collected = 1 AND u.remaining_usd > 0 AND COALESCE(exp.total_paid, 0) = 0 THEN u.remaining_usd
                         WHEN u.is_collected = 1 AND u.remaining_usd = 0 AND COALESCE(exp.total_paid, 0) = 0 THEN 0
                         ELSE MAX(0, (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) - COALESCE(exp.total_paid, 0))
@@ -499,11 +662,23 @@ function register() {
                     END as is_collected
                 FROM under_collection_records u
                 LEFT JOIN (
-                    SELECT TRIM(invoice_number) as inv_num, SUM(amount) as total_paid
-                    FROM export_revenues
-                    WHERE invoice_number IS NOT NULL AND TRIM(invoice_number) != ''
-                    GROUP BY TRIM(invoice_number)
-                ) exp ON TRIM(u.invoice_number) = exp.inv_num
+                    SELECT 
+                        CASE
+                            WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                                THEN e.under_collection_id
+                            ELSE (
+                                SELECT u_fb.id
+                                FROM under_collection_records u_fb
+                                WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                                ORDER BY u_fb.id DESC
+                                LIMIT 1
+                            )
+                        END as target_uc_id,
+                        SUM(e.amount) as total_paid
+                    FROM export_revenues e
+                    WHERE (e.under_collection_id IS NOT NULL) OR (e.invoice_number IS NOT NULL AND TRIM(e.invoice_number) != '')
+                    GROUP BY target_uc_id
+                ) exp ON u.id = exp.target_uc_id
                 ORDER BY u.record_date DESC, u.id DESC
                 LIMIT 100
             `).all();

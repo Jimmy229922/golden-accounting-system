@@ -8,9 +8,14 @@ const state = {
     rows: [],
     editingId: null,
     isSaving: false,
+    totalBaseAmount: 0,
     totalAmount: 0,
+    totalSurplus: 0,
     totalCollected: 0,
     totalRemaining: 0,
+    totalDiscount: 0,
+    discountedCount: 0,
+    discountedRows: [],
     totalCount: 0,
     customItemNames: []
 };
@@ -719,6 +724,7 @@ function renderPage() {
                     <div class="stat-info">
                         <div class="stat-title">إجمالي الفواتير بالدولار</div>
                         <div class="stat-value" id="underCollectionTotalAmount">0.00</div>
+                        <div id="underCollectionTotalSurplusNote" style="display: none;"></div>
                     </div>
                 </div>
                 <div class="stat-card stat-collected">
@@ -726,6 +732,7 @@ function renderPage() {
                     <div class="stat-info">
                         <div class="stat-title">إجمالي المحصل بالدولار</div>
                         <div class="stat-value" id="underCollectionTotalCollected">0.00</div>
+                        <div id="underCollectionCollectedSurplusNote" style="display: none;"></div>
                     </div>
                 </div>
                 <div class="stat-card stat-remaining">
@@ -733,6 +740,14 @@ function renderPage() {
                     <div class="stat-info">
                         <div class="stat-title">إجمالي الفواتير بالدولار بعد التحصيل</div>
                         <div class="stat-value" id="underCollectionTotalRemaining">0.00</div>
+                    </div>
+                </div>
+                <div class="stat-card stat-discount" id="underCollectionDiscountCard" role="button" tabindex="0" title="اضغط لعرض تفاصيل الفواتير المخصومة">
+                    <div class="stat-icon"><i class="fas fa-tags"></i></div>
+                    <div class="stat-info">
+                        <div class="stat-title">إجمالي الخصم بالدولار</div>
+                        <div class="stat-value" id="underCollectionTotalDiscount">0.00</div>
+                        <div id="underCollectionDiscountNote" class="stat-discount-note"></div>
                     </div>
                 </div>
                 <div class="stat-card stat-count">
@@ -960,6 +975,25 @@ function renderPage() {
                 </div>
             </div>
         </div>
+        <div id="discountDetailsModal" class="petty-modal-overlay hidden" style="z-index: 100001;">
+            <div class="petty-modal-card discount-details-modal-card" role="dialog" aria-modal="true" aria-labelledby="discountDetailsTitle">
+                <div class="petty-modal-header" style="padding: 14px 22px;">
+                    <div class="petty-modal-title">
+                        <i class="fas fa-tags" style="color: #e11d48;"></i>
+                        <h2 id="discountDetailsTitle">تفاصيل الفواتير المخصومة (تحت التحصيل)</h2>
+                    </div>
+                    <button type="button" class="petty-modal-close" id="closeDiscountDetailsBtn" aria-label="إغلاق">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="petty-modal-body" id="discountDetailsContent" style="padding: 18px 22px; max-height: 80vh;"></div>
+                <div class="petty-modal-footer" style="padding: 12px 22px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-primary" id="confirmDiscountDetailsBtn" style="border-radius: 8px; padding: 8px 24px;">
+                        إغلاق
+                    </button>
+                </div>
+            </div>
+        </div>
         <div id="ucProductDropdownPortal" class="uc-product-dropdown hidden" role="listbox"></div>
     `;
 }
@@ -1062,6 +1096,21 @@ function bindEvents() {
     const opPreviewModal = document.getElementById('operationPreviewModal');
     opPreviewModal?.addEventListener('click', (e) => {
         if (e.target === opPreviewModal) closeOperationPreview();
+    });
+
+    const discountCard = document.getElementById('underCollectionDiscountCard');
+    discountCard?.addEventListener('click', openDiscountDetailsModal);
+    discountCard?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openDiscountDetailsModal();
+        }
+    });
+    document.getElementById('closeDiscountDetailsBtn')?.addEventListener('click', closeDiscountDetailsModal);
+    document.getElementById('confirmDiscountDetailsBtn')?.addEventListener('click', closeDiscountDetailsModal);
+    const discountDetailsModal = document.getElementById('discountDetailsModal');
+    discountDetailsModal?.addEventListener('click', (e) => {
+        if (e.target === discountDetailsModal) closeDiscountDetailsModal();
     });
 
     window.financialPagination?.bind(document.getElementById('pagination'), {
@@ -1171,6 +1220,129 @@ function closeOperationPreview() {
     document.getElementById('operationPreviewModal')?.classList.add('hidden');
 }
 
+function getDiscountedRowsList() {
+    if (Array.isArray(state.discountedRows) && state.discountedRows.length) {
+        return state.discountedRows;
+    }
+    return (Array.isArray(state.rows) ? state.rows : []).filter((r) => (Number(r?.discount_usd) || 0) > 0);
+}
+
+function openDiscountDetailsModal() {
+    const contentEl = document.getElementById('discountDetailsContent');
+    const modalEl = document.getElementById('discountDetailsModal');
+    if (!contentEl || !modalEl) return;
+
+    const discountedList = getDiscountedRowsList();
+    let totalBeforeDiscount = 0;
+    let totalDiscountUsd = 0;
+    let totalNetAfterDiscount = 0;
+
+    discountedList.forEach((row) => {
+        const totalUsd = Number(row.total_usd) || 0;
+        const discountUsd = Number(row.discount_usd) || 0;
+        const netUsd = row.net_usd !== undefined && row.net_usd !== null && (Number(row.net_usd) > 0 || discountUsd > 0)
+            ? Number(row.net_usd)
+            : Math.max(0, roundMoney(totalUsd - discountUsd));
+        totalBeforeDiscount += totalUsd;
+        totalDiscountUsd += discountUsd;
+        totalNetAfterDiscount += netUsd;
+    });
+
+    const summaryHtml = `
+        <div class="discount-summary-grid">
+            <div class="discount-summary-box">
+                <span class="discount-summary-label"><i class="fas fa-file-invoice"></i> عدد الفواتير المخصومة</span>
+                <strong class="discount-summary-val">${discountedList.length.toLocaleString('en-US')} فاتورة</strong>
+            </div>
+            <div class="discount-summary-box">
+                <span class="discount-summary-label"><i class="fas fa-dollar-sign"></i> إجمالي الفواتير قبل الخصم</span>
+                <strong class="discount-summary-val">${formatMoney(totalBeforeDiscount)} $</strong>
+            </div>
+            <div class="discount-summary-box is-discount">
+                <span class="discount-summary-label"><i class="fas fa-tags"></i> إجمالي المبلغ المخصوم</span>
+                <strong class="discount-summary-val">-${formatMoney(totalDiscountUsd)} $</strong>
+            </div>
+            <div class="discount-summary-box is-net">
+                <span class="discount-summary-label"><i class="fas fa-check-circle"></i> الصافي بعد الخصم</span>
+                <strong class="discount-summary-val">${formatMoney(totalNetAfterDiscount)} $</strong>
+            </div>
+        </div>
+    `;
+
+    if (!discountedList.length) {
+        contentEl.innerHTML = `
+            ${summaryHtml}
+            <div class="discount-empty-state">
+                <i class="fas fa-tags"></i>
+                <p>لا توجد فواتير مخصومة في السجلات الحالية</p>
+            </div>
+        `;
+        modalEl.classList.remove('hidden');
+        return;
+    }
+
+    const rowsHtml = discountedList.map((row, idx) => {
+        const totalUsd = Number(row.total_usd) || 0;
+        const discountUsd = Number(row.discount_usd) || 0;
+        const netUsd = row.net_usd !== undefined && row.net_usd !== null && (Number(row.net_usd) > 0 || discountUsd > 0)
+            ? Number(row.net_usd)
+            : Math.max(0, roundMoney(totalUsd - discountUsd));
+        const discountPercent = totalUsd > 0 ? roundMoney((discountUsd / totalUsd) * 100) : 0;
+        const remainingUsd = Number(row.remaining_usd) || 0;
+        const isFullyPaid = ((Number(row.is_collected) === 1) || (Number(row.total_paid) || 0) > 0) && remainingUsd <= 0;
+        const statusHtml = isFullyPaid
+            ? `<span class="discount-row-status is-paid"><i class="fas fa-check-circle"></i> مسددة بالكامل</span>`
+            : `<span class="discount-row-status is-remaining"><i class="fas fa-clock"></i> متبقي: ${formatMoney(remainingUsd)} $</span>`;
+
+        return `
+            <tr>
+                <td><span class="discount-doc-pill">${escapeHtml(row.document_number || idx + 1)}</span></td>
+                <td>${escapeHtml(row.record_date || '')}</td>
+                <td><strong class="discount-inv-num">${escapeHtml(row.invoice_number || '')}</strong></td>
+                <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
+                <td>${formatMoney(totalUsd)} $</td>
+                <td>
+                    <span class="discount-amount-pill">
+                        <i class="fas fa-tag"></i> -${formatMoney(discountUsd)} $
+                        <small>(${formatMoney(discountPercent)}%)</small>
+                    </span>
+                </td>
+                <td><strong class="discount-net-val">${formatMoney(netUsd)} $</strong></td>
+                <td>${statusHtml}</td>
+            </tr>
+        `;
+    }).join('');
+
+    contentEl.innerHTML = `
+        ${summaryHtml}
+        <div class="discount-table-wrap">
+            <table class="petty-table discount-details-table">
+                <thead>
+                    <tr>
+                        <th>التسلسل</th>
+                        <th>التاريخ</th>
+                        <th>رقم الفاتورة</th>
+                        <th>البيان</th>
+                        <th>الإجمالي قبل الخصم</th>
+                        <th>المبلغ المخصوم</th>
+                        <th>الصافي بعد الخصم</th>
+                        <th>حالة الفاتورة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    modalEl.classList.remove('hidden');
+}
+
+function closeDiscountDetailsModal() {
+    document.getElementById('discountDetailsModal')?.classList.add('hidden');
+}
+
 async function refreshDocumentNumber() {
     const result = await window.electronAPI.getNextUnderCollectionNumber();
     if (result && result.success) {
@@ -1197,13 +1369,18 @@ async function loadRecords() {
     }
 
     state.rows = Array.isArray(result.rows) ? result.rows : [];
+    state.discountedRows = Array.isArray(result.discountedRows) ? result.discountedRows : [];
     state.customItemNames = Array.isArray(result.customItemNames) ? result.customItemNames : state.customItemNames;
     state.page = Number(result.page) || state.page;
     state.pageSize = Number(result.pageSize) || state.pageSize;
     state.totalPages = Number(result.totalPages) || 1;
+    state.totalBaseAmount = Number(result.totalBaseAmount) || 0;
     state.totalAmount = Number(result.totalAmount) || 0;
+    state.totalSurplus = Number(result.totalSurplus) || 0;
     state.totalCollected = Number(result.totalCollected) || 0;
     state.totalRemaining = Number(result.totalRemaining) || 0;
+    state.totalDiscount = Number(result.totalDiscount) || 0;
+    state.discountedCount = Number(result.discountedCount) || 0;
     state.totalCount = Number(result.total) || 0;
     renderRows();
     renderPagination();
@@ -1214,7 +1391,11 @@ function renderSummary() {
     const totalAmountEl = document.getElementById('underCollectionTotalAmount');
     const totalCollectedEl = document.getElementById('underCollectionTotalCollected');
     const totalRemainingEl = document.getElementById('underCollectionTotalRemaining');
+    const totalDiscountEl = document.getElementById('underCollectionTotalDiscount');
+    const discountNoteEl = document.getElementById('underCollectionDiscountNote');
     const totalCountEl = document.getElementById('underCollectionTotalCount');
+    const totalSurplusNoteEl = document.getElementById('underCollectionTotalSurplusNote');
+    const collectedSurplusNoteEl = document.getElementById('underCollectionCollectedSurplusNote');
 
     if (totalAmountEl) {
         totalAmountEl.textContent = formatMoney(state.totalAmount);
@@ -1228,8 +1409,44 @@ function renderSummary() {
         totalRemainingEl.textContent = formatMoney(state.totalRemaining);
     }
 
+    if (totalDiscountEl) {
+        totalDiscountEl.textContent = formatMoney(state.totalDiscount);
+    }
+
+    if (discountNoteEl) {
+        const count = Number(state.discountedCount) || getDiscountedRowsList().length;
+        if (count > 0) {
+            discountNoteEl.innerHTML = `<span class="stat-discount-badge"><i class="fas fa-eye"></i> ${count.toLocaleString('en-US')} فاتورة مخصومة — اضغط للتفاصيل</span>`;
+            discountNoteEl.style.display = 'block';
+        } else {
+            discountNoteEl.innerHTML = `<span class="stat-discount-badge is-empty"><i class="fas fa-info-circle"></i> لا توجد فواتير مخصومة</span>`;
+            discountNoteEl.style.display = 'block';
+        }
+    }
+
     if (totalCountEl) {
         totalCountEl.textContent = (Number(state.totalCount) || 0).toLocaleString('en-US');
+    }
+
+    if (state.totalSurplus > 0) {
+        const badgeHtml = `<span class="stat-surplus-badge"><i class="fas fa-plus-circle"></i> شامل زيادة: +${formatMoney(state.totalSurplus)} $</span>`;
+        if (totalSurplusNoteEl) {
+            totalSurplusNoteEl.innerHTML = badgeHtml;
+            totalSurplusNoteEl.style.display = 'block';
+        }
+        if (collectedSurplusNoteEl) {
+            collectedSurplusNoteEl.innerHTML = badgeHtml;
+            collectedSurplusNoteEl.style.display = 'block';
+        }
+    } else {
+        if (totalSurplusNoteEl) {
+            totalSurplusNoteEl.innerHTML = '';
+            totalSurplusNoteEl.style.display = 'none';
+        }
+        if (collectedSurplusNoteEl) {
+            collectedSurplusNoteEl.innerHTML = '';
+            collectedSurplusNoteEl.style.display = 'none';
+        }
     }
 }
 
@@ -1240,20 +1457,49 @@ function renderRows() {
         return;
     }
 
+    const localInvoiceCounts = new Map();
+    state.rows.forEach((row) => {
+        const invKey = String(row?.invoice_number || '').trim().toLowerCase();
+        if (!invKey) return;
+        localInvoiceCounts.set(invKey, (localInvoiceCounts.get(invKey) || 0) + 1);
+    });
+
+    const duplicateGroupIndexMap = new Map();
+    let nextGroupIdx = 0;
+    state.rows.forEach((row) => {
+        const invKey = String(row?.invoice_number || '').trim().toLowerCase();
+        if (!invKey) return;
+        const count = Math.max(Number(row?.duplicate_count) || 0, localInvoiceCounts.get(invKey) || 0);
+        if (count > 1 && !duplicateGroupIndexMap.has(invKey)) {
+            duplicateGroupIndexMap.set(invKey, nextGroupIdx % 8);
+            nextGroupIdx += 1;
+        }
+    });
+
     const startIndex = (state.page - 1) * state.pageSize;
     body.innerHTML = state.rows.map((row, index) => {
         const isFullyPaid = ((Number(row.is_collected) === 1) || (Number(row.total_paid) || 0) > 0) && (Number(row.remaining_usd) || 0) <= 0;
+        const baseNetUsd = row.net_usd !== undefined && row.net_usd !== null && (Number(row.net_usd) > 0 || Number(row.discount_usd) > 0)
+            ? Number(row.net_usd)
+            : (Number(row.total_usd) || 0);
+        const surplusUsd = Number(row.surplus_usd) || 0;
+        const displayTotalUsd = surplusUsd > 0 ? roundMoney(baseNetUsd + surplusUsd) : baseNetUsd;
+        const invKey = String(row.invoice_number || '').trim().toLowerCase();
+        const dupTotalCount = invKey ? Math.max(Number(row.duplicate_count) || 0, localInvoiceCounts.get(invKey) || 0) : 0;
+        const isDuplicateInvoice = dupTotalCount > 1 && duplicateGroupIndexMap.has(invKey);
+        const dupGroupIdx = isDuplicateInvoice ? duplicateGroupIndexMap.get(invKey) : 0;
         return `
-        <tr>
+        <tr class="${isDuplicateInvoice ? `dup-invoice-row dup-invoice-group-${dupGroupIdx}` : ''}">
             <td>${escapeHtml(row.document_number || startIndex + index + 1)}</td>
             <td>${escapeHtml(row.record_date || '')}</td>
             <td>${escapeHtml(getContainerText(row))}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
-            <td>${isFullyPaid ? `<i class="fas fa-check-circle" style="color: #22c55e; margin-inline-end: 6px; font-size: 1rem;" title="مسددة بالكامل (المتبقي = صفر)"></i>` : ''}${escapeHtml(row.invoice_number || '')}</td>
+            <td>${isFullyPaid ? `<i class="fas fa-check-circle" style="color: #22c55e; margin-inline-end: 6px; font-size: 1rem;" title="مسددة بالكامل (المتبقي = صفر)"></i>` : ''}${isDuplicateInvoice ? `<span class="dup-invoice-badge" title="رقم فاتورة متكرر (${dupTotalCount} فواتير بنفس الرقم)"><i class="fas fa-clone"></i> ${escapeHtml(row.invoice_number || '')}</span>` : escapeHtml(row.invoice_number || '')}</td>
             <td>${getTonsPriceDisplay(row)}</td>
             <td>
                 <div class="invoice-total-cell">
-                    <strong>${formatMoney(row.net_usd !== undefined && row.net_usd !== null && (Number(row.net_usd) > 0 || Number(row.discount_usd) > 0) ? row.net_usd : row.total_usd)} $</strong>
+                    <strong>${formatMoney(displayTotalUsd)} $</strong>
+                    ${surplusUsd > 0 ? `<span class="surplus-badge"><i class="fas fa-plus-circle"></i> زيادة: +${formatMoney(surplusUsd)} $ (الأصل: ${formatMoney(baseNetUsd)} $)</span>` : ''}
                     ${Number(row.discount_usd) > 0 ? `<span class="discount-badge"><i class="fas fa-tag"></i> خصم: ${formatMoney(row.discount_usd)} $</span>` : ''}
                     ${formatRemainingText(row) ? `<span>${escapeHtml(formatRemainingText(row))}</span>` : ''}
                 </div>

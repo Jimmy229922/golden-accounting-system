@@ -686,21 +686,7 @@ function register() {
                     };
                 }
             } catch (error) {
-                const translatedError = translateAppUpdateError(error?.message, { context: 'download' });
-                writeDiagnosticUpdaterLog('ERROR', `Auto-updater download failed: ${error?.message || error}`);
-                const errorPayload = {
-                    status: 'error',
-                    latestVersion: '',
-                    percent: 0,
-                    error: translatedError,
-                    message: translatedError
-                };
-                setAppUpdateProgressState(errorPayload);
-                emitAppUpdateProgress(event.sender, errorPayload);
-                return {
-                    success: false,
-                    error: translatedError
-                };
+                writeDiagnosticUpdaterLog('WARN', `Auto-updater download failed, falling back to direct release download: ${error?.message || error}`);
             }
         }
 
@@ -850,12 +836,9 @@ function register() {
                 app.isQuittingForAppUpdate = true;
             }
 
-            BrowserWindow.getAllWindows().forEach((win) => {
-                try { win.destroy(); } catch (_) {}
-            });
-
             const updater = getAutoUpdater();
-            if (updater && typeof updater.quitAndInstall === 'function') {
+            const updaterFile = updater && updater.installerPath ? String(updater.installerPath).trim() : '';
+            if (updater && updaterFile && fs.existsSync(updaterFile) && typeof updater.quitAndInstall === 'function') {
                 try {
                     updater.quitAndInstall(false, true);
                     return { success: true };
@@ -864,7 +847,7 @@ function register() {
                 }
             }
 
-            const targetPath = String(installerPath || '').trim();
+            const targetPath = String(installerPath || updaterFile || '').trim();
             if (targetPath && targetPath.toLowerCase().endsWith('.exe') && fs.existsSync(targetPath)) {
                 app.isQuittingForAppUpdate = true;
                 app.appUpdateInstallerPath = targetPath;
@@ -874,6 +857,9 @@ function register() {
                         return;
                     }
                     shell.openPath(installerToOpen).catch(() => {});
+                });
+                BrowserWindow.getAllWindows().forEach((win) => {
+                    try { win.destroy(); } catch (_) {}
                 });
                 app.quit();
                 setTimeout(() => {
@@ -1210,5 +1196,3 @@ function register() {
 }
 
 module.exports = { register };
-
-

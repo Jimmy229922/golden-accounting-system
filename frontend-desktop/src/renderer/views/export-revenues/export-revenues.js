@@ -11,7 +11,8 @@ const state = {
     totalAmount: 0,
     totalEgp: 0,
     totalCount: 0,
-    currentLinkedInvoice: null
+    currentLinkedInvoice: null,
+    selectedUnderCollectionId: null
 };
 
 let invoiceLookupTimeout = null;
@@ -368,11 +369,24 @@ function parseRowItems(row) {
 
 function getAmountCellDisplay(row) {
     const items = parseRowItems(row);
+    const surplusUsd = Number(row.invoice_surplus_usd) || 0;
+    const surplusBadgeHtml = surplusUsd > 0
+        ? `<div style="margin-top: 4px;"><span class="surplus-badge"><i class="fas fa-plus-circle"></i> زيادة: +${formatNumber(surplusUsd)} $</span></div>`
+        : '';
     if (Array.isArray(items) && items.length > 1) {
         return `
             <div>
                 <div><strong>${formatNumber(row.amount)}</strong> <span class="rate-splits-badge">(${items.length} شرائح)</span></div>
                 <div class="rate-splits-sub">${items.map((it) => formatNumber(it.amount)).join(' + ')}</div>
+                ${surplusBadgeHtml}
+            </div>
+        `;
+    }
+    if (surplusBadgeHtml) {
+        return `
+            <div>
+                <div><strong>${formatNumber(row.amount)}</strong></div>
+                ${surplusBadgeHtml}
             </div>
         `;
     }
@@ -673,6 +687,7 @@ function bindEvents() {
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
         state.editingId = null;
         state.currentLinkedInvoice = null;
+        state.selectedUnderCollectionId = null;
         document.getElementById('exportRevenuesForm').reset();
         document.getElementById('recordDate').value = today();
         document.getElementById('invoiceNumberInput').value = '';
@@ -687,6 +702,7 @@ function bindEvents() {
     const closeModal = () => {
         state.editingId = null;
         state.currentLinkedInvoice = null;
+        state.selectedUnderCollectionId = null;
         closeInvoiceDropdown();
         modal.classList.add('hidden');
     };
@@ -698,6 +714,11 @@ function bindEvents() {
 
     const invoiceInput = document.getElementById('invoiceNumberInput');
     invoiceInput?.addEventListener('input', () => {
+        const currentTyped = invoiceInput.value.trim().toLowerCase();
+        const linkedInvNum = String(state.currentLinkedInvoice?.invoice_number || '').trim().toLowerCase();
+        if (currentTyped !== linkedInvNum) {
+            state.selectedUnderCollectionId = null;
+        }
         renderInvoiceDropdown(invoiceInput.value);
         onInvoiceNumberInput();
     });
@@ -792,6 +813,7 @@ function renderInvoiceDropdown(filterText = '') {
         const remaining = Number(r.remaining_usd) || 0;
         const net = Number(r.net_usd) || 0;
         const totalPaid = Number(r.total_paid) || 0;
+        const surplus = Number(r.surplus_usd) > 0 ? Number(r.surplus_usd) : Math.max(0, roundMoney(totalPaid - net));
         const isFullyCollected = remaining <= 0 && net > 0;
         const isPartialCollected = !isFullyCollected && (totalPaid > 0 || (Number(r.is_collected) === 1 && remaining < net));
 
@@ -805,15 +827,20 @@ function renderInvoiceDropdown(filterText = '') {
             badgeClass = 'badge-partial';
         }
 
+        const isSelectedRecord = Number(r.id) === Number(state.selectedUnderCollectionId);
+
         return `
-            <div class="invoice-drop-item" data-invoice="${escapeHtml(r.invoice_number)}">
+            <div class="invoice-drop-item ${isSelectedRecord ? 'selected' : ''}" data-invoice="${escapeHtml(r.invoice_number)}" data-uc-id="${r.id}">
                 <div class="invoice-drop-header">
                     <span class="invoice-drop-num">
                         <i class="fas fa-file-invoice text-icon"></i>
                         فاتورة: ${escapeHtml(r.invoice_number)} (${escapeHtml(r.document_number)})
                     </span>
-                    <span class="invoice-drop-badge ${badgeClass}">
-                        ${badgeText}
+                    <span class="uc-header-badges">
+                        ${surplus > 0 ? `<span class="invoice-drop-badge badge-surplus"><i class="fas fa-plus-circle"></i> زيادة: +${formatNumber(surplus)} $</span>` : ''}
+                        <span class="invoice-drop-badge ${badgeClass}">
+                            ${badgeText}
+                        </span>
                     </span>
                 </div>
                 <div class="invoice-drop-details">
@@ -821,7 +848,7 @@ function renderInvoiceDropdown(filterText = '') {
                         ${escapeHtml(r.statement || 'بدون بيان')}
                     </span>
                     <span class="invoice-drop-rem">
-                        المتبقي: ${formatNumber(remaining)} $
+                        ${surplus > 0 ? `المحصل: ${formatNumber(totalPaid)} $ (شامل +${formatNumber(surplus)} $)` : `المتبقي: ${formatNumber(remaining)} $`}
                     </span>
                 </div>
             </div>
@@ -831,49 +858,61 @@ function renderInvoiceDropdown(filterText = '') {
     dropdown.querySelectorAll('.invoice-drop-item').forEach((item) => {
         item.addEventListener('click', (e) => {
             e.stopPropagation();
-            selectInvoiceFromDropdown(item.dataset.invoice);
+            selectInvoiceFromDropdown(item.dataset.invoice, Number(item.dataset.ucId) || null);
         });
     });
 
     dropdown.classList.remove('hidden');
 }
 
-function selectInvoiceFromDropdown(invoiceNumber) {
+function selectInvoiceFromDropdown(invoiceNumber, underCollectionId = null) {
     const input = document.getElementById('invoiceNumberInput');
     if (input) {
         input.value = invoiceNumber;
     }
+    state.selectedUnderCollectionId = Number(underCollectionId) || null;
     closeInvoiceDropdown();
-    onInvoiceNumberInput(true);
+    onInvoiceNumberInput(true, state.selectedUnderCollectionId);
 }
 
 function closeInvoiceDropdown() {
     document.getElementById('invoiceCustomDropdown')?.classList.add('hidden');
 }
 
-async function onInvoiceNumberInput() {
+async function onInvoiceNumberInput(immediate = false, explicitUcId = null) {
     clearTimeout(invoiceLookupTimeout);
-    invoiceLookupTimeout = setTimeout(async () => {
+    const runLookup = async () => {
         const invNum = document.getElementById('invoiceNumberInput')?.value?.trim();
-        if (!invNum) {
+        const targetUcId = Number(explicitUcId) || Number(state.selectedUnderCollectionId) || null;
+        if (!invNum && !targetUcId) {
             state.currentLinkedInvoice = null;
+            state.selectedUnderCollectionId = null;
             renderUnderCollectionInfoCard(null);
             return;
         }
 
         const res = await window.electronAPI.getUnderCollectionInvoiceDetails({
             invoiceNumber: invNum,
+            underCollectionId: targetUcId,
             exportRevenueId: state.editingId
         });
 
         if (res && res.success && res.found) {
             state.currentLinkedInvoice = res.invoice;
+            state.selectedUnderCollectionId = Number(res.invoice.id) || null;
             renderUnderCollectionInfoCard(res.invoice);
         } else {
             state.currentLinkedInvoice = null;
+            state.selectedUnderCollectionId = null;
             renderUnderCollectionInfoCard({ notFound: true, invoiceNumber: invNum });
         }
-    }, 200);
+    };
+
+    if (immediate) {
+        await runLookup();
+    } else {
+        invoiceLookupTimeout = setTimeout(runLookup, 200);
+    }
 }
 
 function updateUnderCollectionLiveStats() {
@@ -898,6 +937,7 @@ function updateUnderCollectionLiveStats() {
     const paidBefore = roundMoney(Number(inv.paidBefore) || 0);
     const liveTotalPaid = roundMoney(paidBefore + currentEnteredAmount);
     const liveRemaining = Math.max(0, roundMoney(liveNet - liveTotalPaid));
+    const liveSurplus = Math.max(0, roundMoney(liveTotalPaid - liveNet));
     const livePercent = liveNet > 0 ? roundMoney((liveRemaining / liveNet) * 100) : 0;
     const isFullyCollected = liveRemaining <= 0 && liveNet > 0;
 
@@ -907,9 +947,33 @@ function updateUnderCollectionLiveStats() {
         statusEl.textContent = isFullyCollected ? 'مكتملة التحصيل' : 'تحت التحصيل';
     }
 
+    const surplusBadgeEl = document.getElementById('ucLiveSurplusBadge');
+    if (surplusBadgeEl) {
+        if (liveSurplus > 0) {
+            surplusBadgeEl.innerHTML = `<i class="fas fa-plus-circle"></i> زيادة تحصيل: +${formatNumber(liveSurplus)} $`;
+            surplusBadgeEl.style.display = 'inline-flex';
+        } else {
+            surplusBadgeEl.innerHTML = '';
+            surplusBadgeEl.style.display = 'none';
+        }
+    }
+
+    const totalEl = document.getElementById('ucLiveTotalVal');
+    if (totalEl) {
+        if (liveSurplus > 0) {
+            totalEl.innerHTML = `${formatNumber(roundMoney(totalUsd + liveSurplus))} $ <span class="surplus-badge" style="font-size: 0.72rem; padding: 1px 7px; margin-inline-start: 4px;">الأصل: ${formatNumber(totalUsd)} $</span>`;
+        } else {
+            totalEl.textContent = `${formatNumber(totalUsd)} $`;
+        }
+    }
+
     const netEl = document.getElementById('ucLiveNetVal');
     if (netEl) {
-        netEl.textContent = `${formatNumber(liveNet)} $`;
+        if (liveSurplus > 0) {
+            netEl.innerHTML = `${formatNumber(roundMoney(liveNet + liveSurplus))} $ <span class="surplus-badge" style="font-size: 0.72rem; padding: 1px 7px; margin-inline-start: 4px;">+${formatNumber(liveSurplus)} $ زيادة</span>`;
+        } else {
+            netEl.textContent = `${formatNumber(liveNet)} $`;
+        }
     }
 
     const paidLabelEl = document.getElementById('ucLivePaidLabel');
@@ -952,13 +1016,31 @@ function renderUnderCollectionInfoCard(inv) {
         return;
     }
 
+    const siblingsHtml = Array.isArray(inv.siblings) && inv.siblings.length > 1
+        ? `
+            <div class="uc-siblings-switcher" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(2, 132, 199, 0.06); border: 1px dashed rgba(2, 132, 199, 0.3);">
+                <span style="font-size: 0.82rem; font-weight: 800; color: #0284c7;"><i class="fas fa-layer-group"></i> اختر السجل المقصود لنفس رقم الفاتورة:</span>
+                ${inv.siblings.map((sib) => {
+                    const isCurrent = Number(sib.id) === Number(inv.id);
+                    return `<button type="button" class="btn ${isCurrent ? 'btn-primary' : 'btn-outline'} uc-sibling-btn" data-uc-id="${sib.id}" style="padding: 3px 10px; font-size: 0.78rem; border-radius: 999px; font-weight: 800;">
+                        ${escapeHtml(sib.document_number)} - ${escapeHtml(sib.statement || 'بدون بيان')} (${formatNumber(sib.net_usd)} $)
+                    </button>`;
+                }).join('')}
+            </div>
+        `
+        : '';
+
     card.style.display = 'block';
     card.innerHTML = `
         <div class="uc-linked-box">
             <div class="uc-linked-header">
-                <span class="uc-badge"><i class="fas fa-link"></i> مرتبطة بفاتورة تحت التحصيل (${escapeHtml(inv.document_number)})</span>
-                <span id="ucLiveStatusBadge" class="uc-status ${inv.is_collected ? 'collected' : 'pending'}">${inv.is_collected ? 'مكتملة التحصيل' : 'تحت التحصيل'}</span>
+                <span class="uc-badge"><i class="fas fa-link"></i> مرتبطة بفاتورة تحت التحصيل (${escapeHtml(inv.document_number)})${inv.statement ? ` - <span style="font-weight: 700; color: var(--text-muted); font-size: 0.84rem;">${escapeHtml(inv.statement)}</span>` : ''}</span>
+                <span class="uc-header-badges">
+                    <span id="ucLiveSurplusBadge" class="uc-surplus-badge" style="display: none;"></span>
+                    <span id="ucLiveStatusBadge" class="uc-status ${inv.is_collected ? 'collected' : 'pending'}">${inv.is_collected ? 'مكتملة التحصيل' : 'تحت التحصيل'}</span>
+                </span>
             </div>
+            ${siblingsHtml}
             <div class="uc-linked-grid">
                 <div class="uc-linked-item">
                     <span class="uc-item-label">إجمالي الفاتورة:</span>
@@ -987,6 +1069,15 @@ function renderUnderCollectionInfoCard(inv) {
     const discountInput = document.getElementById('invoiceDiscountInput');
     discountInput?.addEventListener('input', () => {
         updateUnderCollectionLiveStats();
+    });
+    card.querySelectorAll('.uc-sibling-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const sibId = Number(btn.dataset.ucId) || null;
+            if (sibId) {
+                state.selectedUnderCollectionId = sibId;
+                onInvoiceNumberInput(true, sibId);
+            }
+        });
     });
     updateUnderCollectionLiveStats();
 }
@@ -1043,6 +1134,8 @@ function openInvoiceSyncPreview() {
 
     const newTotalPaid = roundMoney(inv.paidBefore + currentAmount);
     const newRemaining = Math.max(0, roundMoney(newNet - newTotalPaid));
+    const surplusBefore = Math.max(0, roundMoney((Number(inv.paidBefore) || 0) - (Number(inv.net_usd) || 0)));
+    const newSurplus = Math.max(0, roundMoney(newTotalPaid - newNet));
     const newPercent = newNet > 0 ? roundMoney((newRemaining / newNet) * 100) : 0;
     const newIsCollected = (newRemaining <= 0 && newNet > 0);
 
@@ -1056,7 +1149,8 @@ function openInvoiceSyncPreview() {
                 <span class="sync-preview-title"><i class="fas fa-file-invoice text-icon"></i> فاتورة رقم: <strong>${escapeHtml(inv.invoice_number)}</strong> (${escapeHtml(inv.document_number)})</span>
                 <div class="sync-preview-subtitle">${escapeHtml(inv.statement || '')}</div>
             </div>
-            <div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                ${newSurplus > 0 ? `<span class="surplus-badge"><i class="fas fa-plus-circle"></i> زيادة تحصيل: +${formatNumber(newSurplus)} $</span>` : ''}
                 <span class="discount-badge" style="background: rgba(2, 132, 199, 0.12); color: #0284c7; padding: 6px 14px; border-radius: 8px; font-weight: 800; font-size: 0.95rem;">
                     دفعة جديدة: ${formatNumber(currentAmount)} $
                 </span>
@@ -1075,8 +1169,8 @@ function openInvoiceSyncPreview() {
                 <tbody>
                     <tr>
                         <td>إجمالي الفاتورة بالدولار</td>
-                        <td>${formatNumber(inv.total_usd)} $</td>
-                        <td>${formatNumber(inv.total_usd)} $</td>
+                        <td>${formatNumber(roundMoney((Number(inv.total_usd) || 0) + surplusBefore))} $</td>
+                        <td><strong>${formatNumber(roundMoney((Number(inv.total_usd) || 0) + newSurplus))} $</strong> ${newSurplus > 0 ? `<span class="surplus-badge" style="margin-inline-start: 6px;">شامل +${formatNumber(newSurplus)} $ زيادة</span>` : ''}</td>
                     </tr>
                     <tr>
                         <td>خصم الفاتورة</td>
@@ -1086,13 +1180,20 @@ function openInvoiceSyncPreview() {
                     <tr>
                         <td>الصافي المطلوب سداده</td>
                         <td>${formatNumber(inv.net_usd)} $</td>
-                        <td><strong>${formatNumber(newNet)} $</strong></td>
+                        <td><strong>${formatNumber(roundMoney(newNet + newSurplus))} $</strong> ${newSurplus > 0 ? `<span class="surplus-badge" style="margin-inline-start: 6px;">الأصل: ${formatNumber(newNet)} $</span>` : ''}</td>
                     </tr>
                     <tr>
                         <td>إجمالي المسدد والمحصل</td>
                         <td>${formatNumber(inv.paidBefore)} $</td>
                         <td><strong style="color: #10b981;">${formatNumber(newTotalPaid)} $</strong></td>
                     </tr>
+                    ${(surplusBefore > 0 || newSurplus > 0) ? `
+                    <tr>
+                        <td>زيادة التحصيل على الفاتورة</td>
+                        <td>${surplusBefore > 0 ? `<span class="surplus-badge">+${formatNumber(surplusBefore)} $</span>` : '0.00 $'}</td>
+                        <td>${newSurplus > 0 ? `<span class="surplus-badge"><i class="fas fa-plus-circle"></i> +${formatNumber(newSurplus)} $ زيادة</span>` : '0.00 $'}</td>
+                    </tr>
+                    ` : ''}
                     <tr>
                         <td>المتبقي بالدولار</td>
                         <td>${formatNumber(inv.remainingBefore)} $</td>
@@ -1199,7 +1300,7 @@ function renderRows() {
             <td>${escapeHtml(row.document_number || startIndex + index + 1)}</td>
             <td>${escapeHtml(formatWeekday(row.record_date))}</td>
             <td>${escapeHtml(row.record_date || '')}</td>
-            <td><strong>${escapeHtml(row.invoice_number || '-')}</strong></td>
+            <td><strong>${escapeHtml(row.invoice_number || '-')}</strong>${row.uc_document_number ? ` <span style="font-size: 0.76rem; color: var(--text-muted); font-weight: 700;">(${escapeHtml(row.uc_document_number)})</span>` : ''}</td>
             <td class="amount-cell">${getAmountCellDisplay(row)}</td>
             <td class="currency-cell">${escapeHtml(row.currency || '')}</td>
             <td class="rate-cell">${getExchangeRateCellDisplay(row)}</td>
@@ -1243,6 +1344,7 @@ async function openEditModal(id) {
     }
 
     state.editingId = row.id;
+    state.selectedUnderCollectionId = Number(row.under_collection_id) || null;
     document.getElementById('documentNumber').value = row.document_number || '';
     document.getElementById('recordDate').value = row.record_date || today();
     document.getElementById('statementInput').value = row.statement || '';
@@ -1262,8 +1364,8 @@ async function openEditModal(id) {
     closeInvoiceDropdown();
     await loadUnderCollectionInvoices();
 
-    if (row.invoice_number) {
-        await onInvoiceNumberInput();
+    if (row.invoice_number || state.selectedUnderCollectionId) {
+        await onInvoiceNumberInput(true, state.selectedUnderCollectionId);
     } else {
         renderUnderCollectionInfoCard(null);
     }
@@ -1340,6 +1442,7 @@ async function saveRecord(event) {
         exchange_rate: avgRate,
         statement: document.getElementById('statementInput').value,
         invoice_number: document.getElementById('invoiceNumberInput')?.value?.trim() || '',
+        under_collection_id: state.currentLinkedInvoice?.id || state.selectedUnderCollectionId || null,
         discount_usd: discountEl && discountEl.value !== '' ? Number(discountEl.value) : undefined,
         items_json: JSON.stringify(cleanItems)
     };
@@ -1359,6 +1462,7 @@ async function saveRecord(event) {
             showMessage('تم تعديل السجل وتحديث الفاتورة المرتبطة بنجاح', 'success');
             state.editingId = null;
             state.currentLinkedInvoice = null;
+            state.selectedUnderCollectionId = null;
             document.getElementById('addRecordModal').classList.add('hidden');
             document.getElementById('exportRevenuesForm').reset();
             initModalRateItems([{ amount: '', currency: 'دولار', exchange_rate: '', amount_egp: 0 }]);
@@ -1379,6 +1483,7 @@ async function saveRecord(event) {
         document.getElementById('recordDate').value = today();
         initModalRateItems([{ amount: '', currency: 'دولار', exchange_rate: '', amount_egp: 0 }]);
         state.currentLinkedInvoice = null;
+        state.selectedUnderCollectionId = null;
         await refreshDocumentNumber();
         state.page = 1;
         await loadRecords();
