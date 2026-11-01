@@ -33,7 +33,8 @@ const state = {
     isSavingWeek: false,
     isSavingWorker: false,
     isSavingAdvance: false,
-    hasUnsavedAttendance: false
+    hasUnsavedAttendance: false,
+    overtimeOnlyByDay: {}
 };
 
 function buildTopNavHTML() {
@@ -205,9 +206,13 @@ function renderPage() {
                     <div class="workers-summary-icon"><i class="fas fa-money-bill-wave"></i></div>
                     <div><span>${t('workersManagement.totalWages', 'إجمالي الأجور')}</span><strong id="grossPayValue">0.00 ج.م</strong></div>
                 </article>
-                <article class="workers-summary-card workers-advances" id="totalAdvancesCard" role="button" tabindex="0" title="انقر لعرض تفاصيل سُلف العمال">
+                <article class="workers-summary-card workers-advances" id="totalAdvancesCard" role="button" tabindex="0" title="انقر لعرض تفاصيل سُلف العمال والتنزيل الأسبوعي">
                     <div class="workers-summary-icon"><i class="fas fa-hand-holding-dollar"></i></div>
-                    <div><span>${t('workersManagement.totalAdvances', 'إجمالي السُلف')}</span><strong id="advancesValue">0.00 ج.م</strong></div>
+                    <div>
+                        <span>${t('workersManagement.totalAdvances', 'إجمالي السُلف (المخصومة للأسبوع)')}</span>
+                        <strong id="advancesValue">0.00 ج.م</strong>
+                        <small id="advancesSubValue" class="workers-summary-subtext"></small>
+                    </div>
                 </article>
                 <article class="workers-summary-card workers-net" id="netPayCard">
                     <div class="workers-summary-icon"><i class="fas fa-sack-dollar"></i></div>
@@ -245,7 +250,8 @@ function renderPage() {
                     <div class="workers-filter-field select-field">
                         <select class="workers-select" id="advanceFilterSelect">
                             <option value="">كل العمال</option>
-                            <option value="has-advances">عمال لديهم سُلف هذا الأسبوع</option>
+                            <option value="has-advances">عمال عليهم رصيد سُلف (حالي أو مرحّل)</option>
+                            <option value="has-week-deduction">عمال تم التنزيل من سُلفهم هذا الأسبوع</option>
                         </select>
                     </div>
                 </div>
@@ -324,8 +330,41 @@ function renderPage() {
                     </div>
                     <button type="button" class="workers-modal-close" data-close-modal="advanceModal"><i class="fas fa-times"></i></button>
                 </div>
-                <form id="advanceForm">
-                    <div class="workers-modal-body">
+                <div class="workers-modal-body">
+                    <div id="advanceSummaryCards" class="advance-summary-cards"></div>
+
+                    <div class="advance-deduction-section" id="advanceDeductionSection">
+                        <div class="advance-section-head">
+                            <h3><i class="fas fa-hand-holding-hand"></i> تنزيل / خصم من السلفة في هذا الأسبوع</h3>
+                            <span id="advanceDeductionHint" class="advance-section-hint">حدد المبلغ المراد خصمه من أجر العامل هذا الأسبوع</span>
+                        </div>
+                        <div class="advance-deduction-controls">
+                            <div class="workers-field">
+                                <label for="advanceDeductionAmountInput">المبلغ المنزّل هذا الأسبوع (ج.م)</label>
+                                <input type="number" class="workers-input" id="advanceDeductionAmountInput" min="0" step="0.01" placeholder="0.00">
+                            </div>
+                            <div class="workers-field">
+                                <label for="advanceDeductionNotesInput">ملاحظة التنزيل (اختياري)</label>
+                                <input type="text" class="workers-input" id="advanceDeductionNotesInput" placeholder="مثال: قسط أسبوعي من السلفة">
+                            </div>
+                        </div>
+                        <div class="workers-inline-actions" style="margin-top: 10px;">
+                            <button type="button" class="workers-btn workers-btn-primary" id="saveAdvanceDeductionBtn">
+                                <i class="fas fa-check-circle"></i> تطبيق وحفظ التنزيل
+                            </button>
+                            <button type="button" class="workers-btn workers-btn-success" id="deductFullAdvanceBtn">
+                                <i class="fas fa-bolt"></i> خصم الرصيد بالكامل
+                            </button>
+                            <button type="button" class="workers-btn workers-btn-danger" id="clearAdvanceDeductionBtn">
+                                <i class="fas fa-rotate-left"></i> تصفير خصم الأسبوع (0)
+                            </button>
+                        </div>
+                    </div>
+
+                    <form id="advanceForm" class="advance-new-form-section">
+                        <div class="advance-section-head">
+                            <h3><i class="fas fa-plus-circle"></i> سحب / إضافة سلفة جديدة في هذا الأسبوع</h3>
+                        </div>
                         <div class="workers-modal-grid">
                             <div class="workers-field">
                                 <label for="advanceDateInput">تاريخ السلفة</label>
@@ -340,16 +379,22 @@ function renderPage() {
                                 <textarea class="workers-textarea" id="advanceNotesInput">سلف</textarea>
                             </div>
                         </div>
-                        <div class="workers-inline-actions">
-                            <button type="submit" class="workers-btn workers-btn-primary" id="saveAdvanceBtn">حفظ السلفة</button>
+                        <div class="workers-inline-actions" style="margin-top: 10px;">
+                            <button type="submit" class="workers-btn workers-btn-primary" id="saveAdvanceBtn">حفظ السلفة الجديدة</button>
                             <button type="button" class="workers-btn workers-btn-outline hidden" id="cancelAdvanceEditBtn">إلغاء التعديل</button>
                         </div>
-                        <div class="workers-advances-list">
-                            <h3>سُلف العامل خلال الأسبوع</h3>
-                            <div id="workerAdvancesList"></div>
-                        </div>
+                    </form>
+
+                    <div class="workers-advances-list">
+                        <h3>سُلف العامل المسحوبة خلال هذا الأسبوع</h3>
+                        <div id="workerAdvancesList"></div>
                     </div>
-                </form>
+
+                    <div class="workers-advances-list hidden" id="workerPriorAdvancesSection">
+                        <h3><i class="fas fa-clock-rotate-left"></i> سجل السُلف والتنزيلات من الأسابيع السابقة</h3>
+                        <div id="workerPriorAdvancesList"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -438,7 +483,7 @@ function renderPage() {
                     </button>
                     <button type="button" class="workers-btn workers-btn-outline" data-close-modal="smartAttendanceModal">إلغاء</button>
                     <button type="button" class="workers-btn workers-btn-primary" id="applySmartAttendanceBtn">
-                        <i class="fas fa-check-double"></i> تطبيق على جدول الأسبوع
+                        <i class="fas fa-check-double"></i> تطبيق وحفظ في جدول الأسبوع
                     </button>
                 </div>
             </div>
@@ -494,11 +539,11 @@ function renderPage() {
         </div>
 
         <div class="workers-modal-overlay hidden" id="totalAdvancesModal">
-            <div class="workers-modal" role="dialog" aria-modal="true" aria-labelledby="totalAdvancesModalTitle" style="max-width: 620px;">
+            <div class="workers-modal" role="dialog" aria-modal="true" aria-labelledby="totalAdvancesModalTitle" style="max-width: 780px;">
                 <div class="workers-modal-header">
                     <div>
-                        <h2 id="totalAdvancesModalTitle"><i class="fas fa-hand-holding-dollar" style="color: #f59e0b;"></i> تفاصيل سُلف العمال</h2>
-                        <span class="smart-modal-subtitle">عرض إجمالي السُلف لكل عامل مع إمكانية عرض وتعديل السُلف</span>
+                        <h2 id="totalAdvancesModalTitle"><i class="fas fa-hand-holding-dollar" style="color: #f59e0b;"></i> تفاصيل سُلف العمال والتنزيل الأسبوعي</h2>
+                        <span class="smart-modal-subtitle">عرض إجمالي السُلف المرحّلة والحالية والمبالغ المنزّلة والمتبقية لكل عامل</span>
                     </div>
                     <button type="button" class="workers-modal-close" data-close-modal="totalAdvancesModal"><i class="fas fa-times"></i></button>
                 </div>
@@ -507,9 +552,11 @@ function renderPage() {
                         <div class="workers-field absent-search-field" style="flex: 1;">
                             <input type="text" class="workers-input" id="totalAdvancesSearchInput" placeholder="بحث باسم العامل أو المهنة...">
                         </div>
-                        <div class="workers-field" style="width: 170px;">
+                        <div class="workers-field" style="width: 230px;">
                             <select class="workers-select" id="totalAdvancesFilterSelect">
-                                <option value="has-advances">عمال بسُلف فقط</option>
+                                <option value="has-advances">عمال عليهم سُلف (حالية أو مرحلة)</option>
+                                <option value="has-remaining">عمال متبقي عليهم رصيد للأسبوع القادم</option>
+                                <option value="has-deduction">عمال تم التنزيل منهم هذا الأسبوع</option>
                                 <option value="all">جميع العمال</option>
                             </select>
                         </div>
@@ -517,7 +564,7 @@ function renderPage() {
                     <div class="absent-workers-list-wrap" id="totalAdvancesListContainer"></div>
                 </div>
                 <div class="workers-modal-footer">
-                    <div style="margin-left: auto; font-weight: 700; color: #f59e0b; font-size: 0.95rem;" id="totalAdvancesModalSummary"></div>
+                    <div style="margin-left: auto; font-weight: 700; color: #f59e0b; font-size: 0.92rem;" id="totalAdvancesModalSummary"></div>
                     <button type="button" class="workers-btn workers-btn-outline" data-close-modal="totalAdvancesModal">إغلاق</button>
                 </div>
             </div>
@@ -639,7 +686,11 @@ function renderRows() {
             return false;
         }
 
-        if (advanceVal === 'has-advances' && (!row.advances_total || row.advances_total <= 0)) {
+        if (advanceVal === 'has-advances' && ((Number(row.total_advance_balance) || 0) <= 0 && (Number(row.remaining_advance_balance) || 0) <= 0)) {
+            return false;
+        }
+
+        if (advanceVal === 'has-week-deduction' && (Number(row.deducted_advance_amount) || 0) <= 0) {
             return false;
         }
 
@@ -659,8 +710,29 @@ function renderRows() {
         const dailyWage = Number(row.daily_wage) || 0;
         const isLowWage = dailyWage <= 50;
 
+        const carriedOverAdv = Number(row.carried_over_advance) || 0;
+        const weekAdv = Number(row.week_advances_total) || 0;
+        const totalAdv = Number(row.total_advance_balance) || 0;
+        const deductedAdv = Number(row.deducted_advance_amount) || 0;
+        const remainingAdv = Number(row.remaining_advance_balance ?? row.advances_total) || 0;
+
+        let advanceMetaHtml = '';
+        if (totalAdv > 0) {
+            const originBadge = carriedOverAdv > 0 && weekAdv > 0
+                ? `<span class="adv-meta-tag is-carried" title="مرحّل ${formatMoney(carriedOverAdv)} + جديد ${formatMoney(weekAdv)}">إجمالي السُلف: ${formatMoney(totalAdv)} (مرحّل ${formatMoney(carriedOverAdv)})</span>`
+                : (carriedOverAdv > 0
+                    ? `<span class="adv-meta-tag is-carried">إجمالي مرحّل: ${formatMoney(carriedOverAdv)} ج</span>`
+                    : `<span class="adv-meta-tag is-new">إجمالي السلفة: ${formatMoney(weekAdv)} ج</span>`);
+
+            const remainingBadge = remainingAdv > 0
+                ? `<span class="adv-meta-tag is-unpaid">المتبقي للأسبوع القادم: ${formatMoney(remainingAdv)} ج</span>`
+                : `<span class="adv-meta-tag is-deducted">المتبقي: 0 ج (خالص)</span>`;
+
+            advanceMetaHtml = `<div class="worker-advance-meta">${originBadge}${remainingBadge}</div>`;
+        }
+
         return `
-            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${row.advances_total}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'} ${isLowWage ? 'is-low-wage-row' : ''}">
+            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${deductedAdv}" data-deducted-advance="${deductedAdv}" data-remaining-advance="${remainingAdv}" data-total-advance="${totalAdv}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'} ${isLowWage ? 'is-low-wage-row' : ''}">
                 <td>${index + 1}</td>
                 <td class="worker-name-cell"${notesTitle}>
                     <div class="worker-name-box ${isLowWage ? 'worker-name-low-wage' : ''}"${isLowWage ? ' title="الأجر اليومي 50 ج أو أقل - انقر لتصحيحه"' : ''}>
@@ -672,8 +744,9 @@ function renderRows() {
                 ${ATTENDANCE_DAYS.map((day) => buildAttendanceCell(row, day)).join('')}
                 <td class="attendance-units-value">${formatUnits(row.attendance_units)}</td>
                 <td class="worker-money gross-pay-value">${formatMoney(row.gross_pay)} ج.م</td>
-                <td class="worker-money">
-                    <span class="worker-advances-value">${formatMoney(row.advances_total)} ج.م</span>
+                <td class="worker-money worker-advances-cell">
+                    <span class="worker-advances-value ${deductedAdv > 0 ? 'is-settled' : (remainingAdv > 0 ? 'has-balance' : 'is-zero')}" title="المبلغ المخصوم من أجر العامل في هذا الأسبوع">${totalAdv > 0 ? `المخصوم: ${formatMoney(deductedAdv)} ج.م` : '0.00 ج.م'}</span>
+                    ${advanceMetaHtml}
                     <div class="advance-action">
                         <button type="button" class="workers-btn workers-btn-outline workers-btn-small" data-action="advance" data-id="${row.id}">
                             <i class="fas fa-hand-holding-dollar"></i> السُلف
@@ -784,9 +857,9 @@ function updateRowCalculations(rowElement) {
     });
 
     const dailyWage = Number(rowElement.dataset.dailyWage) || 0;
-    const advancesTotal = Number(rowElement.dataset.advancesTotal) || 0;
+    const deductedAdvance = Number(rowElement.dataset.deductedAdvance ?? rowElement.dataset.advancesTotal) || 0;
     const grossPay = Math.round((dailyWage * attendanceUnits + Number.EPSILON) * 100) / 100;
-    const netPay = Math.round((grossPay - advancesTotal + Number.EPSILON) * 100) / 100;
+    const netPay = Math.round((grossPay - deductedAdvance + Number.EPSILON) * 100) / 100;
 
     rowElement.dataset.grossPay = grossPay;
     rowElement.dataset.netPay = netPay;
@@ -829,9 +902,10 @@ function syncAttendanceStateFromRow(rowElement) {
         attendanceUnits += present ? (isNewLogic ? ((baseDuration || 1) + duration) : duration) : 0;
     });
 
+    const deductedAdv = Number(worker.deducted_advance_amount) || 0;
     worker.attendance_units = attendanceUnits;
     worker.gross_pay = Math.round(((Number(worker.daily_wage) || 0) * attendanceUnits + Number.EPSILON) * 100) / 100;
-    worker.net_pay = Math.round((worker.gross_pay - (Number(worker.advances_total) || 0) + Number.EPSILON) * 100) / 100;
+    worker.net_pay = Math.round((worker.gross_pay - deductedAdv + Number.EPSILON) * 100) / 100;
     state.hasUnsavedAttendance = true;
 }
 
@@ -850,8 +924,9 @@ function restoreUnsavedAttendance(rows, attendanceByWorker) {
             const duration = att.duration ?? defaultDuration;
             return total + (isNewLogic ? (baseDuration + duration) : duration);
         }, 0);
+        const deductedAdv = Number(row.deducted_advance_amount) || 0;
         row.gross_pay = Math.round(((Number(row.daily_wage) || 0) * row.attendance_units + Number.EPSILON) * 100) / 100;
-        row.net_pay = Math.round((row.gross_pay - (Number(row.advances_total) || 0) + Number.EPSILON) * 100) / 100;
+        row.net_pay = Math.round((row.gross_pay - deductedAdv + Number.EPSILON) * 100) / 100;
     });
 }
 
@@ -863,12 +938,16 @@ function getMoneyFromCell(element) {
 function updateSummaryFromTable() {
     const rows = Array.from(document.querySelectorAll('#workersTableBody tr[data-worker-id]'));
     let grossPay = 0;
-    let advancesTotal = 0;
+    let remainingAdvancesTotal = 0;
+    let deductedAdvancesTotal = 0;
+    let totalAdvancesBalance = 0;
     let netPay = 0;
 
     rows.forEach((row) => {
         grossPay += Number(row.dataset.grossPay) || 0;
-        advancesTotal += Number(row.dataset.advancesTotal) || 0;
+        remainingAdvancesTotal += Number(row.dataset.remainingAdvance ?? row.dataset.advancesTotal) || 0;
+        deductedAdvancesTotal += Number(row.dataset.deductedAdvance) || 0;
+        totalAdvancesBalance += Number(row.dataset.totalAdvance) || 0;
         netPay += Number(row.dataset.netPay) || 0;
     });
 
@@ -877,7 +956,11 @@ function updateSummaryFromTable() {
 
     document.getElementById('workersCountValue').textContent = String(rows.length);
     document.getElementById('grossPayValue').textContent = `${formatMoney(grossPay)} ج.م`;
-    document.getElementById('advancesValue').textContent = `${formatMoney(advancesTotal)} ج.م`;
+    document.getElementById('advancesValue').textContent = `${formatMoney(deductedAdvancesTotal)} ج.م`;
+    const advancesSubValue = document.getElementById('advancesSubValue');
+    if (advancesSubValue) {
+        advancesSubValue.textContent = `المتبقي المرحّل للأسبوع القادم: ${formatMoney(remainingAdvancesTotal)} ج.م (من إجمالي ${formatMoney(totalAdvancesBalance)} ج.م)`;
+    }
 
     const netPayElement = document.getElementById('netPayValue');
     const netPayCard = document.getElementById('netPayCard');
@@ -1204,27 +1287,32 @@ function collectAttendanceEntries() {
     const isNewLogic = state.weekStart >= '2026-07-11';
     const defaultDuration = isNewLogic ? 0 : 1;
 
-    return Array.from(document.querySelectorAll('#workersTableBody tr[data-worker-id]')).map((row) => {
-        const entry = { worker_id: Number(row.dataset.workerId) };
+    document.querySelectorAll('#workersTableBody tr[data-worker-id]').forEach((row) => {
+        syncAttendanceStateFromRow(row);
+    });
+
+    return state.rows.map((worker) => {
+        const entry = { worker_id: Number(worker.id) };
         ATTENDANCE_DAYS.forEach((day) => {
-            const cell = row.querySelector(`.attendance-day-cell[data-day="${day.key}"]`);
-            const checkbox = cell?.querySelector('.attendance-check');
-            const baseSelect = cell?.querySelector('.attendance-base-duration');
-            const select = cell?.querySelector('.attendance-duration');
-            const present = Boolean(checkbox?.checked);
-            const baseDurationVal = baseSelect ? Number(baseSelect.value) : 1;
-            const durationVal = select ? Number(select.value) : defaultDuration;
+            const att = worker.attendance?.[day.key] || {};
+            const present = Boolean(att.present);
+            const baseDurationVal = att.base_duration !== undefined ? Number(att.base_duration) : 1;
+            const durationVal = att.duration !== undefined ? Number(att.duration) : defaultDuration;
 
             entry[`${day.key}_present`] = present;
-            entry[`${day.key}_base_duration`] = present && isNewLogic ? (isNaN(baseDurationVal) ? 1 : baseDurationVal) : 0;
+            entry[`${day.key}_base_duration`] = present && isNewLogic ? (isNaN(baseDurationVal) || baseDurationVal <= 0 ? 1 : baseDurationVal) : 0;
             entry[`${day.key}_duration`] = present ? (isNaN(durationVal) ? defaultDuration : durationVal) : 0;
         });
         return entry;
     });
 }
 
-async function saveWeekAttendance() {
+async function saveWeekAttendance(options = {}) {
     if (state.isSavingWeek) return;
+
+    const customMessage = options && typeof options === 'object' && typeof options.customMessage === 'string'
+        ? options.customMessage
+        : '';
 
     const entries = collectAttendanceEntries();
     if (!entries.length) {
@@ -1249,7 +1337,7 @@ async function saveWeekAttendance() {
             return;
         }
 
-        let successMsg = 'تم حفظ حضور الأسبوع بنجاح';
+        let successMsg = customMessage || 'تم حفظ حضور الأسبوع بنجاح';
         if (result.transferred_workers && result.transferred_workers.length > 0) {
             successMsg += ` (تم ترحيل أجر ${result.transferred_workers.join('، ')} إلى النثريات)`;
         }
@@ -1426,53 +1514,155 @@ function resetAdvanceForm() {
     }
     if (notesInput) notesInput.value = 'سلف';
     if (cancelButton) cancelButton.classList.add('hidden');
-    if (saveButton) saveButton.textContent = 'حفظ السلفة';
+    if (saveButton) saveButton.textContent = 'حفظ السلفة الجديدة';
 }
 
 function renderWorkerAdvances() {
     const host = document.getElementById('workerAdvancesList');
+    const priorSection = document.getElementById('workerPriorAdvancesSection');
+    const priorHost = document.getElementById('workerPriorAdvancesList');
     const worker = getWorkerById(state.advanceWorkerId);
     if (!host || !worker) return;
 
     if (!worker.advances?.length) {
-        host.innerHTML = '<div class="workers-empty">لا توجد سُلف مسجلة لهذا الأسبوع</div>';
-        return;
+        host.innerHTML = '<div class="workers-empty" style="padding: 16px !important;">لا توجد سُلف جديدة مسحوبة خلال هذا الأسبوع</div>';
+    } else {
+        host.innerHTML = `
+            <table class="workers-advances-table">
+                <thead>
+                    <tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظات</th><th>إجراءات</th></tr>
+                </thead>
+                <tbody>
+                    ${worker.advances.map((advance) => `
+                        <tr>
+                            <td>${formatArabicDate(advance.advance_date)}</td>
+                            <td><strong>${formatMoney(advance.amount)} ج.م</strong></td>
+                            <td>${escapeHtml(advance.notes || '-')}</td>
+                            <td>
+                                <div class="workers-inline-actions" style="justify-content: center;">
+                                    <button type="button" class="workers-btn workers-btn-outline workers-btn-small" data-advance-action="edit" data-id="${advance.id}">تعديل</button>
+                                    <button type="button" class="workers-btn workers-btn-danger workers-btn-small" data-advance-action="delete" data-id="${advance.id}">حذف</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
     }
 
-    host.innerHTML = `
-        <table class="workers-advances-table">
-            <thead>
-                <tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظات</th><th>إجراءات</th></tr>
-            </thead>
-            <tbody>
-                ${worker.advances.map((advance) => `
-                    <tr>
-                        <td>${formatArabicDate(advance.advance_date)}</td>
-                        <td>${formatMoney(advance.amount)} ج.م</td>
-                        <td>${escapeHtml(advance.notes || '-')}</td>
-                        <td>
-                            <div class="workers-inline-actions">
-                                <button type="button" class="workers-btn workers-btn-outline workers-btn-small" data-advance-action="edit" data-id="${advance.id}">تعديل</button>
-                                <button type="button" class="workers-btn workers-btn-danger workers-btn-small" data-advance-action="delete" data-id="${advance.id}">حذف</button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
+    if (priorSection && priorHost) {
+        const priorAdvances = worker.prior_advances || [];
+        const priorDeductions = worker.prior_deductions || [];
+        if (!priorAdvances.length && !priorDeductions.length) {
+            priorSection.classList.add('hidden');
+            priorHost.innerHTML = '';
+        } else {
+            priorSection.classList.remove('hidden');
+            const priorRowsHtml = [
+                ...priorAdvances.map((adv) => ({
+                    sortKey: `${adv.advance_date}_1_${adv.id}`,
+                    html: `
+                        <tr>
+                            <td><span class="adv-history-badge is-advance"><i class="fas fa-arrow-up"></i> سحب سلفة</span></td>
+                            <td>${formatArabicDate(adv.advance_date)} <small style="color:#64748b;">(أسبوع ${formatArabicDate(adv.week_start_date)})</small></td>
+                            <td style="color:#d97706; font-weight:800;">+${formatMoney(adv.amount)} ج.م</td>
+                            <td>${escapeHtml(adv.notes || '-')}</td>
+                            <td>
+                                <button type="button" class="workers-btn workers-btn-danger workers-btn-small" data-advance-action="delete" data-id="${adv.id}">حذف</button>
+                            </td>
+                        </tr>
+                    `
+                })),
+                ...priorDeductions.filter((d) => Number(d.deducted_amount) > 0).map((ded) => ({
+                    sortKey: `${ded.week_start_date}_2_${ded.id}`,
+                    html: `
+                        <tr>
+                            <td><span class="adv-history-badge is-deduction"><i class="fas fa-arrow-down"></i> تنزيل أسبوعي</span></td>
+                            <td>أسبوع ${formatArabicDate(ded.week_start_date)}</td>
+                            <td style="color:#16a34a; font-weight:800;">-${formatMoney(ded.deducted_amount)} ج.م</td>
+                            <td>${escapeHtml(ded.notes || 'خصم من راتب الأسبوع')}</td>
+                            <td>-</td>
+                        </tr>
+                    `
+                }))
+            ].sort((a, b) => b.sortKey.localeCompare(a.sortKey)).map((item) => item.html).join('');
+
+            priorHost.innerHTML = `
+                <table class="workers-advances-table">
+                    <thead>
+                        <tr><th>نوع الحركة</th><th>التاريخ / الأسبوع</th><th>المبلغ</th><th>ملاحظات</th><th>إجراءات</th></tr>
+                    </thead>
+                    <tbody>${priorRowsHtml}</tbody>
+                </table>
+            `;
+        }
+    }
 }
 
 function updateAdvanceModalHeader() {
     const worker = getWorkerById(state.advanceWorkerId);
     if (!worker) return;
 
-    document.getElementById('advanceModalTitle').textContent = `سُلف العامل: ${worker.name}`;
+    document.getElementById('advanceModalTitle').textContent = `إدارة سُلف العامل: ${worker.name}`;
+
+    const carriedOver = Number(worker.carried_over_advance) || 0;
+    const weekAdvances = Number(worker.week_advances_total) || 0;
+    const totalAdvance = Number(worker.total_advance_balance) || 0;
+    const deductedAmount = Number(worker.deducted_advance_amount) || 0;
+    const remainingBalance = Number(worker.remaining_advance_balance) || 0;
 
     const histElement = document.getElementById('historicalAdvancesTotal');
     if (histElement) {
-        const totalHist = worker.historical_advances_total || 0;
-        histElement.textContent = `إجمالي السلف التراكمية: ${formatMoney(totalHist)} ج.م`;
+        const totalHist = Number(worker.historical_advances_total) || 0;
+        const totalHistDed = Number(worker.historical_deductions_total) || 0;
+        histElement.textContent = `إجمالي السُلف المسحوبة تاريخياً: ${formatMoney(totalHist)} ج.م | إجمالي المسدد تاريخياً: ${formatMoney(totalHistDed)} ج.م`;
+    }
+
+    const summaryCardsEl = document.getElementById('advanceSummaryCards');
+    if (summaryCardsEl) {
+        summaryCardsEl.innerHTML = `
+            <div class="adv-stat-card is-carried">
+                <span>مرحّل من السابق</span>
+                <strong>${formatMoney(carriedOver)} ج.م</strong>
+            </div>
+            <div class="adv-stat-card is-week">
+                <span>سُلف هذا الأسبوع</span>
+                <strong>${formatMoney(weekAdvances)} ج.م</strong>
+            </div>
+            <div class="adv-stat-card is-total">
+                <span>إجمالي السُلف عليه</span>
+                <strong>${formatMoney(totalAdvance)} ج.م</strong>
+            </div>
+            <div class="adv-stat-card is-deducted">
+                <span>المنزّل هذا الأسبوع</span>
+                <strong>${formatMoney(deductedAmount)} ج.م</strong>
+            </div>
+            <div class="adv-stat-card ${remainingBalance > 0 ? 'is-remaining-due' : 'is-remaining-zero'}">
+                <span>المتبقي للأسبوع القادم</span>
+                <strong>${formatMoney(remainingBalance)} ج.م</strong>
+            </div>
+        `;
+    }
+
+    const deductionInput = document.getElementById('advanceDeductionAmountInput');
+    const deductionNotesInput = document.getElementById('advanceDeductionNotesInput');
+    const deductFullBtn = document.getElementById('deductFullAdvanceBtn');
+    const clearDeductBtn = document.getElementById('clearAdvanceDeductionBtn');
+
+    if (deductionInput) {
+        deductionInput.value = deductedAmount > 0 ? String(deductedAmount) : '';
+        deductionInput.max = String(totalAdvance);
+    }
+    if (deductionNotesInput) {
+        deductionNotesInput.value = worker.deduction_notes || '';
+    }
+    if (deductFullBtn) {
+        deductFullBtn.disabled = totalAdvance <= 0 || deductedAmount === totalAdvance;
+        deductFullBtn.innerHTML = `<i class="fas fa-bolt"></i> خصم الرصيد بالكامل (${formatMoney(totalAdvance)} ج.م)`;
+    }
+    if (clearDeductBtn) {
+        clearDeductBtn.disabled = deductedAmount <= 0;
     }
 }
 
@@ -1500,31 +1690,79 @@ function editAdvance(id) {
     document.getElementById('saveAdvanceBtn').textContent = 'حفظ التعديل';
 }
 
+async function saveAdvanceDeduction(forcedAmount = null) {
+    if (state.isSavingAdvance || !state.advanceWorkerId) return;
+
+    const worker = getWorkerById(state.advanceWorkerId);
+    if (!worker) return;
+
+    const totalAdvance = Number(worker.total_advance_balance) || 0;
+    const deductionInput = document.getElementById('advanceDeductionAmountInput');
+    const notesInput = document.getElementById('advanceDeductionNotesInput');
+    const rawAmount = forcedAmount !== null ? Number(forcedAmount) : Number(deductionInput?.value || 0);
+    const deductedAmount = Math.round(((Number.isFinite(rawAmount) ? rawAmount : 0) + Number.EPSILON) * 100) / 100;
+
+    if (deductedAmount < 0) {
+        showMessage('مبلغ التنزيل لا يمكن أن يكون بالسالب', 'warning');
+        return;
+    }
+
+    if (deductedAmount > totalAdvance) {
+        showMessage(`مبلغ التنزيل (${formatMoney(deductedAmount)} ج.م) لا يمكن أن يتجاوز إجمالي السلف المستحقة على العامل (${formatMoney(totalAdvance)} ج.م)`, 'warning');
+        return;
+    }
+
+    if (deductedAmount > 0 && deductedAmount > (Number(worker.gross_pay) || 0)) {
+        const confirmed = typeof window.showConfirmDialog === 'function'
+            ? await window.showConfirmDialog(`تنبيه: المبلغ المراد تنزيله هذا الأسبوع (${formatMoney(deductedAmount)} ج.م) أكبر من إجمالي أجر العامل للأسبوع الحالي (${formatMoney(worker.gross_pay)} ج.م)، مما يجعل صافي قبضه بالسالب. هل تريد المتابعة؟`)
+            : window.confirm(`تنبيه: المبلغ المراد تنزيله (${deductedAmount} ج.م) أكبر من إجمالي أجر العامل للأسبوع الحالي (${worker.gross_pay} ج.م). هل تريد المتابعة؟`);
+        if (!confirmed) return;
+    }
+
+    state.isSavingAdvance = true;
+    const saveBtn = document.getElementById('saveAdvanceDeductionBtn');
+    if (saveBtn) saveBtn.disabled = true;
+
+    try {
+        const result = await window.electronAPI.saveWorkerAdvanceDeduction({
+            worker_id: state.advanceWorkerId,
+            week_start_date: state.weekStart,
+            deducted_amount: deductedAmount,
+            notes: notesInput?.value || ''
+        });
+
+        if (!result || !result.success) {
+            showMessage((result && result.error) || 'تعذر حفظ التنزيل الأسبوعي', 'error');
+            return;
+        }
+
+        const remainingAfter = Math.max(0, Math.round((totalAdvance - deductedAmount + Number.EPSILON) * 100) / 100);
+        showMessage(
+            deductedAmount > 0
+                ? `تم تنزيل ${formatMoney(deductedAmount)} ج.م لهذا الأسبوع — المتبقي على العامل: ${formatMoney(remainingAfter)} ج.م`
+                : 'تم تصفير خصم السلفة لهذا الأسبوع',
+            'success'
+        );
+
+        const workerId = state.advanceWorkerId;
+        await Promise.all([loadWeek({ preserveAttendance: true }), loadWeeksHistory()]);
+        state.advanceWorkerId = workerId;
+        updateAdvanceModalHeader();
+        renderWorkerAdvances();
+    } catch (error) {
+        showMessage(error.message || 'تعذر حفظ التنزيل الأسبوعي', 'error');
+    } finally {
+        state.isSavingAdvance = false;
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
 async function saveAdvance(event) {
     event.preventDefault();
     if (state.isSavingAdvance || !state.advanceWorkerId) return;
 
     const amountInput = document.getElementById('advanceAmountInput');
     const amount = Number(amountInput?.value) || 0;
-
-    const worker = getWorkerById(state.advanceWorkerId);
-    if (worker) {
-        const otherAdvancesTotal = worker.advances
-            ?.filter((adv) => String(adv.id) !== String(state.editingAdvanceId))
-            ?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
-
-        const netPayBeforeThisAdvance = Math.round((worker.gross_pay - otherAdvancesTotal + Number.EPSILON) * 100) / 100;
-
-        if (amount > netPayBeforeThisAdvance) {
-            const confirmed = typeof window.showConfirmDialog === 'function'
-                ? await window.showConfirmDialog(`تنبيه: قيمة هذه السلفة (${amount} ج.م) تتجاوز صافي مستحقات العامل المتبقية للأسبوع الحالي (${netPayBeforeThisAdvance} ج.م)، مما يجعل صافي راتبه بالسالب. هل تريد المتابعة وحفظ السلفة؟`)
-                : window.confirm(`تنبيه: قيمة هذه السلفة (${amount} ج.م) تتجاوز صافي مستحقات العامل المتبقية للأسبوع الحالي (${netPayBeforeThisAdvance} ج.م)، مما يجعل صافي راتبه بالسالب. هل تريد المتابعة وحفظ السلفة؟`);
-
-            if (!confirmed) {
-                return;
-            }
-        }
-    }
 
     const payload = {
         worker_id: state.advanceWorkerId,
@@ -1548,7 +1786,7 @@ async function saveAdvance(event) {
             return;
         }
 
-        showMessage(state.editingAdvanceId ? 'تم تعديل السلفة' : 'تم تسجيل السلفة', 'success');
+        showMessage(state.editingAdvanceId ? 'تم تعديل السلفة' : 'تمت إضافة السلفة لرصيد العامل', 'success');
         const workerId = state.advanceWorkerId;
         await Promise.all([loadWeek({ preserveAttendance: true }), loadWeeksHistory()]);
         state.advanceWorkerId = workerId;
@@ -1577,7 +1815,7 @@ async function deleteAdvance(id) {
 
     showMessage('تم حذف السلفة', 'success');
     const workerId = state.advanceWorkerId;
-    await loadWeek({ preserveAttendance: true });
+    await Promise.all([loadWeek({ preserveAttendance: true }), loadWeeksHistory()]);
     state.advanceWorkerId = workerId;
     updateAdvanceModalHeader();
     resetAdvanceForm();
@@ -1626,7 +1864,11 @@ function normalizeArabicText(text) {
         .replace(/[يى]/g, 'ي')
         .replace(/ة/g, 'ه')
         .replace(/[ًٌٍَُِّْـ]/g, '')
-        .replace(/\s+/g, ' ');
+        .replace(/\s*\(\s*/g, ' (')
+        .replace(/\s*\)\s*/g, ') ')
+        .replace(/(^|\s)عبد\s+/g, '$1عبد')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function extractNamesList(rawText) {
@@ -1652,7 +1894,14 @@ function findWorkerByName(queryName, candidateRows) {
     const cleanQuery = normalizeArabicText(queryName);
     if (!cleanQuery) return null;
 
-    return candidateRows.find((row) => normalizeArabicText(row.name) === cleanQuery) || null;
+    const exactMatch = candidateRows.find((row) => normalizeArabicText(row.name) === cleanQuery);
+    if (exactMatch) return exactMatch;
+
+    const stripParens = (str) => str.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+    const strippedQuery = stripParens(cleanQuery);
+    if (!strippedQuery) return null;
+
+    return candidateRows.find((row) => stripParens(normalizeArabicText(row.name)) === strippedQuery) || null;
 }
 
 function getLevenshteinDistance(a, b) {
@@ -1789,7 +2038,7 @@ function checkExistingDayAttendance() {
                     <i class="fas fa-triangle-exclamation"></i>
                     <div>
                         <strong>تنبيه: يوم ${escapeHtml(dayLabel)} يحتوي بالفعل على (${count}) عامل مسجلين كحضور.</strong>
-                        <span>تطبيق الحضور سيقوم بتحديث واستبدال حضور هذا اليوم بالبيانات الجديدة.</span>
+                        <span>تطبيق الحضور سيقوم بتحديث حضور هذا اليوم مع الحفاظ تلقائياً على السهرات المسجلة مسبقاً عند ترك خانة السهرة فارغة.</span>
                     </div>
                 `;
             }
@@ -2234,16 +2483,27 @@ function renderTotalAdvancesList(searchQuery) {
     const filterMode = filterSelect ? filterSelect.value : 'has-advances';
 
     const activeRows = state.rows.filter((r) => state.includeArchived ? true : r.is_active);
-    const withAdvances = activeRows.filter((r) => (Number(r.advances_total) || 0) > 0);
+    const withAdvances = activeRows.filter((r) => (Number(r.total_advance_balance) || 0) > 0 || (Number(r.remaining_advance_balance) || 0) > 0);
+    const withRemaining = activeRows.filter((r) => (Number(r.remaining_advance_balance) || 0) > 0);
+    const withDeduction = activeRows.filter((r) => (Number(r.deducted_advance_amount) || 0) > 0);
 
     const summaryEl = document.getElementById('totalAdvancesModalSummary');
-    const totalSum = withAdvances.reduce((sum, r) => sum + (Number(r.advances_total) || 0), 0);
+    const totalRemainingSum = withAdvances.reduce((sum, r) => sum + (Number(r.remaining_advance_balance) || 0), 0);
+    const totalDeductedSum = withAdvances.reduce((sum, r) => sum + (Number(r.deducted_advance_amount) || 0), 0);
+    const totalBalanceSum = withAdvances.reduce((sum, r) => sum + (Number(r.total_advance_balance) || 0), 0);
     if (summaryEl) {
-        summaryEl.textContent = `الإجمالي: ${formatMoney(totalSum)} ج.م (${withAdvances.length} عامل بالسُلف)`;
+        summaryEl.textContent = `إجمالي السُلف: ${formatMoney(totalBalanceSum)} ج.م | المنزّل هذا الأسبوع: ${formatMoney(totalDeductedSum)} ج.م | المتبقي: ${formatMoney(totalRemainingSum)} ج.م (${withAdvances.length} عامل)`;
     }
 
-    let sourceRows = filterMode === 'all' ? [...activeRows] : [...withAdvances];
-    sourceRows.sort((a, b) => (Number(b.advances_total) || 0) - (Number(a.advances_total) || 0));
+    let sourceRows = [...withAdvances];
+    if (filterMode === 'all') {
+        sourceRows = [...activeRows];
+    } else if (filterMode === 'has-remaining') {
+        sourceRows = [...withRemaining];
+    } else if (filterMode === 'has-deduction') {
+        sourceRows = [...withDeduction];
+    }
+    sourceRows.sort((a, b) => (Number(b.remaining_advance_balance) || 0) - (Number(a.remaining_advance_balance) || 0) || (Number(b.total_advance_balance) || 0) - (Number(a.total_advance_balance) || 0));
 
     if (term) {
         sourceRows = sourceRows.filter((w) => {
@@ -2255,7 +2515,7 @@ function renderTotalAdvancesList(searchQuery) {
         container.innerHTML = `
             <div class="absent-empty-state">
                 <i class="fas ${term ? 'fa-magnifying-glass' : 'fa-circle-check'}" style="color: ${term ? '#94a3b8' : '#10b981'}; font-size: 2.2rem;"></i>
-                <strong>${term ? 'لا توجد نتائج بحث مطابقة' : 'لا توجد سُلف مسجلة لأي عامل في هذا الأسبوع!'}</strong>
+                <strong>${term ? 'لا توجد نتائج بحث مطابقة' : 'لا توجد سُلف مطابقة للتصفية الحالية!'}</strong>
                 <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #64748b;">${term ? 'جرب البحث باسم آخر أو تغيير التصفية' : 'يمكنك اختيار «جميع العمال» لإضافة سُلف جديدة لأي عامل.'}</p>
             </div>
         `;
@@ -2263,24 +2523,35 @@ function renderTotalAdvancesList(searchQuery) {
     }
 
     container.innerHTML = sourceRows.map((w, idx) => {
-        const totalAdv = Number(w.advances_total) || 0;
-        const badgeStyle = totalAdv > 0
-            ? 'background: rgba(245, 158, 11, 0.12); color: #d97706; font-weight: 700;'
-            : 'background: rgba(148, 163, 184, 0.15); color: #64748b; font-weight: normal;';
+        const carriedAdv = Number(w.carried_over_advance) || 0;
+        const weekAdv = Number(w.week_advances_total) || 0;
+        const totalAdv = Number(w.total_advance_balance) || 0;
+        const deductedAdv = Number(w.deducted_advance_amount) || 0;
+        const remainingAdv = Number(w.remaining_advance_balance) || 0;
+
+        const remainingStyle = remainingAdv > 0
+            ? 'background: rgba(245, 158, 11, 0.14); color: #d97706; font-weight: 800;'
+            : (totalAdv > 0
+                ? 'background: rgba(16, 185, 129, 0.14); color: #059669; font-weight: 800;'
+                : 'background: rgba(148, 163, 184, 0.15); color: #64748b; font-weight: normal;');
+
+        const detailsSubText = totalAdv > 0
+            ? `إجمالي السُلف: ${formatMoney(totalAdv)} ج (${carriedAdv > 0 ? `مرحّل: ${formatMoney(carriedAdv)}` : ''}${carriedAdv > 0 && weekAdv > 0 ? ' + ' : ''}${weekAdv > 0 ? `الأسبوع: ${formatMoney(weekAdv)}` : ''}) | منزّل الأسبوع: ${formatMoney(deductedAdv)} ج`
+            : `${escapeHtml(w.job_title || 'عامل')} — لا توجد سُلف`;
 
         return `
             <div class="low-wage-worker-item">
                 <div class="absent-worker-info">
                     <span class="absent-worker-num">${idx + 1}</span>
                     <div class="absent-worker-details">
-                        <strong>${escapeHtml(w.name)}</strong>
-                        <span>${escapeHtml(w.job_title || 'عامل')}</span>
+                        <strong>${escapeHtml(w.name)} <small style="font-weight:normal; color:#64748b;">(${escapeHtml(w.job_title || 'عامل')})</small></strong>
+                        <span style="color: ${totalAdv > 0 ? '#475569' : '#64748b'}; font-weight: ${totalAdv > 0 ? '600' : '400'};">${detailsSubText}</span>
                     </div>
                 </div>
                 <div class="low-wage-worker-actions">
-                    <span class="low-wage-current-badge" style="${badgeStyle}">${formatMoney(totalAdv)} ج.م</span>
+                    <span class="low-wage-current-badge" style="${remainingStyle}">المتبقي: ${formatMoney(remainingAdv)} ج.م</span>
                     <button type="button" class="workers-btn workers-btn-outline workers-btn-small" data-action="open-worker-advance-details" data-id="${w.id}">
-                        <i class="fas fa-hand-holding-dollar"></i> التفاصيل
+                        <i class="fas fa-hand-holding-dollar"></i> التفاصيل / تنزيل
                     </button>
                 </div>
             </div>
@@ -2424,6 +2695,27 @@ function updateSmartAttendancePreview() {
     }
 }
 
+function recalculateWorkerAttendanceTotals(worker) {
+    if (!worker) return;
+    const isNewLogic = state.weekStart >= '2026-07-11';
+    const defaultDuration = isNewLogic ? 0 : 1;
+    worker.attendance = worker.attendance || {};
+
+    let attendanceUnits = 0;
+    ATTENDANCE_DAYS.forEach((day) => {
+        const att = worker.attendance[day.key];
+        if (!att || !att.present) return;
+        const baseDuration = Number(att.base_duration) || 1;
+        const duration = att.duration !== undefined ? Number(att.duration) : defaultDuration;
+        attendanceUnits += isNewLogic ? (baseDuration + duration) : duration;
+    });
+
+    const deductedAdv = Number(worker.deducted_advance_amount) || 0;
+    worker.attendance_units = attendanceUnits;
+    worker.gross_pay = Math.round(((Number(worker.daily_wage) || 0) * attendanceUnits + Number.EPSILON) * 100) / 100;
+    worker.net_pay = Math.round((worker.gross_pay - deductedAdv + Number.EPSILON) * 100) / 100;
+}
+
 async function applySmartAttendance() {
     deduplicateTextarea('smartPresentNamesInput', true);
     deduplicateTextarea('smartFullOvertimeNamesInput', true);
@@ -2449,9 +2741,19 @@ async function applySmartAttendance() {
         return;
     }
 
+    document.querySelectorAll('#workersTableBody tr[data-worker-id]').forEach((rowElement) => {
+        syncAttendanceStateFromRow(rowElement);
+    });
+
     const isOvertimeOnly = !presentNames.length && (fullOvertimeNames.length > 0 || halfOvertimeNames.length > 0);
+    const hasFullInput = fullOvertimeNames.length > 0;
+    const hasHalfInput = halfOvertimeNames.length > 0;
 
     const activeRows = state.rows.filter((r) => state.includeArchived ? true : r.is_active);
+    if (!activeRows.length) {
+        showMessage('لا يوجد عمال في الجدول للتطبيق عليهم', 'warning');
+        return;
+    }
 
     const matchedDayPresentIds = new Set();
     const unrecognized = [];
@@ -2485,12 +2787,6 @@ async function applySmartAttendance() {
         }
     });
 
-    const rowElements = Array.from(document.querySelectorAll('#workersTableBody tr[data-worker-id]'));
-    if (!rowElements.length) {
-        showMessage('لا يوجد عمال في الجدول للتطبيق عليهم', 'warning');
-        return;
-    }
-
     const existingCount = checkExistingDayAttendance();
     const dayObj = ORDERED_WEEK_DAYS.find((d) => d.key === selectedDayKey);
     const dayLabel = dayObj ? dayObj.label : selectedDayKey;
@@ -2506,14 +2802,14 @@ async function applySmartAttendance() {
                             <span>يحتوي هذا اليوم حالياً على (${existingCount}) عامل مسجلين كحضور.</span>
                         </div>
                     </div>
-                    <p class="smart-confirm-text">سيتم <strong>إضافة وتحديث السهرات</strong> للعمال المحددين (${matchedFullIds.size + matchedHalfIds.size} عامل) مع <strong>الحفاظ الكامل</strong> على حضور باقي عمال اليوم دون تعديلهم.</p>
-                    <div class="smart-confirm-question">هل ترغب في تطبيق هذه السهرات على الجدول؟</div>
+                    <p class="smart-confirm-text">سيتم <strong>إضافة وتحديث السهرات</strong> للعمال المحددين (${matchedFullIds.size + matchedHalfIds.size} عامل) مع <strong>الحفاظ الكامل</strong> على حضور وسهرات باقي عمال اليوم دون تعديلهم.</p>
+                    <div class="smart-confirm-question">هل ترغب في تطبيق وحفظ هذه السهرات؟</div>
                 </div>
             `;
             const confirmed = typeof window.showConfirmDialog === 'function'
                 ? await window.showConfirmDialog(htmlMsg, {
                     title: 'تأكيد إضافة السهرات',
-                    confirmText: 'نعم، تطبيق السهرات',
+                    confirmText: 'نعم، تطبيق وحفظ السهرات',
                     cancelText: 'تراجع',
                     isHtml: true
                 })
@@ -2532,18 +2828,18 @@ async function applySmartAttendance() {
                             <span>يحتوي هذا اليوم حالياً على (${existingCount}) عامل مسجلين كحضور.</span>
                         </div>
                     </div>
-                    <p class="smart-confirm-text">تطبيق البيانات الجديدة سيقوم <strong>بتحديث واستبدال</strong> كشف الحضور لهذا اليوم بالأسماء المدخلة حالياً.</p>
-                    <div class="smart-confirm-question">هل أنت متأكد من رغبتك في المتابعة واستبدال حضور هذا اليوم؟</div>
+                    <p class="smart-confirm-text">تطبيق البيانات الجديدة سيقوم <strong>بتحديث</strong> كشف الحضور لهذا اليوم بالأسماء المدخلة مع الحفاظ تلقائياً على السهرات المسجلة مسبقاً عند ترك خانة السهرة فارغة.</p>
+                    <div class="smart-confirm-question">هل أنت متأكد من رغبتك في المتابعة وتحديث وحفظ حضور هذا اليوم؟</div>
                 </div>
             `;
             const confirmed = typeof window.showConfirmDialog === 'function'
                 ? await window.showConfirmDialog(htmlMsg, {
-                    title: 'تنبيه استبدال الحضور السابق',
-                    confirmText: 'نعم، استبدال وتطبيق',
+                    title: 'تنبيه تحديث الحضور السابق',
+                    confirmText: 'نعم، تحديث وحفظ',
                     cancelText: 'تراجع',
                     isHtml: true
                 })
-                : window.confirm(`تنبيه: يوم (${dayLabel}) يحتوي بالفعل على (${existingCount}) عامل مسجلين كحضور. هل تريد الاستبدال؟`);
+                : window.confirm(`تنبيه: يوم (${dayLabel}) يحتوي بالفعل على (${existingCount}) عامل مسجلين كحضور. هل تريد التحديث؟`);
 
             if (!confirmed) {
                 return;
@@ -2586,26 +2882,30 @@ async function applySmartAttendance() {
     }
 
     const isNewLogic = state.weekStart >= '2026-07-11';
+    const dayCacheKey = `${state.weekStart}_${selectedDayKey}`;
+    if (!state.overtimeOnlyByDay[dayCacheKey]) {
+        state.overtimeOnlyByDay[dayCacheKey] = new Map();
+    }
+    const overtimeOnlyMap = state.overtimeOnlyByDay[dayCacheKey];
+
     let appliedCount = 0;
     let overtimeUpdatedCount = 0;
 
-    rowElements.forEach((rowElement) => {
-        const workerId = Number(rowElement.dataset.workerId);
-        const cell = rowElement.querySelector(`.attendance-day-cell[data-day="${selectedDayKey}"]`);
-        if (!cell) return;
-
-        const checkbox = cell.querySelector('.attendance-check');
-        const wasPresent = Boolean(checkbox?.checked);
+    activeRows.forEach((worker) => {
+        const workerId = Number(worker.id);
+        worker.attendance = worker.attendance || {};
+        const prevAtt = worker.attendance[selectedDayKey] || { present: false, base_duration: 1, duration: isNewLogic ? 0 : 1 };
+        const wasPresent = Boolean(prevAtt.present);
+        const prevBaseDuration = Number(prevAtt.base_duration) || 1;
+        const prevDuration = Number(prevAtt.duration) || 0;
+        const prevOvertimeOnly = overtimeOnlyMap.get(workerId) || null;
 
         if (isOvertimeOnly) {
             const hasFull = matchedFullIds.has(workerId);
             const hasHalf = matchedHalfIds.has(workerId);
 
             if (hasFull || hasHalf) {
-                const baseSelect = cell.querySelector('.attendance-base-duration');
-                const durationSelect = cell.querySelector('.attendance-duration');
-
-                if (wasPresent) {
+                if (wasPresent && !prevOvertimeOnly) {
                     let duration = 0;
                     if (hasFull && hasHalf) {
                         duration = 1.5;
@@ -2614,40 +2914,51 @@ async function applySmartAttendance() {
                     } else if (hasHalf) {
                         duration = 0.5;
                     }
-
-                    if (durationSelect) {
-                        durationSelect.value = String(duration);
-                    }
+                    worker.attendance[selectedDayKey] = {
+                        present: true,
+                        base_duration: isNewLogic ? prevBaseDuration : 0,
+                        duration
+                    };
                 } else {
-                    applyAttendanceCellState(cell, true);
+                    const effFull = hasFull || (!hasFullInput && (prevOvertimeOnly === 'full' || prevOvertimeOnly === 'both') && !hasHalf);
+                    const effHalf = hasHalf || (!hasHalfInput && (prevOvertimeOnly === 'half' || prevOvertimeOnly === 'both') && !hasFull);
+                    let newBaseDuration = 1;
+                    let newDuration = 0;
                     if (isNewLogic) {
-                        if (hasFull && hasHalf) {
-                            if (baseSelect) baseSelect.value = '1';
-                            if (durationSelect) durationSelect.value = '0.5';
-                        } else if (hasFull) {
-                            if (baseSelect) baseSelect.value = '1';
-                            if (durationSelect) durationSelect.value = '0';
-                        } else if (hasHalf) {
-                            if (baseSelect) baseSelect.value = '0.5';
-                            if (durationSelect) durationSelect.value = '0';
+                        if (effFull && effHalf) {
+                            newBaseDuration = 1;
+                            newDuration = 0.5;
+                            overtimeOnlyMap.set(workerId, 'both');
+                        } else if (effFull) {
+                            newBaseDuration = 1;
+                            newDuration = 0;
+                            overtimeOnlyMap.set(workerId, 'full');
+                        } else if (effHalf) {
+                            newBaseDuration = 0.5;
+                            newDuration = 0;
+                            overtimeOnlyMap.set(workerId, 'half');
                         }
                     } else {
-                        let duration = 0;
-                        if (hasFull && hasHalf) {
-                            duration = 1.5;
-                        } else if (hasFull) {
-                            duration = 1;
-                        } else if (hasHalf) {
-                            duration = 0.5;
-                        }
-                        if (durationSelect) {
-                            durationSelect.value = String(duration);
+                        newBaseDuration = 0;
+                        if (effFull && effHalf) {
+                            newDuration = 1.5;
+                            overtimeOnlyMap.set(workerId, 'both');
+                        } else if (effFull) {
+                            newDuration = 1;
+                            overtimeOnlyMap.set(workerId, 'full');
+                        } else if (effHalf) {
+                            newDuration = 0.5;
+                            overtimeOnlyMap.set(workerId, 'half');
                         }
                     }
+                    worker.attendance[selectedDayKey] = {
+                        present: true,
+                        base_duration: newBaseDuration,
+                        duration: newDuration
+                    };
                 }
 
-                updateRowCalculations(rowElement);
-                syncAttendanceStateFromRow(rowElement);
+                recalculateWorkerAttendanceTotals(worker);
                 overtimeUpdatedCount += 1;
             }
             if (wasPresent || hasFull || hasHalf) {
@@ -2655,22 +2966,25 @@ async function applySmartAttendance() {
             }
         } else {
             const isDayPresent = matchedDayPresentIds.has(workerId);
-            const hasFull = matchedFullIds.has(workerId);
-            const hasHalf = matchedHalfIds.has(workerId);
+            const prevHadFull = wasPresent && (prevDuration === 1 || prevDuration === 1.5 || prevOvertimeOnly === 'full' || prevOvertimeOnly === 'both');
+            const prevHadHalf = wasPresent && (prevDuration === 0.5 || prevDuration === 1.5 || prevOvertimeOnly === 'half' || prevOvertimeOnly === 'both');
+
+            const explicitFull = matchedFullIds.has(workerId) || (!hasFullInput && (prevOvertimeOnly === 'full' || prevOvertimeOnly === 'both') && !matchedHalfIds.has(workerId));
+            const explicitHalf = matchedHalfIds.has(workerId) || (!hasHalfInput && (prevOvertimeOnly === 'half' || prevOvertimeOnly === 'both') && !matchedFullIds.has(workerId));
+
+            const hasFull = explicitFull || (isDayPresent && !hasFullInput && prevHadFull && !matchedHalfIds.has(workerId));
+            const hasHalf = explicitHalf || (isDayPresent && !hasHalfInput && prevHadHalf && !matchedFullIds.has(workerId));
             const isPresent = isDayPresent || hasFull || hasHalf;
 
-            applyAttendanceCellState(cell, isPresent);
-
-            const baseSelect = cell.querySelector('.attendance-base-duration');
-            const durationSelect = cell.querySelector('.attendance-duration');
-
             if (!isPresent) {
-                if (baseSelect) baseSelect.value = '1';
-                if (durationSelect) durationSelect.value = '0';
+                overtimeOnlyMap.delete(workerId);
+                worker.attendance[selectedDayKey] = {
+                    present: false,
+                    base_duration: 0,
+                    duration: 0
+                };
             } else if (isDayPresent) {
-                if (baseSelect) {
-                    baseSelect.value = String(baseDuration);
-                }
+                overtimeOnlyMap.delete(workerId);
                 let duration = 0;
                 if (isNewLogic) {
                     if (hasFull && hasHalf) {
@@ -2693,56 +3007,69 @@ async function applySmartAttendance() {
                         duration = 1;
                     }
                 }
-                if (durationSelect) {
-                    durationSelect.value = String(duration);
-                }
+                worker.attendance[selectedDayKey] = {
+                    present: true,
+                    base_duration: isNewLogic ? baseDuration : 0,
+                    duration
+                };
             } else {
+                let newBaseDuration = 1;
+                let newDuration = 0;
                 if (isNewLogic) {
                     if (hasFull && hasHalf) {
-                        if (baseSelect) baseSelect.value = '1';
-                        if (durationSelect) durationSelect.value = '0.5';
+                        newBaseDuration = 1;
+                        newDuration = 0.5;
+                        overtimeOnlyMap.set(workerId, 'both');
                     } else if (hasFull) {
-                        if (baseSelect) baseSelect.value = '1';
-                        if (durationSelect) durationSelect.value = '0';
+                        newBaseDuration = 1;
+                        newDuration = 0;
+                        overtimeOnlyMap.set(workerId, 'full');
                     } else if (hasHalf) {
-                        if (baseSelect) baseSelect.value = '0.5';
-                        if (durationSelect) durationSelect.value = '0';
+                        newBaseDuration = 0.5;
+                        newDuration = 0;
+                        overtimeOnlyMap.set(workerId, 'half');
                     }
                 } else {
-                    let duration = 0;
+                    newBaseDuration = 0;
                     if (hasFull && hasHalf) {
-                        duration = 1.5;
+                        newDuration = 1.5;
+                        overtimeOnlyMap.set(workerId, 'both');
                     } else if (hasFull) {
-                        duration = 1;
+                        newDuration = 1;
+                        overtimeOnlyMap.set(workerId, 'full');
                     } else if (hasHalf) {
-                        duration = 0.5;
-                    }
-                    if (durationSelect) {
-                        durationSelect.value = String(duration);
+                        newDuration = 0.5;
+                        overtimeOnlyMap.set(workerId, 'half');
                     }
                 }
+                worker.attendance[selectedDayKey] = {
+                    present: true,
+                    base_duration: newBaseDuration,
+                    duration: newDuration
+                };
             }
 
-            updateRowCalculations(rowElement);
-            syncAttendanceStateFromRow(rowElement);
+            recalculateWorkerAttendanceTotals(worker);
             if (isPresent) appliedCount += 1;
         }
     });
 
-    updateSummaryFromTable();
+    renderRows();
     state.hasUnsavedAttendance = true;
 
     closeModal('smartAttendanceModal');
 
+    let finalSuccessMsg = '';
     if (isOvertimeOnly) {
-        showMessage(`تم تحديث سهرات يوم ${dayLabel} بنجاح: (${overtimeUpdatedCount}) عامل بسهرة، مع الحفاظ على حضور باقي العمال`, 'success');
+        finalSuccessMsg = `تم تحديث وحفظ سهرات يوم ${dayLabel} بنجاح: (${overtimeUpdatedCount}) عامل بسهرة، مع الحفاظ على حضور باقي العمال`;
     } else {
-        let msg = `تم تطبيق حضور يوم ${dayLabel}: (${appliedCount}) حاضر، (${Math.max(0, rowElements.length - appliedCount)}) غائب`;
+        finalSuccessMsg = `تم تطبيق وحفظ حضور يوم ${dayLabel}: (${appliedCount}) حاضر، (${Math.max(0, activeRows.length - appliedCount)}) غائب`;
         if (matchedFullIds.size > 0 || matchedHalfIds.size > 0) {
-            msg += ` | السهرات: (${matchedFullIds.size + matchedHalfIds.size})`;
+            finalSuccessMsg += ` | السهرات: (${matchedFullIds.size + matchedHalfIds.size})`;
         }
-        showMessage(msg, 'success');
     }
+
+    await saveWeekAttendance({ customMessage: finalSuccessMsg });
 
     if (unrecognized.length > 0) {
         setTimeout(() => {
@@ -2792,7 +3119,7 @@ function bindEvents() {
             setTimeout(() => deduplicateTextarea('smartHalfOvertimeNamesInput'), 50);
         });
     }
-    document.getElementById('smartAttendanceDaySelect')?.addEventListener('change', checkExistingDayAttendance);
+    document.getElementById('smartAttendanceDaySelect')?.addEventListener('change', updateSmartAttendancePreview);
     document.getElementById('smartAttendanceModal')?.addEventListener('click', (event) => {
         const absentBadge = event.target.closest('.badge-absent, .badge-absent-zero');
         if (absentBadge) {
@@ -2841,6 +3168,14 @@ function bindEvents() {
     document.getElementById('workerForm').addEventListener('submit', saveWorker);
     document.getElementById('advanceForm').addEventListener('submit', saveAdvance);
     document.getElementById('cancelAdvanceEditBtn').addEventListener('click', resetAdvanceForm);
+    document.getElementById('saveAdvanceDeductionBtn')?.addEventListener('click', () => saveAdvanceDeduction(null));
+    document.getElementById('deductFullAdvanceBtn')?.addEventListener('click', () => {
+        const worker = getWorkerById(state.advanceWorkerId);
+        if (worker) {
+            saveAdvanceDeduction(Number(worker.total_advance_balance) || 0);
+        }
+    });
+    document.getElementById('clearAdvanceDeductionBtn')?.addEventListener('click', () => saveAdvanceDeduction(0));
 
     document.getElementById('weekStartInput').addEventListener('change', (event) => {
         if (event.target.value) changeWeek(event.target.value);
@@ -3056,6 +3391,12 @@ function bindEvents() {
         if (button.dataset.advanceAction === 'delete') await deleteAdvance(button.dataset.id);
     });
 
+    document.getElementById('workerPriorAdvancesList')?.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-advance-action]');
+        if (!button) return;
+        if (button.dataset.advanceAction === 'delete') await deleteAdvance(button.dataset.id);
+    });
+
     document.querySelectorAll('[data-close-modal]').forEach((button) => {
         button.addEventListener('click', () => closeModal(button.dataset.closeModal));
     });
@@ -3195,7 +3536,7 @@ function bindEvents() {
         let el = event.target;
         let canScroll = false;
         while (el && el !== document.body && el !== document.documentElement) {
-            if (el.matches('textarea, .smart-names-pills, .absent-workers-list-wrap, #workerAdvancesList')) {
+            if (el.matches('textarea, .smart-names-pills, .absent-workers-list-wrap, .workers-modal, #workerAdvancesList, #workerPriorAdvancesList')) {
                 const hasScroll = el.scrollHeight > el.clientHeight;
                 if (hasScroll) {
                     const isScrollingUp = event.deltaY < 0;

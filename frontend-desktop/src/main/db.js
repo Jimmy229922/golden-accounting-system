@@ -849,6 +849,22 @@ function initDB() {
         )
     `);
 
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS worker_advance_deductions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            worker_id INTEGER NOT NULL,
+            week_start_date TEXT NOT NULL,
+            deducted_amount REAL NOT NULL DEFAULT 0 CHECK (deducted_amount >= 0),
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
+            UNIQUE (worker_id, week_start_date),
+            FOREIGN KEY (worker_id) REFERENCES workers(id) ON DELETE RESTRICT
+        )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_advance_deductions_week ON worker_advance_deductions(week_start_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_advance_deductions_worker ON worker_advance_deductions(worker_id)`);
+
     // ── Performance Indexes ──
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_unit_id ON items(unit_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_items_is_deleted ON items(is_deleted)`);

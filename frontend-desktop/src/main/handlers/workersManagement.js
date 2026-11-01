@@ -175,6 +175,7 @@ function getWeekData(weekStart, includeArchived = false) {
             w.is_active,
             w.auto_transfer_to_petty,
             (SELECT COALESCE(SUM(amount), 0) FROM worker_advances WHERE worker_id = w.id) AS historical_advances_total,
+            (SELECT COALESCE(SUM(deducted_amount), 0) FROM worker_advance_deductions WHERE worker_id = w.id) AS historical_deductions_total,
             a.id AS attendance_id,
             a.daily_wage AS week_daily_wage,
             a.petty_expense_id,
@@ -211,21 +212,52 @@ function getWeekData(weekStart, includeArchived = false) {
         include_archived: includeArchived ? 1 : 0
     });
 
-    const advances = db.prepare(`
+    const allAdvancesUpToWeek = db.prepare(`
         SELECT id, worker_id, week_start_date, advance_date, amount, notes, created_at, updated_at
         FROM worker_advances
-        WHERE week_start_date = ?
+        WHERE week_start_date <= ?
         ORDER BY advance_date ASC, id ASC
     `).all(weekStart);
 
+    const allDeductionsUpToWeek = db.prepare(`
+        SELECT id, worker_id, week_start_date, deducted_amount, notes, created_at, updated_at
+        FROM worker_advance_deductions
+        WHERE week_start_date <= ?
+        ORDER BY week_start_date ASC, id ASC
+    `).all(weekStart);
+
     const advancesByWorker = new Map();
-    for (const advance of advances) {
-        const workerAdvances = advancesByWorker.get(advance.worker_id) || [];
-        workerAdvances.push({
+    const priorAdvancesByWorker = new Map();
+    for (const advance of allAdvancesUpToWeek) {
+        const normalizedAdv = {
             ...advance,
             amount: roundMoney(advance.amount)
-        });
-        advancesByWorker.set(advance.worker_id, workerAdvances);
+        };
+        if (advance.week_start_date === weekStart) {
+            const list = advancesByWorker.get(advance.worker_id) || [];
+            list.push(normalizedAdv);
+            advancesByWorker.set(advance.worker_id, list);
+        } else {
+            const list = priorAdvancesByWorker.get(advance.worker_id) || [];
+            list.push(normalizedAdv);
+            priorAdvancesByWorker.set(advance.worker_id, list);
+        }
+    }
+
+    const weekDeductionByWorker = new Map();
+    const priorDeductionsByWorker = new Map();
+    for (const deduction of allDeductionsUpToWeek) {
+        const normalizedDed = {
+            ...deduction,
+            deducted_amount: roundMoney(deduction.deducted_amount)
+        };
+        if (deduction.week_start_date === weekStart) {
+            weekDeductionByWorker.set(deduction.worker_id, normalizedDed);
+        } else {
+            const list = priorDeductionsByWorker.get(deduction.worker_id) || [];
+            list.push(normalizedDed);
+            priorDeductionsByWorker.set(deduction.worker_id, list);
+        }
     }
 
     const isNewLogic = weekStart >= '2026-07-11';
@@ -251,7 +283,34 @@ function getWeekData(weekStart, includeArchived = false) {
             ? roundMoney(worker.week_daily_wage)
             : roundMoney(worker.daily_wage);
         const workerAdvances = advancesByWorker.get(worker.worker_id) || [];
-        const advancesTotal = roundMoney(workerAdvances.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+        const priorAdvances = priorAdvancesByWorker.get(worker.worker_id) || [];
+        const priorDeductions = priorDeductionsByWorker.get(worker.worker_id) || [];
+        const currentDeductionRow = weekDeductionByWorker.get(worker.worker_id) || null;
+
+        let runningCarriedBalance = 0;
+        const priorWeeksSet = new Set([
+            ...priorAdvances.map((a) => a.week_start_date),
+            ...priorDeductions.map((d) => d.week_start_date)
+        ]);
+        const sortedPriorWeeks = Array.from(priorWeeksSet).sort();
+        for (const w of sortedPriorWeeks) {
+            const wAdv = priorAdvances
+                .filter((a) => a.week_start_date === w)
+                .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+            const wDed = priorDeductions
+                .filter((d) => d.week_start_date === w)
+                .reduce((sum, item) => sum + Number(item.deducted_amount || 0), 0);
+            runningCarriedBalance = roundMoney(runningCarriedBalance + wAdv);
+            const effDed = roundMoney(Math.min(Math.max(0, wDed), runningCarriedBalance));
+            runningCarriedBalance = roundMoney(Math.max(0, runningCarriedBalance - effDed));
+        }
+
+        const carriedOverAdvance = runningCarriedBalance;
+        const weekAdvancesTotal = roundMoney(workerAdvances.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+        const totalAdvanceBalance = roundMoney(carriedOverAdvance + weekAdvancesTotal);
+        const rawWeekDeducted = currentDeductionRow ? roundMoney(currentDeductionRow.deducted_amount) : 0;
+        const deductedAdvanceAmount = roundMoney(Math.min(Math.max(0, rawWeekDeducted), totalAdvanceBalance));
+        const remainingAdvanceBalance = roundMoney(Math.max(0, totalAdvanceBalance - deductedAdvanceAmount));
         const grossPay = roundMoney(dailyWage * attendanceUnits);
 
         return {
@@ -268,22 +327,37 @@ function getWeekData(weekStart, includeArchived = false) {
             attendance,
             attendance_units: attendanceUnits,
             gross_pay: grossPay,
-            advances_total: advancesTotal,
-            net_pay: roundMoney(grossPay - advancesTotal),
+            carried_over_advance: carriedOverAdvance,
+            week_advances_total: weekAdvancesTotal,
+            total_advance_balance: totalAdvanceBalance,
+            deducted_advance_amount: deductedAdvanceAmount,
+            deduction_notes: currentDeductionRow?.notes || '',
+            remaining_advance_balance: remainingAdvanceBalance,
+            advances_total: deductedAdvanceAmount,
+            net_pay: roundMoney(grossPay - deductedAdvanceAmount),
             advances: workerAdvances,
-            historical_advances_total: roundMoney(worker.historical_advances_total || 0)
+            prior_advances: [...priorAdvances].reverse(),
+            prior_deductions: [...priorDeductions].reverse(),
+            historical_advances_total: roundMoney(worker.historical_advances_total || 0),
+            historical_deductions_total: roundMoney(worker.historical_deductions_total || 0)
         };
     });
 
     const totals = rows.reduce((summary, row) => {
         summary.gross_pay = roundMoney(summary.gross_pay + row.gross_pay);
-        summary.advances_total = roundMoney(summary.advances_total + row.advances_total);
+        summary.advances_total = roundMoney(summary.advances_total + row.deducted_advance_amount);
+        summary.remaining_advance_balance = roundMoney(summary.remaining_advance_balance + row.remaining_advance_balance);
+        summary.total_advance_balance = roundMoney(summary.total_advance_balance + row.total_advance_balance);
+        summary.deducted_advance_amount = roundMoney(summary.deducted_advance_amount + row.deducted_advance_amount);
         summary.net_pay = roundMoney(summary.net_pay + row.net_pay);
         return summary;
     }, {
         workers_count: rows.length,
         gross_pay: 0,
         advances_total: 0,
+        remaining_advance_balance: 0,
+        total_advance_balance: 0,
+        deducted_advance_amount: 0,
         net_pay: 0
     });
 
@@ -316,6 +390,8 @@ function register() {
                     SELECT week_start_date FROM worker_weekly_attendance
                     UNION
                     SELECT week_start_date FROM worker_advances
+                    UNION
+                    SELECT week_start_date FROM worker_advance_deductions
                 )
                 ORDER BY week_start_date DESC
                 LIMIT 260
@@ -683,6 +759,51 @@ function register() {
             }
 
             return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-worker-advance-deduction', (event, data = {}) => {
+        try {
+            const workerId = Number(data.worker_id);
+            const weekStart = normalizeWeekStart(data.week_start_date);
+            const deductedAmount = roundMoney(data.deducted_amount);
+            const notes = String(data.notes || '').trim();
+
+            if (!Number.isInteger(workerId) || workerId <= 0) {
+                return { success: false, error: 'معرف العامل غير صحيح' };
+            }
+
+            if (!Number.isFinite(Number(data.deducted_amount)) || deductedAmount < 0) {
+                return { success: false, error: 'مبلغ التنزيل يجب أن يكون صفرًا أو أكبر' };
+            }
+
+            const worker = db.prepare('SELECT id FROM workers WHERE id = ?').get(workerId);
+            if (!worker) {
+                return { success: false, error: 'العامل غير موجود' };
+            }
+
+            if (deductedAmount === 0) {
+                db.prepare('DELETE FROM worker_advance_deductions WHERE worker_id = ? AND week_start_date = ?').run(workerId, weekStart);
+                return { success: true, deducted_amount: 0 };
+            }
+
+            db.prepare(`
+                INSERT INTO worker_advance_deductions (worker_id, week_start_date, deducted_amount, notes)
+                VALUES (@worker_id, @week_start_date, @deducted_amount, @notes)
+                ON CONFLICT(worker_id, week_start_date) DO UPDATE SET
+                    deducted_amount = excluded.deducted_amount,
+                    notes = excluded.notes,
+                    updated_at = CURRENT_TIMESTAMP
+            `).run({
+                worker_id: workerId,
+                week_start_date: weekStart,
+                deducted_amount: deductedAmount,
+                notes
+            });
+
+            return { success: true, deducted_amount: deductedAmount };
         } catch (error) {
             return { success: false, error: error.message };
         }

@@ -199,6 +199,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveWorkerAdvance: (data) => invokeChannel('save-worker-advance', data),
     updateWorkerAdvance: (data) => invokeChannel('update-worker-advance', data),
     deleteWorkerAdvance: (id) => invokeChannel('delete-worker-advance', id),
+    saveWorkerAdvanceDeduction: (data) => invokeChannel('save-worker-advance-deduction', data),
 
     // Inventory API
     getItemTransactions: (itemId, startDate = null, endDate = null) => invokeChannel('get-item-transactions', { itemId, startDate, endDate }),

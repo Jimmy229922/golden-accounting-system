@@ -883,6 +883,11 @@
     animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.workers-modal.changelog-modal {
+    max-width: 720px;
+    max-height: 88vh;
+}
+
 @keyframes modalSlideIn {
     from { opacity: 0; transform: scale(0.95) translateY(10px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
@@ -1018,6 +1023,112 @@
     color: var(--text-muted, #64748b);
     font-size: 0.85rem;
     line-height: 1.45;
+}
+
+.changelog-releases-scroll {
+    max-height: 54vh;
+    overflow-y: auto;
+    padding-left: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.changelog-releases-scroll::-webkit-scrollbar {
+    width: 7px;
+}
+
+.changelog-releases-scroll::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.12);
+    border-radius: 999px;
+}
+
+.changelog-releases-scroll::-webkit-scrollbar-thumb {
+    background: rgba(13, 148, 136, 0.45);
+    border-radius: 999px;
+}
+
+.changelog-releases-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(13, 148, 136, 0.75);
+}
+
+.changelog-release-block {
+    border: 1px solid var(--card-border, #e2e8f0);
+    border-radius: 12px;
+    padding: 16px 18px;
+    background: var(--secondary-bg, #f8fafc);
+}
+
+.changelog-release-block.is-latest {
+    border-color: rgba(13, 148, 136, 0.45);
+    background: rgba(13, 148, 136, 0.04);
+}
+
+.changelog-release-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--card-border, #cbd5e1);
+}
+
+.changelog-release-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.98rem;
+    color: var(--text-color, #0f172a);
+}
+
+.changelog-release-title i {
+    color: #0d9488;
+}
+
+.changelog-release-badge {
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.changelog-release-badge.badge-latest {
+    background: rgba(13, 148, 136, 0.14);
+    color: #0f766e;
+}
+
+.changelog-release-badge.badge-previous {
+    background: rgba(100, 116, 139, 0.14);
+    color: #475569;
+}
+
+[data-theme="dark"] .changelog-release-block {
+    background: rgba(15, 23, 42, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .changelog-release-block.is-latest {
+    background: rgba(13, 148, 136, 0.1);
+    border-color: rgba(20, 184, 166, 0.38);
+}
+
+[data-theme="dark"] .changelog-release-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .changelog-release-title {
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .changelog-release-badge.badge-latest {
+    background: rgba(20, 184, 166, 0.2);
+    color: #5eead4;
+}
+
+[data-theme="dark"] .changelog-release-badge.badge-previous {
+    background: rgba(148, 163, 184, 0.16);
+    color: #cbd5e1;
 }
 
 /* تنسيقات الأزرار العامة للمودال */
