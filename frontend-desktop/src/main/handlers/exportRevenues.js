@@ -87,8 +87,8 @@ function normalizePayload(data = {}) {
     const invoiceNumber = String(data.invoice_number || '').trim();
     const underCollectionId = data.under_collection_id ? Number(data.under_collection_id) : null;
     const discountUsd = (data.discount_usd !== undefined && data.discount_usd !== null && data.discount_usd !== '')
-        ? Math.max(0, Number(data.discount_usd))
-        : undefined;
+        ? roundMoney(Math.max(0, Number(data.discount_usd) || 0))
+        : 0;
 
     return {
         record_date: normalizeDate(data.record_date),
@@ -145,7 +145,10 @@ function syncUnderCollectionForInvoice(invoiceNumber, optionalDiscountUsd, under
 
     for (const underRecord of underRecords) {
         const paidRow = db.prepare(`
-            SELECT COALESCE(SUM(e.amount), 0) as totalPaid
+            SELECT
+                COALESCE(SUM(e.amount), 0) as totalPaid,
+                COALESCE(SUM(COALESCE(e.discount_usd, 0)), 0) as totalExportDiscount,
+                COUNT(e.id) as exportCount
             FROM export_revenues e
             WHERE (
                 CASE
@@ -163,10 +166,14 @@ function syncUnderCollectionForInvoice(invoiceNumber, optionalDiscountUsd, under
         `).get(underRecord.id);
 
         const totalPaid = roundMoney(Number(paidRow?.totalPaid) || 0);
+        const totalExportDiscount = roundMoney(Number(paidRow?.totalExportDiscount) || 0);
+        const exportCount = Number(paidRow?.exportCount) || 0;
         const isCollected = totalPaid > 0 ? 1 : 0;
 
         let discountUsd = Number(underRecord.discount_usd) || 0;
-        if (
+        if (exportCount > 0) {
+            discountUsd = totalExportDiscount;
+        } else if (
             Number(underRecord.id) === Number(discountTargetId) &&
             optionalDiscountUsd !== undefined &&
             Number.isFinite(optionalDiscountUsd) &&
@@ -203,6 +210,9 @@ function syncUnderCollectionForInvoice(invoiceNumber, optionalDiscountUsd, under
 function register() {
     try {
         db.exec('ALTER TABLE export_revenues ADD COLUMN items_json TEXT');
+    } catch (_) {}
+    try {
+        db.exec('ALTER TABLE export_revenues ADD COLUMN discount_usd REAL NOT NULL DEFAULT 0');
     } catch (_) {}
 
     ipcMain.handle('get-next-export-revenue-number', () => {
@@ -253,6 +263,7 @@ function register() {
             const rows = db.prepare(`
                 SELECT e.id, e.document_number, e.record_date, e.amount, e.currency,
                        e.exchange_rate, e.amount_egp, e.statement, e.invoice_number,
+                       COALESCE(e.discount_usd, 0) as discount_usd,
                        COALESCE(uc.id, e.under_collection_id) as under_collection_id,
                        uc.document_number as uc_document_number,
                        e.items_json, e.created_at,
@@ -263,7 +274,7 @@ function register() {
                        END as invoice_surplus_usd
                 FROM (
                     SELECT id, document_number, record_date, amount, currency,
-                           exchange_rate, amount_egp, statement, invoice_number, under_collection_id, items_json, created_at,
+                           exchange_rate, amount_egp, statement, invoice_number, under_collection_id, discount_usd, items_json, created_at,
                            CASE
                                WHEN under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = export_revenues.under_collection_id)
                                    THEN under_collection_id
@@ -357,11 +368,11 @@ function register() {
                 const info = db.prepare(`
                     INSERT INTO export_revenues (
                         document_number, record_date, amount, currency,
-                        exchange_rate, amount_egp, statement, invoice_number, under_collection_id, items_json
+                        exchange_rate, amount_egp, statement, invoice_number, under_collection_id, discount_usd, items_json
                     )
                     VALUES (
                         @document_number, @record_date, @amount, @currency,
-                        @exchange_rate, @amount_egp, @statement, @invoice_number, @under_collection_id, @items_json
+                        @exchange_rate, @amount_egp, @statement, @invoice_number, @under_collection_id, @discount_usd, @items_json
                     )
                 `).run({
                     document_number: documentNumber,
@@ -373,6 +384,7 @@ function register() {
                     statement: payload.statement,
                     invoice_number: payload.invoice_number || null,
                     under_collection_id: payload.under_collection_id || null,
+                    discount_usd: roundMoney(payload.discount_usd || 0),
                     items_json: payload.items_json || null
                 });
 
@@ -441,6 +453,7 @@ function register() {
                         statement = @statement,
                         invoice_number = @invoice_number,
                         under_collection_id = @under_collection_id,
+                        discount_usd = @discount_usd,
                         items_json = @items_json
                     WHERE id = @id
                 `).run({
@@ -452,6 +465,7 @@ function register() {
                     statement: payload.statement,
                     invoice_number: payload.invoice_number || null,
                     under_collection_id: payload.under_collection_id || null,
+                    discount_usd: roundMoney(payload.discount_usd || 0),
                     items_json: payload.items_json || null,
                     id
                 });
@@ -464,7 +478,7 @@ function register() {
                     (existing.invoice_number && existing.invoice_number !== payload.invoice_number) ||
                     (existing.under_collection_id && existing.under_collection_id !== payload.under_collection_id)
                 ) {
-                    syncUnderCollectionForInvoice(existing.invoice_number, undefined, existing.under_collection_id);
+                    syncUnderCollectionForInvoice(existing.invoice_number, 0, existing.under_collection_id);
                 }
             })();
 
@@ -490,7 +504,7 @@ function register() {
                 db.prepare('DELETE FROM export_revenues WHERE id = ?').run(id);
 
                 if (existing.invoice_number || existing.under_collection_id) {
-                    syncUnderCollectionForInvoice(existing.invoice_number, undefined, existing.under_collection_id);
+                    syncUnderCollectionForInvoice(existing.invoice_number, 0, existing.under_collection_id);
                 }
             })();
 
@@ -546,8 +560,17 @@ function register() {
             `).all(underRecord.invoice_number);
 
             const excludeId = Number(exportRevenueId) || null;
+            let currentRecordDiscount = 0;
+            if (excludeId) {
+                const currentExpRow = db.prepare('SELECT COALESCE(discount_usd, 0) as discount_usd FROM export_revenues WHERE id = ?').get(excludeId);
+                currentRecordDiscount = roundMoney(Number(currentExpRow?.discount_usd) || 0);
+            }
+
             const paidRow = db.prepare(`
-                SELECT COALESCE(SUM(e.amount), 0) as paidBefore
+                SELECT
+                    COALESCE(SUM(e.amount), 0) as paidBefore,
+                    COALESCE(SUM(COALESCE(e.discount_usd, 0)), 0) as exportDiscountBefore,
+                    COUNT(e.id) as countBefore
                 FROM export_revenues e
                 WHERE (
                     CASE
@@ -566,14 +589,19 @@ function register() {
             `).get(underRecord.id, excludeId, excludeId);
 
             const totalUsd = Number(underRecord.total_usd) || 0;
-            const discountUsd = Number(underRecord.discount_usd) || 0;
-            const netUsd = underRecord.net_usd !== undefined && underRecord.net_usd !== null && (Number(underRecord.net_usd) > 0 || discountUsd > 0)
-                ? Number(underRecord.net_usd)
-                : Math.max(0, roundMoney(totalUsd - discountUsd));
+            const ucDiscountUsd = roundMoney(Number(underRecord.discount_usd) || 0);
+            const exportDiscountBefore = roundMoney(Number(paidRow?.exportDiscountBefore) || 0);
+            const countBefore = Number(paidRow?.countBefore) || 0;
+            const discountBefore = (countBefore > 0 || excludeId)
+                ? Math.max(exportDiscountBefore, roundMoney(Math.max(0, ucDiscountUsd - currentRecordDiscount)))
+                : ucDiscountUsd;
+            const discountUsd = roundMoney(discountBefore + currentRecordDiscount);
+            const netUsd = Math.max(0, roundMoney(totalUsd - discountUsd));
+            const netBefore = Math.max(0, roundMoney(totalUsd - discountBefore));
             const paidBefore = roundMoney(Number(paidRow?.paidBefore) || 0);
-            const remainingBefore = Math.max(0, roundMoney(netUsd - paidBefore));
-            const surplusBefore = Math.max(0, roundMoney(paidBefore - netUsd));
-            const remainingPercentBefore = netUsd > 0 ? roundMoney((remainingBefore / netUsd) * 100) : 0;
+            const remainingBefore = Math.max(0, roundMoney(netBefore - paidBefore));
+            const surplusBefore = Math.max(0, roundMoney(paidBefore - netBefore));
+            const remainingPercentBefore = netBefore > 0 ? roundMoney((remainingBefore / netBefore) * 100) : 0;
 
             return {
                 success: true,
@@ -587,6 +615,9 @@ function register() {
                     container_count: underRecord.container_count,
                     total_usd: totalUsd,
                     discount_usd: discountUsd,
+                    discountBefore,
+                    currentRecordDiscount,
+                    netBefore,
                     net_usd: netUsd,
                     paidBefore,
                     remainingBefore,
@@ -615,6 +646,40 @@ function register() {
               AND invoice_number IS NOT NULL
               AND TRIM(invoice_number) != ''
         `).run();
+
+        const legacyDiscountRecords = db.prepare(`
+            SELECT id, discount_usd
+            FROM under_collection_records
+            WHERE COALESCE(discount_usd, 0) > 0
+        `).all();
+
+        for (const uc of legacyDiscountRecords) {
+            const expRows = db.prepare(`
+                SELECT id, COALESCE(discount_usd, 0) as discount_usd
+                FROM export_revenues e
+                WHERE (
+                    CASE
+                        WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                            THEN e.under_collection_id
+                        ELSE (
+                            SELECT u_fb.id
+                            FROM under_collection_records u_fb
+                            WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                            ORDER BY u_fb.id DESC
+                            LIMIT 1
+                        )
+                    END
+                ) = ?
+                ORDER BY id ASC
+            `).all(uc.id);
+
+            if (expRows.length > 0) {
+                const sumExpDiscount = expRows.reduce((acc, r) => acc + (Number(r.discount_usd) || 0), 0);
+                if (sumExpDiscount === 0) {
+                    db.prepare('UPDATE export_revenues SET discount_usd = ? WHERE id = ?').run(roundMoney(uc.discount_usd), expRows[0].id);
+                }
+            }
+        }
 
         const linkedInvoices = db.prepare(`
             SELECT DISTINCT TRIM(invoice_number) as inv

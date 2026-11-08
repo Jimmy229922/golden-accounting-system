@@ -573,3 +573,26 @@
     color: #c4b5fd;
     border-color: rgba(167, 139, 250, 0.35);
 }
+
+#addRecordModal .petty-modal-card {
+    width: min(96vw, 1140px);
+    max-width: 1140px;
+}
+
+#addRecordModal .petty-modal-header {
+    padding: 14px 24px;
+}
+
+#addRecordModal .petty-modal-body {
+    padding: 16px 24px 18px;
+    max-height: none;
+    overflow: visible;
+}
+
+#addRecordModal .petty-modal-grid {
+    gap: 12px;
+}
+
+#addRecordModal .petty-modal-footer {
+    padding: 12px 24px;
+}

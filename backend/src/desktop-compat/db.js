@@ -578,6 +578,7 @@ function initDB() {
     `);
     runAddColumnMigration('ALTER TABLE export_revenues ADD COLUMN invoice_number TEXT', 'export_revenues', 'invoice_number');
     runAddColumnMigration('ALTER TABLE export_revenues ADD COLUMN under_collection_id INTEGER', 'export_revenues', 'under_collection_id');
+    runAddColumnMigration('ALTER TABLE export_revenues ADD COLUMN discount_usd REAL NOT NULL DEFAULT 0', 'export_revenues', 'discount_usd');
     runAddColumnMigration('ALTER TABLE export_revenues ADD COLUMN items_json TEXT', 'export_revenues', 'items_json');
 
     db.exec(`

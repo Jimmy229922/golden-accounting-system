@@ -534,7 +534,7 @@ function renderPage() {
         </main>
 
         <div id="addRecordModal" class="petty-modal-overlay hidden">
-            <div class="petty-modal-card" style="width: min(95vw, 980px); max-width: 980px;" role="dialog" aria-modal="true" aria-labelledby="exportRevenuesModalTitle">
+            <div class="petty-modal-card" style="width: min(96vw, 1140px); max-width: 1140px;" role="dialog" aria-modal="true" aria-labelledby="exportRevenuesModalTitle">
                 <div class="petty-modal-header">
                     <div class="petty-modal-title">
                         <i class="fas fa-file-invoice-dollar"></i>
@@ -714,13 +714,11 @@ function bindEvents() {
 
     const invoiceInput = document.getElementById('invoiceNumberInput');
     invoiceInput?.addEventListener('input', () => {
-        const currentTyped = invoiceInput.value.trim().toLowerCase();
-        const linkedInvNum = String(state.currentLinkedInvoice?.invoice_number || '').trim().toLowerCase();
-        if (currentTyped !== linkedInvNum) {
-            state.selectedUnderCollectionId = null;
-        }
+        clearTimeout(invoiceLookupTimeout);
+        state.selectedUnderCollectionId = null;
+        state.currentLinkedInvoice = null;
+        renderUnderCollectionInfoCard(null);
         renderInvoiceDropdown(invoiceInput.value);
-        onInvoiceNumberInput();
     });
     invoiceInput?.addEventListener('focus', () => {
         renderInvoiceDropdown(invoiceInput.value);
@@ -929,9 +927,11 @@ function updateUnderCollectionLiveStats() {
     currentEnteredAmount = roundMoney(currentEnteredAmount);
 
     const discountEl = document.getElementById('invoiceDiscountInput');
-    const liveDiscount = discountEl && discountEl.value !== ''
+    const enteredDiscount = discountEl && discountEl.value !== ''
         ? Math.max(0, Number(discountEl.value) || 0)
-        : (Number(inv.discount_usd) || 0);
+        : 0;
+    const discountBefore = roundMoney(Number(inv.discountBefore) || 0);
+    const liveDiscount = roundMoney(discountBefore + enteredDiscount);
     const totalUsd = Number(inv.total_usd) || 0;
     const liveNet = Math.max(0, roundMoney(totalUsd - liveDiscount));
     const paidBefore = roundMoney(Number(inv.paidBefore) || 0);
@@ -940,6 +940,19 @@ function updateUnderCollectionLiveStats() {
     const liveSurplus = Math.max(0, roundMoney(liveTotalPaid - liveNet));
     const livePercent = liveNet > 0 ? roundMoney((liveRemaining / liveNet) * 100) : 0;
     const isFullyCollected = liveRemaining <= 0 && liveNet > 0;
+
+    const prevDiscBadgeEl = document.getElementById('ucPrevDiscountBadge');
+    const prevDiscTextEl = document.getElementById('ucPrevDiscountText');
+    if (prevDiscBadgeEl && prevDiscTextEl) {
+        if (discountBefore > 0) {
+            prevDiscBadgeEl.style.display = 'inline-flex';
+            prevDiscTextEl.textContent = enteredDiscount > 0
+                ? `خصم سابق من الفواتير المرتبطة: ${formatNumber(discountBefore)} $ (إجمالي الخصم: ${formatNumber(liveDiscount)} $)`
+                : `خصم سابق من الفواتير المرتبطة: ${formatNumber(discountBefore)} $`;
+        } else {
+            prevDiscBadgeEl.style.display = 'none';
+        }
+    }
 
     const statusEl = document.getElementById('ucLiveStatusBadge');
     if (statusEl) {
@@ -1059,9 +1072,13 @@ function renderUnderCollectionInfoCard(inv) {
                     <span id="ucLiveRemainingVal" class="uc-item-val" style="color: #f59e0b;">${formatNumber(inv.remainingBefore)} $ (${inv.remainingPercentBefore}%)</span>
                 </div>
             </div>
-            <div class="uc-linked-discount">
+            <div class="uc-linked-discount" style="flex-wrap: wrap;">
                 <label><i class="fas fa-tag text-icon"></i> تعديل خصم الفاتورة ($):</label>
-                <input type="number" id="invoiceDiscountInput" class="form-control" min="0" step="any" value="${inv.discount_usd || ''}" placeholder="0.00">
+                <input type="number" id="invoiceDiscountInput" class="form-control" min="0" step="any" value="${Number(inv.currentRecordDiscount) > 0 ? inv.currentRecordDiscount : ''}" placeholder="0.00">
+                <span id="ucPrevDiscountBadge" style="display: ${(Number(inv.discountBefore) || 0) > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 800; color: #f59e0b; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); padding: 4px 12px; border-radius: 999px;">
+                    <i class="fas fa-tag"></i>
+                    <span id="ucPrevDiscountText">خصم سابق من الفواتير المرتبطة: ${formatNumber(inv.discountBefore || 0)} $</span>
+                </span>
             </div>
         </div>
     `;
@@ -1129,12 +1146,15 @@ function openInvoiceSyncPreview() {
     const currentRate = currentAmount > 0 ? roundMoney(currentAmountEgp / currentAmount) : 0;
 
     const discountEl = document.getElementById('invoiceDiscountInput');
-    const newDiscount = discountEl && discountEl.value !== '' ? Math.max(0, Number(discountEl.value) || 0) : Number(inv.discount_usd) || 0;
+    const enteredDiscount = discountEl && discountEl.value !== '' ? Math.max(0, Number(discountEl.value) || 0) : 0;
+    const discountBefore = roundMoney(Number(inv.discountBefore) || 0);
+    const newDiscount = roundMoney(discountBefore + enteredDiscount);
+    const netBefore = Math.max(0, roundMoney((Number(inv.total_usd) || 0) - discountBefore));
     const newNet = Math.max(0, roundMoney(inv.total_usd - newDiscount));
 
     const newTotalPaid = roundMoney(inv.paidBefore + currentAmount);
     const newRemaining = Math.max(0, roundMoney(newNet - newTotalPaid));
-    const surplusBefore = Math.max(0, roundMoney((Number(inv.paidBefore) || 0) - (Number(inv.net_usd) || 0)));
+    const surplusBefore = Math.max(0, roundMoney((Number(inv.paidBefore) || 0) - netBefore));
     const newSurplus = Math.max(0, roundMoney(newTotalPaid - newNet));
     const newPercent = newNet > 0 ? roundMoney((newRemaining / newNet) * 100) : 0;
     const newIsCollected = (newRemaining <= 0 && newNet > 0);
@@ -1174,12 +1194,12 @@ function openInvoiceSyncPreview() {
                     </tr>
                     <tr>
                         <td>خصم الفاتورة</td>
-                        <td>${formatNumber(inv.discount_usd)} $</td>
+                        <td>${formatNumber(discountBefore)} $</td>
                         <td><strong style="color: #ef4444;">${formatNumber(newDiscount)} $</strong></td>
                     </tr>
                     <tr>
                         <td>الصافي المطلوب سداده</td>
-                        <td>${formatNumber(inv.net_usd)} $</td>
+                        <td>${formatNumber(netBefore)} $</td>
                         <td><strong>${formatNumber(roundMoney(newNet + newSurplus))} $</strong> ${newSurplus > 0 ? `<span class="surplus-badge" style="margin-inline-start: 6px;">الأصل: ${formatNumber(newNet)} $</span>` : ''}</td>
                     </tr>
                     <tr>
@@ -1443,7 +1463,7 @@ async function saveRecord(event) {
         statement: document.getElementById('statementInput').value,
         invoice_number: document.getElementById('invoiceNumberInput')?.value?.trim() || '',
         under_collection_id: state.currentLinkedInvoice?.id || state.selectedUnderCollectionId || null,
-        discount_usd: discountEl && discountEl.value !== '' ? Number(discountEl.value) : undefined,
+        discount_usd: discountEl ? (discountEl.value !== '' ? Number(discountEl.value) : 0) : undefined,
         items_json: JSON.stringify(cleanItems)
     };
 
