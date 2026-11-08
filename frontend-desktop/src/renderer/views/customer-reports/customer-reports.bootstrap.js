@@ -11,8 +11,16 @@ let balanceFooterEl;
 let totalClosingBalanceEl;
 let closingBalanceBadgeEl;
 let closingBalanceCardEl;
+let customerReportPaginationEl;
 let customerAutocomplete = null;
 let ar = {};
+const statementState = {
+    page: 1,
+    pageSize: 50,
+    totalPages: 1,
+    transactions: [],
+    totals: {}
+};
 const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
 const customerReportsRender = window.customerReportsPageRender;
 const CUR = 'ج.م';
@@ -122,6 +130,22 @@ function initializeElements() {
     totalClosingBalanceEl = document.getElementById('totalClosingBalance');
     closingBalanceBadgeEl = document.getElementById('closingBalanceBadge');
     closingBalanceCardEl = document.getElementById('closingBalanceCard');
+    customerReportPaginationEl = document.getElementById('customerReportPagination');
+
+    window.financialPagination?.bind(customerReportPaginationEl, {
+        onPageChange: (page) => {
+            statementState.page = page;
+            renderStatementTable();
+            renderStatementPagination();
+        },
+        onPageSizeChange: (pageSize) => {
+            statementState.pageSize = pageSize;
+            statementState.page = 1;
+            statementState.totalPages = Math.max(1, Math.ceil(statementState.transactions.length / statementState.pageSize));
+            renderStatementTable();
+            renderStatementPagination();
+        }
+    });
 
     const now = new Date();
     const yearStart = `${now.getFullYear()}-01-01`;
@@ -249,6 +273,11 @@ async function loadCustomerReport(customerId) {
     const result = await window.electronAPI.getCustomerDetailedStatement({ customerId, startDate, endDate });
 
     if (!result || !result.success) {
+        statementState.transactions = [];
+        statementState.totals = {};
+        statementState.page = 1;
+        statementState.totalPages = 1;
+        renderStatementPagination();
         if (totalClosingBalanceEl) totalClosingBalanceEl.textContent = '0.00 ' + CUR;
         if (closingBalanceBadgeEl) closingBalanceBadgeEl.style.display = 'none';
         if (closingBalanceCardEl) closingBalanceCardEl.className = 'summary-card card-closing-balance';
@@ -303,110 +332,13 @@ async function loadCustomerReport(customerId) {
     } catch (_) {
     }
 
-    customerReportTableBody.innerHTML = '';
+    statementState.transactions = [...transactions].reverse();
+    statementState.totals = totals;
+    statementState.page = 1;
+    statementState.totalPages = Math.max(1, Math.ceil(statementState.transactions.length / statementState.pageSize));
 
-    if (totals.openingBalance !== 0) {
-        const obRow = document.createElement('tr');
-        obRow.className = 'opening-row';
-        const obClass = totals.openingBalance > 0 ? 'positive' : 'negative';
-        const obLabel = totals.openingBalance > 0
-            ? t('customerReports.balanceForUs', 'لينا (مدين)')
-            : t('customerReports.balanceAgainstUs', 'علينا (دائن)');
-
-        obRow.innerHTML = `
-            <td colspan="5" class="ob-label">
-                <i class="fas fa-flag"></i>
-                ${t('customerReports.openingBalance', 'رصيد أول المدة')}
-            </td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td class="running-bal ${obClass}">${formatCurrency(Math.abs(totals.openingBalance))} ${obLabel}</td>
-        `;
-        customerReportTableBody.appendChild(obRow);
-    }
-
-    if (transactions.length === 0 && totals.openingBalance === 0) {
-        customerReportTableBody.innerHTML = `
-            <tr class="no-data-row">
-                <td colspan="9">
-                    <i class="fas fa-inbox"></i>
-                    ${t('customerReports.noTransactions', 'لا توجد عمليات لهذا العميل')}
-                </td>
-            </tr>`;
-    } else {
-        transactions.forEach((item, idx) => {
-            const mainRow = document.createElement('tr');
-            mainRow.className = `trans-main-row trans-type-${item.type}`;
-            let typeBadge = '';
-            
-            let totalInvoiceVal = '—';
-            let paidVal = '—';
-            let remainingVal = '—';
-
-            const hasDetails = ['sales', 'purchase', 'local_sale'].includes(item.type);
-            const rowId = `items-${idx}`;
-
-            if (item.type === 'sales') {
-                typeBadge = `<span class="badge badge-sales"><i class="fas fa-shopping-cart"></i> ${t('customerReports.salesBadge', 'مبيعات')}</span>`;
-                totalInvoiceVal = formatCurrency(item.total_amount);
-                paidVal = formatCurrency(item.paid_amount);
-                remainingVal = formatCurrency(item.remaining_amount);
-            } else if (item.type === 'local_sale') {
-                typeBadge = `<span class="badge badge-sales"><i class="fas fa-store"></i> ${t('customerReports.localSalesBadge', 'مبيعات محلية')}</span>`;
-                totalInvoiceVal = formatCurrency(item.total_amount);
-                paidVal = formatCurrency(item.paid_amount);
-                remainingVal = formatCurrency(item.remaining_amount);
-            } else if (item.type === 'purchase') {
-                typeBadge = `<span class="badge badge-purchase"><i class="fas fa-shopping-bag"></i> ${t('customerReports.purchaseBadge', 'مشتريات')}</span>`;
-                totalInvoiceVal = formatCurrency(item.total_amount);
-                paidVal = formatCurrency(item.paid_amount);
-                remainingVal = formatCurrency(item.remaining_amount);
-            } else if (item.type === 'payment_in') {
-                typeBadge = `<span class="badge badge-receipt"><i class="fas fa-hand-holding-usd"></i> ${t('customerReports.receiptBadge', 'تحصيل')}</span>`;
-                paidVal = formatCurrency(item.paid_amount);
-            } else if (item.type === 'payment_out') {
-                typeBadge = `<span class="badge badge-payment"><i class="fas fa-money-bill-wave"></i> ${t('customerReports.paymentBadge', 'سداد')}</span>`;
-                paidVal = formatCurrency(item.paid_amount);
-            }
-
-            const rb = item.running_balance;
-            const rbClass = rb > 0 ? 'positive' : rb < 0 ? 'negative' : '';
-            const rbLabel = rb > 0 ? t('customerReports.balanceForUs', 'لينا (مدين)') : rb < 0 ? t('customerReports.balanceAgainstUs', 'علينا (دائن)') : '';
-            const rbText = `${formatCurrency(Math.abs(rb))} ${rbLabel}`;
-
-            const toggleBtn = hasDetails
-                ? `<button class="btn-toggle" data-action="toggle-items" data-row-id="${rowId}" data-type="${item.type}" data-id="${item.id}" title="${t('customerReports.showItems', 'عرض الأصناف')}"><i class="fas fa-chevron-down"></i></button>`
-                : '';
-            const docNumberCellHtml = window.renderDocNumberCell
-                ? window.renderDocNumberCell(item.doc_number, { numberTag: 'span' })
-                : `<span>${escapeHtml(item.doc_number || '—')}</span>`;
-
-            mainRow.innerHTML = `
-                <td class="idx-cell">${idx + 1} ${toggleBtn}</td>
-                <td>${item.trans_date}</td>
-                <td>${typeBadge}</td>
-                <td>${docNumberCellHtml}</td>
-                <td class="notes-cell">${escapeHtml(item.notes || '—')}</td>
-                <td class="amt-cell">${totalInvoiceVal}</td>
-                <td class="amt-cell">${paidVal}</td>
-                <td class="amt-cell">${remainingVal}</td>
-                <td class="running-bal ${rbClass}">${rbText}</td>
-            `;
-            customerReportTableBody.appendChild(mainRow);
-
-            if (hasDetails) {
-                const detailRow = document.createElement('tr');
-                detailRow.id = rowId;
-                detailRow.className = 'items-detail-row';
-                detailRow.dataset.loaded = 'false';
-                detailRow.dataset.detailType = item.type;
-                detailRow.dataset.detailId = String(item.id);
-                detailRow.innerHTML = `<td colspan="9"><div class="items-loading"><i class="fas fa-spinner fa-spin"></i> ${t('customerReports.loadingItems', 'جاري تحميل الأصناف...')}</div></td>`;
-                customerReportTableBody.appendChild(detailRow);
-            }
-        });
-    }
+    renderStatementTable();
+    renderStatementPagination();
 
     const balance = totals.closingBalance;
     let balClass = 'zero';
@@ -457,6 +389,135 @@ async function loadCustomerReport(customerId) {
 
     document.getElementById('summaryOpening').textContent = `${formatCurrency(Math.abs(totals.openingBalance))} ${totals.openingBalance > 0 ? t('customerReports.balanceForUs', 'لينا (مدين)') : totals.openingBalance < 0 ? t('customerReports.balanceAgainstUs', 'علينا (دائن)') : ''}`;
     document.getElementById('summaryClosing').textContent = `${balText} ${balLabel}`;
+}
+
+function renderStatementPagination() {
+    if (!customerReportPaginationEl) return;
+    window.financialPagination?.render(customerReportPaginationEl, {
+        page: statementState.page,
+        pageSize: statementState.pageSize,
+        totalPages: statementState.totalPages,
+        total: statementState.transactions.length
+    });
+}
+
+function renderStatementTable({ renderAll = false } = {}) {
+    if (!customerReportTableBody) return;
+    const transactions = Array.isArray(statementState.transactions) ? statementState.transactions : [];
+    const totals = statementState.totals || {};
+
+    customerReportTableBody.innerHTML = '';
+
+    const openingBalance = Number(totals.openingBalance) || 0;
+    if (openingBalance !== 0) {
+        const obRow = document.createElement('tr');
+        obRow.className = 'opening-row';
+        const obClass = openingBalance > 0 ? 'positive' : 'negative';
+        const obLabel = openingBalance > 0
+            ? t('customerReports.balanceForUs', 'لينا (مدين)')
+            : t('customerReports.balanceAgainstUs', 'علينا (دائن)');
+
+        obRow.innerHTML = `
+            <td colspan="5" class="ob-label">
+                <i class="fas fa-flag"></i>
+                ${t('customerReports.openingBalance', 'رصيد أول المدة')}
+            </td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="running-bal ${obClass}">${formatCurrency(Math.abs(openingBalance))} ${obLabel}</td>
+        `;
+        customerReportTableBody.appendChild(obRow);
+    }
+
+    if (transactions.length === 0 && openingBalance === 0) {
+        customerReportTableBody.innerHTML = `
+            <tr class="no-data-row">
+                <td colspan="9">
+                    <i class="fas fa-inbox"></i>
+                    ${t('customerReports.noTransactions', 'لا توجد عمليات لهذا العميل')}
+                </td>
+            </tr>`;
+        return;
+    }
+
+    const startIndex = renderAll ? 0 : ((statementState.page - 1) * statementState.pageSize);
+    const displayedTransactions = renderAll
+        ? transactions
+        : transactions.slice(startIndex, startIndex + statementState.pageSize);
+
+    displayedTransactions.forEach((item, idx) => {
+        const globalIdx = startIndex + idx;
+        const mainRow = document.createElement('tr');
+        mainRow.className = `trans-main-row trans-type-${item.type}`;
+        let typeBadge = '';
+        
+        let totalInvoiceVal = '—';
+        let paidVal = '—';
+        let remainingVal = '—';
+
+        const hasDetails = ['sales', 'purchase', 'local_sale'].includes(item.type);
+        const rowId = `items-${globalIdx}`;
+
+        if (item.type === 'sales') {
+            typeBadge = `<span class="badge badge-sales"><i class="fas fa-shopping-cart"></i> ${t('customerReports.salesBadge', 'مبيعات')}</span>`;
+            totalInvoiceVal = formatCurrency(item.total_amount);
+            paidVal = formatCurrency(item.paid_amount);
+            remainingVal = formatCurrency(item.remaining_amount);
+        } else if (item.type === 'local_sale') {
+            typeBadge = `<span class="badge badge-sales"><i class="fas fa-store"></i> ${t('customerReports.localSalesBadge', 'مبيعات محلية')}</span>`;
+            totalInvoiceVal = formatCurrency(item.total_amount);
+            paidVal = formatCurrency(item.paid_amount);
+            remainingVal = formatCurrency(item.remaining_amount);
+        } else if (item.type === 'purchase') {
+            typeBadge = `<span class="badge badge-purchase"><i class="fas fa-shopping-bag"></i> ${t('customerReports.purchaseBadge', 'مشتريات')}</span>`;
+            totalInvoiceVal = formatCurrency(item.total_amount);
+            paidVal = formatCurrency(item.paid_amount);
+            remainingVal = formatCurrency(item.remaining_amount);
+        } else if (item.type === 'payment_in') {
+            typeBadge = `<span class="badge badge-receipt"><i class="fas fa-hand-holding-usd"></i> ${t('customerReports.receiptBadge', 'تحصيل')}</span>`;
+            paidVal = formatCurrency(item.paid_amount);
+        } else if (item.type === 'payment_out') {
+            typeBadge = `<span class="badge badge-payment"><i class="fas fa-money-bill-wave"></i> ${t('customerReports.paymentBadge', 'سداد')}</span>`;
+            paidVal = formatCurrency(item.paid_amount);
+        }
+
+        const rb = item.running_balance;
+        const rbClass = rb > 0 ? 'positive' : rb < 0 ? 'negative' : '';
+        const rbLabel = rb > 0 ? t('customerReports.balanceForUs', 'لينا (مدين)') : rb < 0 ? t('customerReports.balanceAgainstUs', 'علينا (دائن)') : '';
+        const rbText = `${formatCurrency(Math.abs(rb))} ${rbLabel}`;
+
+        const toggleBtn = hasDetails
+            ? `<button class="btn-toggle" data-action="toggle-items" data-row-id="${rowId}" data-type="${item.type}" data-id="${item.id}" title="${t('customerReports.showItems', 'عرض الأصناف')}"><i class="fas fa-chevron-down"></i></button>`
+            : '';
+        const docNumberCellHtml = window.renderDocNumberCell
+            ? window.renderDocNumberCell(item.doc_number, { numberTag: 'span' })
+            : `<span>${escapeHtml(item.doc_number || '—')}</span>`;
+
+        mainRow.innerHTML = `
+            <td class="idx-cell">${globalIdx + 1} ${toggleBtn}</td>
+            <td>${item.trans_date}</td>
+            <td>${typeBadge}</td>
+            <td>${docNumberCellHtml}</td>
+            <td class="notes-cell">${escapeHtml(item.notes || '—')}</td>
+            <td class="amt-cell">${totalInvoiceVal}</td>
+            <td class="amt-cell">${paidVal}</td>
+            <td class="amt-cell">${remainingVal}</td>
+            <td class="running-bal ${rbClass}">${rbText}</td>
+        `;
+        customerReportTableBody.appendChild(mainRow);
+
+        if (hasDetails) {
+            const detailRow = document.createElement('tr');
+            detailRow.id = rowId;
+            detailRow.className = 'items-detail-row';
+            detailRow.dataset.loaded = 'false';
+            detailRow.dataset.detailType = item.type;
+            detailRow.dataset.detailId = String(item.id);
+            detailRow.innerHTML = `<td colspan="9"><div class="items-loading"><i class="fas fa-spinner fa-spin"></i> ${t('customerReports.loadingItems', 'جاري تحميل الأصناف...')}</div></td>`;
+            customerReportTableBody.appendChild(detailRow);
+        }
+    });
 }
 
 async function toggleItems(rowId, btn, type, id) {
@@ -580,11 +641,18 @@ document.addEventListener('click', (event) => {
 });
 
 window.printReport = async () => {
-    await window.customerReportsUtils.loadAllItemDetails({ t, formatCurrency });
-    window.print();
+    renderStatementTable({ renderAll: true });
+    try {
+        await window.customerReportsUtils.loadAllItemDetails({ t, formatCurrency });
+        window.print();
+    } finally {
+        renderStatementTable();
+        renderStatementPagination();
+    }
 };
 
 window.savePDF = async () => {
+    renderStatementTable({ renderAll: true });
     await window.customerReportsUtils.loadAllItemDetails({ t, formatCurrency });
     const selectedOption = customerSelect.options[customerSelect.selectedIndex];
     const customerName = selectedOption ? selectedOption.textContent.trim() : '';
@@ -606,6 +674,8 @@ window.savePDF = async () => {
     } finally {
         document.documentElement.classList.remove('customer-report-pdf-mode');
         document.body.classList.remove('customer-report-pdf-mode');
+        renderStatementTable();
+        renderStatementPagination();
     }
 };
 

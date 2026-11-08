@@ -441,7 +441,7 @@ function renderPage() {
         </div>
 
         <div id="detailsModal" class="external-modal-overlay hidden">
-            <div class="external-modal-card" style="max-width: 680px;" role="dialog" aria-modal="true">
+            <div class="external-modal-card details-modal-wide" role="dialog" aria-modal="true">
                 <div class="external-modal-header">
                     <div class="external-modal-title">
                         <i class="fas fa-file-alt"></i>
@@ -760,7 +760,7 @@ function viewShipmentDetails(id) {
     }
 
     document.getElementById('detailsContent').innerHTML = `
-        <div class="details-grid">
+        <div class="details-top-grid">
             <div class="details-row">
                 <span>رقم الشحنة:</span>
                 <strong>${escapeHtml(row.shipment_number)}</strong>
@@ -769,67 +769,69 @@ function viewShipmentDetails(id) {
                 <span>تاريخ الشحنة:</span>
                 <strong>${escapeHtml(row.shipment_date)}</strong>
             </div>
-            <div class="details-row" style="grid-column: span 2;">
+            <div class="details-row">
                 <span>الصنف / البضاعة:</span>
                 <strong>${escapeHtml(row.item_description || '-')}</strong>
             </div>
         </div>
 
-        <div class="modal-section-card" style="margin-top: 14px;">
-            <div class="modal-section-title"><i class="fas fa-money-check-alt"></i> حركة دفعات الشراء والتحويلات الخارجية</div>
-            <div class="details-grid">
-                <div class="details-row">
-                    <span>دفعة مقدمة:</span>
-                    <span>$${formatMoney(row.advance_amount_usd)} (سعر صرف: ${formatMoney(row.advance_rate)})</span>
+        <div class="details-sections-grid">
+            <div class="modal-section-card">
+                <div class="modal-section-title"><i class="fas fa-money-check-alt"></i> حركة دفعات الشراء والتحويلات الخارجية</div>
+                <div class="details-grid">
+                    <div class="details-row">
+                        <span>دفعة مقدمة:</span>
+                        <span>$${formatMoney(row.advance_amount_usd)} (سعر صرف: ${formatMoney(row.advance_rate)})</span>
+                    </div>
+                    <div class="details-row">
+                        <span>المقابل بالجنيه:</span>
+                        <strong>${formatMoney(row.advance_amount_egp)} ج.م</strong>
+                    </div>
+                    <div class="details-row">
+                        <span>دفعة نهائية:</span>
+                        <span>$${formatMoney(row.final_amount_usd)} (سعر صرف: ${formatMoney(row.final_rate)})</span>
+                    </div>
+                    <div class="details-row">
+                        <span>المقابل بالجنيه:</span>
+                        <strong>${formatMoney(row.final_amount_egp)} ج.م</strong>
+                    </div>
+                    <div class="details-row highlight" style="grid-column: span 2;">
+                        <span>إجمالي دفعات الشراء:</span>
+                        <span>$${formatMoney(row.total_amount_usd)} = <strong>${formatMoney(row.total_amount_egp)} ج.م</strong></span>
+                    </div>
                 </div>
-                <div class="details-row">
-                    <span>المقابل بالجنيه:</span>
-                    <strong>${formatMoney(row.advance_amount_egp)} ج.م</strong>
-                </div>
-                <div class="details-row">
-                    <span>دفعة نهائية:</span>
-                    <span>$${formatMoney(row.final_amount_usd)} (سعر صرف: ${formatMoney(row.final_rate)})</span>
-                </div>
-                <div class="details-row">
-                    <span>المقابل بالجنيه:</span>
-                    <strong>${formatMoney(row.final_amount_egp)} ج.م</strong>
-                </div>
-                <div class="details-row highlight" style="grid-column: span 2;">
-                    <span>إجمالي دفعات الشراء:</span>
-                    <span>$${formatMoney(row.total_amount_usd)} = <strong>${formatMoney(row.total_amount_egp)} ج.م</strong></span>
+            </div>
+
+            <div class="modal-section-card">
+                <div class="modal-section-title"><i class="fas fa-coins"></i> تكلفة المشتريات ومصاريف الشحن والتخليص</div>
+                <div class="details-grid">
+                    <div class="details-row">
+                        <span>مصاريف شحن/تخليص:</span>
+                        <span>${formatMoney(row.shipping_expenses_egp)} ج.م</span>
+                    </div>
+                    <div class="details-row">
+                        <span>عمولة ومصاريف البنك:</span>
+                        <span style="color: #9333ea; font-weight: 700;">${formatMoney(row.bank_commission_egp)} ج.م</span>
+                    </div>
+                    <div class="details-row">
+                        <span>الكمية المنفذة:</span>
+                        <strong>${formatMoney(row.quantity_tons)} طن</strong>
+                    </div>
+                    <div class="details-row">
+                        <span>تكلفة الطن الواحد:</span>
+                        <strong style="color: #0284c7;">${formatMoney(row.cost_per_ton_egp)} ج.م/طن</strong>
+                    </div>
+                    <div class="details-row highlight" style="grid-column: span 2;">
+                        <span>إجمالي تكلفة المشتريات:</span>
+                        <strong style="color: #059669;">${formatMoney(row.purchase_cost_egp)} ج.م</strong>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="modal-section-card" style="margin-top: 14px;">
-            <div class="modal-section-title"><i class="fas fa-coins"></i> تكلفة المشتريات ومصاريف الشحن والتخليص</div>
-            <div class="details-grid">
-                <div class="details-row">
-                    <span>مصاريف شحن/تخليص:</span>
-                    <span>${formatMoney(row.shipping_expenses_egp)} ج.م</span>
-                </div>
-                <div class="details-row">
-                    <span>عمولة ومصاريف البنك:</span>
-                    <span style="color: #9333ea; font-weight: 700;">${formatMoney(row.bank_commission_egp)} ج.م</span>
-                </div>
-                <div class="details-row highlight" style="grid-column: span 2;">
-                    <span>إجمالي تكلفة المشتريات:</span>
-                    <strong style="color: #059669;">${formatMoney(row.purchase_cost_egp)} ج.م</strong>
-                </div>
-                <div class="details-row">
-                    <span>الكمية المنفذة:</span>
-                    <strong>${formatMoney(row.quantity_tons)} طن</strong>
-                </div>
-                <div class="details-row">
-                    <span>تكلفة الطن الواحد:</span>
-                    <strong style="color: #0284c7;">${formatMoney(row.cost_per_ton_egp)} ج.م/طن</strong>
-                </div>
-            </div>
-        </div>
-
-        <div class="modal-section-card" style="margin-top: 14px;">
+        <div class="modal-section-card">
             <div class="modal-section-title"><i class="fas fa-chart-line"></i> حالة المخزون والمبيعات</div>
-            <div class="details-grid">
+            <div class="details-top-grid">
                 <div class="details-row">
                     <span>الكمية المتبقية للتصريف:</span>
                     <strong style="color: #059669;">${formatMoney(row.remaining_tons ?? row.quantity_tons)} طن</strong>
@@ -838,7 +840,7 @@ function viewShipmentDetails(id) {
                     <span>الكمية المباعة:</span>
                     <strong style="color: #0284c7;">${formatMoney(row.sold_tons || 0)} طن</strong>
                 </div>
-                <div class="details-row highlight" style="grid-column: span 2;">
+                <div class="details-row highlight">
                     <span>صافي أرباح مبيعات الشحنة حتى الآن:</span>
                     <strong style="color: ${Number(row.total_sales_profit_egp || 0) >= 0 ? '#059669' : '#dc2626'}; font-size: 1.05rem;">${formatMoney(row.total_sales_profit_egp || 0)} ج.م</strong>
                 </div>
@@ -846,7 +848,7 @@ function viewShipmentDetails(id) {
         </div>
 
         ${row.notes ? `
-            <div style="margin-top: 10px; font-size: 0.9rem; color: var(--text-muted);">
+            <div style="font-size: 0.9rem; color: var(--text-muted); padding: 4px 2px;">
                 <strong>ملاحظات:</strong> ${escapeHtml(row.notes)}
             </div>
         ` : ''}

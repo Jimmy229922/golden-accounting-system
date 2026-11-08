@@ -133,6 +133,7 @@
                         <tbody id="customerReportTableBody"></tbody>
                     </table>
                     <div class="balance-footer" id="balanceFooter"></div>
+                    <div class="customer-report-pagination no-print" id="customerReportPagination"></div>
                 </div>
 
                 <div class="print-summary" id="printSummary">

@@ -579,6 +579,43 @@
         .balance-footer .bf-value.negative { color: #ef4444; }
         .balance-footer .bf-value.zero     { color: var(--text-muted); }
 
+        .customer-report-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 24px;
+            border-top: 1px solid var(--table-border);
+            background: var(--card-bg);
+        }
+        .customer-report-pagination:empty {
+            display: none;
+        }
+        .customer-report-pagination .btn-outline {
+            padding: 8px 16px;
+            background: var(--input-bg, var(--card-bg));
+            color: var(--text-color);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .customer-report-pagination .btn-outline:hover:not(:disabled) {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background: rgba(99, 102, 241, 0.08);
+        }
+        .customer-report-pagination .btn-outline:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        html.customer-report-pdf-mode .customer-report-pagination,
+        body.customer-report-pdf-mode .customer-report-pagination {
+            display: none !important;
+        }
+
         /* ===== No Data Row ===== */
         .no-data-row td {
             text-align: center;
