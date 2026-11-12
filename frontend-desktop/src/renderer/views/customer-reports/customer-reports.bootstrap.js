@@ -534,7 +534,7 @@ async function toggleItems(rowId, btn, type, id) {
         if (result && result.success && result.details.length > 0) {
             const isPurchaseDetail = type === 'purchase';
             let itemsHTML = `
-                <td colspan="8">
+                <td colspan="9">
                     <div class="items-detail-box">
                         <table class="items-inner-table">
                             <thead>
@@ -544,8 +544,9 @@ async function toggleItems(rowId, btn, type, id) {
                                     <th>${t('customerReports.itemHeaders.unit', 'الوحدة')}</th>
                                     ${isPurchaseDetail ? `
                                     <th>${t('customerReports.itemHeaders.rawQty', 'الكمية الخام')}</th>
-                                    <th>${t('customerReports.itemHeaders.discountRate', 'نسبة الخصم')}</th>
-                                    <th>${t('customerReports.itemHeaders.netQty', 'الكمية الصافية')}</th>` : `
+                                    <th>${t('customerReports.itemHeaders.net1Qty', 'صافي 1%')}</th>
+                                    <th>${t('customerReports.itemHeaders.ratePercent', 'المعدل %')}</th>
+                                    <th>${t('customerReports.itemHeaders.netQty', 'الكمية النهائية')}</th>` : `
                                     <th>${t('customerReports.itemHeaders.qty', 'الكمية')}</th>`}
                                     <th>${t('customerReports.itemHeaders.price', 'السعر')}</th>
                                     <th>${t('customerReports.itemHeaders.total', 'الإجمالي')}</th>
@@ -555,10 +556,17 @@ async function toggleItems(rowId, btn, type, id) {
             result.details.forEach((itm, i) => {
                 const rawQty = Number(itm.raw_quantity);
                 const rawQtyText = Number.isFinite(rawQty) && rawQty > 0 ? rawQty : itm.quantity;
+                const net1Qty = Number(itm.net1_quantity);
+                const net1QtyText = Number.isFinite(net1Qty) && net1Qty > 0
+                    ? net1Qty
+                    : Math.round(((Number(rawQtyText) || 0) * 0.99 + Number.EPSILON) * 100) / 100;
+                const rateVal = Number(itm.rate_percent);
+                const rateText = Number.isFinite(rateVal) && rateVal > 0 ? `${rateVal}%` : '—';
                 const qtyCells = isPurchaseDetail
                     ? `
                                     <td>${rawQtyText}</td>
-                                    <td>1%</td>
+                                    <td>${net1QtyText}</td>
+                                    <td>${rateText}</td>
                                     <td>${itm.quantity}</td>`
                     : `
                                     <td>${itm.quantity}</td>`;
@@ -579,7 +587,7 @@ async function toggleItems(rowId, btn, type, id) {
                 </td>`;
             row.innerHTML = itemsHTML;
         } else {
-            row.innerHTML = `<td colspan="8"><div class="items-loading">${t('customerReports.noItems', 'لا توجد أصناف')}</div></td>`;
+            row.innerHTML = `<td colspan="9"><div class="items-loading">${t('customerReports.noItems', 'لا توجد أصناف')}</div></td>`;
         }
         row.dataset.loaded = 'true';
     }
@@ -929,12 +937,13 @@ function buildSummaryItemsSection(result, t) {
         ].filter(Boolean).join(';');
 
         const isPurchaseSection = section.key === 'purchaseItems';
-        const colCount = isPurchaseSection ? 8 : 6;
+        const colCount = isPurchaseSection ? 9 : 6;
 
         const qtyHeadersHtml = isPurchaseSection
             ? `
                             <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">الكمية الخام</th>
                             <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">صافي 1%</th>
+                            <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">المعدل %</th>
                             <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">الكمية النهائية</th>`
             : `
                             <th style="background:#f3f3f3;font-size:11px;padding:8px 6px;border:1px solid #ccc;font-weight:700;text-align:center;">
@@ -969,10 +978,14 @@ function buildSummaryItemsSection(result, t) {
 
         if (hasItems) {
             items.forEach((item, i) => {
+                const rateDisplayText = item.rate_display
+                    ? item.rate_display
+                    : (Number.isFinite(Number(item.rate_percent)) && Number(item.rate_percent) > 0 ? `${Number(item.rate_percent)}%` : '—');
                 const qtyCellsHtml = isPurchaseSection
                     ? `
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${item.total_raw_qty ?? item.total_qty}</td>
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${item.total_net1_qty ?? item.total_qty}</td>
+                            <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;">${escapeHtml(String(rateDisplayText))}</td>
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;font-weight:700;">${item.total_qty}</td>`
                     : `
                             <td style="font-size:11px;padding:6px;border:1px solid #ddd;text-align:center;font-weight:700;">${item.total_qty}</td>`;

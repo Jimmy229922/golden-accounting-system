@@ -93,7 +93,10 @@ function initializeElements() {
     });
 
     if (purchasesState.dom.discountTypeSelect) {
-        purchasesState.dom.discountTypeSelect.addEventListener('change', () => calculateInvoiceTotal());
+        purchasesState.dom.discountTypeSelect.addEventListener('change', () => {
+            resetCustomRemainingState();
+            calculateInvoiceTotal();
+        });
     }
 
     if (purchasesState.dom.discountValueInput) {
@@ -101,6 +104,7 @@ function initializeElements() {
             if (purchasesState.dom.discountTypeSelect?.value === 'amount') {
                 formatInputWithCursor(e.target);
             }
+            resetCustomRemainingState();
             calculateInvoiceTotal();
         });
         purchasesState.dom.discountValueInput.addEventListener('keydown', (e) => {
@@ -163,10 +167,7 @@ function initializeElements() {
 
     if (purchasesState.dom.resetRemainingBtn) {
         purchasesState.dom.resetRemainingBtn.addEventListener('click', () => {
-            purchasesState.isRemainingCustomized = false;
-            if (purchasesState.dom.resetRemainingBtn) {
-                purchasesState.dom.resetRemainingBtn.style.display = 'none';
-            }
+            resetCustomRemainingState();
             calculateInvoiceTotal();
         });
     }
@@ -1109,6 +1110,7 @@ function saveQuickRawModal() {
     // Since we want it to be considered as raw quantity but skipping individual weights
     const newWeightsData = { weights: [rawQuantity], method, rate: rateValue, manualNet1 };
     
+    resetCustomRemainingState();
     setRowBaskeelData(row, { rawQuantity, rawWeights: newWeightsData });
     closeQuickRawModal();
 }
@@ -1178,6 +1180,7 @@ function saveWeightsFromModal() {
     const rateValue = existingBaskeelData.rate || 0;
     const manualNet1 = existingBaskeelData.manualNet1 || 0;
     
+    resetCustomRemainingState();
     setRowBaskeelData(row, { rawQuantity, rawWeights: { weights, method, rate: rateValue, manualNet1 } });
     closeWeightsModal();
 }
@@ -1272,12 +1275,15 @@ function addInvoiceRow(existingItem = null) {
     const rateInput = row.querySelector('.rate-percent-input');
     if (rateInput) {
         rateInput.addEventListener('input', () => {
+            if (isEditLocked()) return;
+
             const currentBaskeelData = getBaskeelDataFromRow(row);
             const rawQuantity = getRowRawQuantity(row);
             const val = parseLocaleFloat(rateInput.value);
             const rateValue = Number.isFinite(val) && val > 0 ? val : 0;
             const method = rateValue > 0 ? 'rate' : 'normal';
             
+            resetCustomRemainingState();
             setRowBaskeelData(row, { rawQuantity, rawWeights: { weights: currentBaskeelData.weights, method, rate: rateValue, manualNet1: currentBaskeelData.manualNet1 || 0 } }, { skipAutoAdd: true });
         });
     }
@@ -1292,6 +1298,7 @@ function addInvoiceRow(existingItem = null) {
             const val = parseLocaleFloat(net1Input.value);
             const manualNet1 = Number.isFinite(val) && val > 0 ? val : 0;
 
+            resetCustomRemainingState();
             setRowBaskeelData(row, {
                 rawQuantity,
                 rawWeights: {
@@ -1319,6 +1326,7 @@ function removeRow(removeBtnEl) {
     const row = removeBtnEl.closest('tr');
     if (!row) return;
     row.remove();
+    resetCustomRemainingState();
     calculateInvoiceTotal();
 
     const fallbackRow = purchasesState.dom.invoiceItemsBody.querySelector('tr:last-child');
@@ -1359,6 +1367,7 @@ function onItemSelect(select) {
     }
 
     updateSelectedItemAvailability(row);
+    resetCustomRemainingState();
     calculateRowTotal(select);
     maybeAutoAddRow(row);
 
@@ -1369,6 +1378,7 @@ function onItemSelect(select) {
 function onRowInput(input) {
     if (isEditLocked()) return;
 
+    resetCustomRemainingState();
     calculateRowTotal(input);
     if (input.classList.contains('quantity-input')) {
         const row = input.closest('tr');
@@ -1583,10 +1593,18 @@ function formatInputWithCursor(input) {
     } catch (_) {}
 }
 
+function resetCustomRemainingState() {
+    purchasesState.isRemainingCustomized = false;
+    if (purchasesState.dom.resetRemainingBtn) {
+        purchasesState.dom.resetRemainingBtn.style.display = 'none';
+    }
+}
+
 function handlePaidAmountInput(event) {
     const input = event?.target;
     if (!input) return;
     formatInputWithCursor(input);
+    resetCustomRemainingState();
     calculateInvoiceTotal();
 }
 

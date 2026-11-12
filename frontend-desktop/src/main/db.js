@@ -1273,6 +1273,11 @@ function initDB() {
                 transaction_date = NEW.invoice_date,
                 party_id = NEW.customer_id
             WHERE transaction_type = 'sales_invoice' AND reference_id = NEW.id;
+            INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+            SELECT NEW.customer_id, 'sales_invoice', NEW.total_amount - NEW.paid_amount, NEW.invoice_date, NEW.id, NEW.created_at
+            WHERE NOT EXISTS (
+                SELECT 1 FROM party_ledger WHERE transaction_type = 'sales_invoice' AND reference_id = NEW.id
+            );
         END
     `);
 
@@ -1309,6 +1314,11 @@ function initDB() {
                 transaction_date = NEW.invoice_date,
                 party_id = NEW.supplier_id
             WHERE transaction_type = 'purchase_invoice' AND reference_id = NEW.id;
+            INSERT INTO party_ledger (party_id, transaction_type, amount, transaction_date, reference_id, created_at)
+            SELECT NEW.supplier_id, 'purchase_invoice', -(NEW.remaining_amount), NEW.invoice_date, NEW.id, NEW.created_at
+            WHERE NOT EXISTS (
+                SELECT 1 FROM party_ledger WHERE transaction_type = 'purchase_invoice' AND reference_id = NEW.id
+            );
         END
     `);
 
@@ -1418,6 +1428,12 @@ function initDB() {
     db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_local_sale_update`);
     db.exec(`DROP TRIGGER IF EXISTS trg_party_ledger_after_local_sale_delete`);
     db.exec(`DELETE FROM party_ledger WHERE transaction_type = 'local_sale'`);
+    db.exec(`
+        UPDATE purchase_invoices
+        SET remaining_amount = ROUND(total_amount - paid_amount, 2)
+        WHERE ABS((total_amount - paid_amount) - remaining_amount) > 0.01
+          AND ABS(remaining_amount - ROUND(remaining_amount, 0)) > 0.001
+    `);
 
     // Migrate old data if party_ledger is empty
     const hasPartyLedger = db.prepare('SELECT 1 FROM party_ledger LIMIT 1').get();

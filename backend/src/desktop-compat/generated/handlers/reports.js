@@ -394,6 +394,7 @@ function register() {
                     CASE
                         WHEN pl.transaction_type = 'opening_balance' THEN ABS(pl.amount)
                         WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
+                        WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.remaining_amount, pi.total_amount - pi.paid_amount, 0)
                         ELSE COALESCE(si.total_amount - si.paid_amount, pi.total_amount - pi.paid_amount, 0)
                     END as remaining_amount,
                     COALESCE(si.notes, pi.notes, tt.description, ls.statement, 'رصيد افتتاحي') as notes,
@@ -449,6 +450,49 @@ function register() {
         }
     });
 
+function extractPurchaseDetailMeta(rawQuantity, fallbackQty, rawWeights) {
+    let method = 'normal';
+    let rate = 0;
+    let manualNet1 = 0;
+
+    if (typeof rawWeights === 'string' && rawWeights.trim()) {
+        try {
+            const parsed = JSON.parse(rawWeights.trim());
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                method = parsed.method === 'rate' ? 'rate' : 'normal';
+                rate = Number.isFinite(Number(parsed.rate)) && Number(parsed.rate) > 0 ? Number(parsed.rate) : 0;
+                manualNet1 = Number.isFinite(Number(parsed.manualNet1)) && Number(parsed.manualNet1) > 0 ? Number(parsed.manualNet1) : 0;
+            }
+        } catch (_) {}
+    }
+
+    const rawNum = Number(rawQuantity);
+    const fallbackNum = Number(fallbackQty);
+    const resolvedRawQty = Number.isFinite(rawNum) && rawNum > 0
+        ? rawNum
+        : (Number.isFinite(fallbackNum) && fallbackNum > 0 ? fallbackNum : 0);
+
+    const autoNet1Qty = Math.round((resolvedRawQty * 0.99 + Number.EPSILON) * 100) / 100;
+    const resolvedNet1Qty = manualNet1 > 0 ? manualNet1 : autoNet1Qty;
+    let resolvedRate = (method === 'rate' && rate > 0) || rate > 0 ? rate : null;
+
+    if (resolvedRate === null && resolvedNet1Qty > 0 && Number.isFinite(fallbackNum) && fallbackNum > 0) {
+        const roundedNet1 = Math.round(resolvedNet1Qty);
+        if (roundedNet1 > 0 && Math.abs(fallbackNum - resolvedNet1Qty) > 0.01 && fallbackNum < resolvedNet1Qty) {
+            const inferred = Math.round(((fallbackNum / roundedNet1) * 100 + Number.EPSILON) * 100) / 100;
+            if (inferred > 0 && inferred < 100) {
+                resolvedRate = inferred;
+            }
+        }
+    }
+
+    return {
+        raw_quantity: resolvedRawQty,
+        net1_quantity: resolvedNet1Qty,
+        rate_percent: resolvedRate
+    };
+}
+
     // تحميل تفاصيل الأصناف عند الطلب (Lazy Loading)
     ipcMain.handle('get-statement-item-details', (event, { type, id }) => {
         try {
@@ -464,8 +508,8 @@ function register() {
                     ORDER BY sid.id ASC
                 `).all(id);
             } else if (type === 'purchase') {
-                details = db.prepare(`
-                    SELECT pid.raw_quantity, pid.quantity, pid.cost_price as price, pid.total_price,
+                const rawDetails = db.prepare(`
+                    SELECT pid.raw_quantity, pid.raw_weights, pid.quantity, pid.cost_price as price, pid.total_price,
                            i.name as item_name, u.name as unit_name
                     FROM purchase_invoice_details pid
                     JOIN items i ON pid.item_id = i.id
@@ -473,6 +517,15 @@ function register() {
                     WHERE pid.invoice_id = ?
                     ORDER BY pid.id ASC
                 `).all(id);
+                details = rawDetails.map((row) => {
+                    const meta = extractPurchaseDetailMeta(row.raw_quantity, row.quantity, row.raw_weights);
+                    return {
+                        ...row,
+                        raw_quantity: meta.raw_quantity,
+                        net1_quantity: meta.net1_quantity,
+                        rate_percent: meta.rate_percent
+                    };
+                });
             } else if (type === 'local_sale') {
                 details = db.prepare(`
                     SELECT quantity, price, total as total_price,
@@ -515,12 +568,8 @@ function register() {
 
             // --- جلب أصناف المشتريات ---
             let purchaseItemsQuery = `
-                SELECT i.name as item_name, u.name as unit_name,
-                       SUM(COALESCE(NULLIF(pid.raw_quantity, 0), pid.quantity)) as total_raw_qty,
-                       ROUND(SUM(COALESCE(NULLIF(pid.raw_quantity, 0), pid.quantity) * 0.99), 2) as total_net1_qty,
-                       SUM(pid.quantity) as total_qty,
-                       ROUND(SUM(pid.total_price) * 1.0 / NULLIF(SUM(pid.quantity), 0), 2) as avg_price,
-                       SUM(pid.total_price) as total_amount
+                SELECT i.id as item_id, i.name as item_name, u.name as unit_name,
+                       pid.raw_quantity, pid.raw_weights, pid.quantity, pid.total_price
                 FROM purchase_invoice_details pid
                 JOIN purchase_invoices pi ON pid.invoice_id = pi.id
                 JOIN items i ON pid.item_id = i.id
@@ -529,10 +578,53 @@ function register() {
             const purchaseParams = [custId];
             if (startDate) { purchaseItemsQuery += ' AND pi.invoice_date >= ?'; purchaseParams.push(startDate); }
             if (endDate) { purchaseItemsQuery += ' AND pi.invoice_date <= ?'; purchaseParams.push(endDate); }
-            purchaseItemsQuery += ' GROUP BY i.id ORDER BY i.name ASC';
+            purchaseItemsQuery += ' ORDER BY i.name ASC, pid.id ASC';
 
             const salesItems = db.prepare(salesItemsQuery).all(...salesParams);
-            const purchaseItems = db.prepare(purchaseItemsQuery).all(...purchaseParams);
+            const rawPurchaseRows = db.prepare(purchaseItemsQuery).all(...purchaseParams);
+            const purchaseGroups = new Map();
+            for (const row of rawPurchaseRows) {
+                const meta = extractPurchaseDetailMeta(row.raw_quantity, row.quantity, row.raw_weights);
+                const key = row.item_id;
+                if (!purchaseGroups.has(key)) {
+                    purchaseGroups.set(key, {
+                        item_name: row.item_name,
+                        unit_name: row.unit_name,
+                        total_raw_qty: 0,
+                        total_net1_qty: 0,
+                        total_qty: 0,
+                        total_amount: 0,
+                        ratesSet: new Set()
+                    });
+                }
+                const group = purchaseGroups.get(key);
+                group.total_raw_qty += meta.raw_quantity;
+                group.total_net1_qty += meta.net1_quantity;
+                group.total_qty += Number(row.quantity) || 0;
+                group.total_amount += Number(row.total_price) || 0;
+                if (meta.rate_percent !== null && Number.isFinite(Number(meta.rate_percent)) && Number(meta.rate_percent) > 0) {
+                    group.ratesSet.add(Number(meta.rate_percent));
+                }
+            }
+            const purchaseItems = Array.from(purchaseGroups.values()).map((group) => {
+                const totalRawQty = Math.round((group.total_raw_qty + Number.EPSILON) * 100) / 100;
+                const totalNet1Qty = Math.round((group.total_net1_qty + Number.EPSILON) * 100) / 100;
+                const totalQty = Math.round((group.total_qty + Number.EPSILON) * 100) / 100;
+                const totalAmount = Math.round((group.total_amount + Number.EPSILON) * 100) / 100;
+                const avgPrice = totalQty > 0 ? Math.round(((totalAmount / totalQty) + Number.EPSILON) * 100) / 100 : 0;
+                const ratesList = Array.from(group.ratesSet);
+                return {
+                    item_name: group.item_name,
+                    unit_name: group.unit_name,
+                    total_raw_qty: totalRawQty,
+                    total_net1_qty: totalNet1Qty,
+                    rate_percent: ratesList.length === 1 ? ratesList[0] : null,
+                    rate_display: ratesList.length > 0 ? ratesList.map((r) => `${r}%`).join(' / ') : '—',
+                    total_qty: totalQty,
+                    avg_price: avgPrice,
+                    total_amount: totalAmount
+                };
+            });
             const salesReturnItems = [];
             const purchaseReturnItems = [];
 
