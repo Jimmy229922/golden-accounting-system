@@ -703,47 +703,168 @@ window.showOnboardingWizardModal = function() {
     let existing = document.getElementById('onboardingWizardModal');
     if (existing) existing.remove();
 
+    if (!document.getElementById('onboardingWizardModalStyles')) {
+        const style = document.createElement('style');
+        style.id = 'onboardingWizardModalStyles';
+        style.textContent = `
+            #onboardingWizardModal {
+                position: fixed;
+                inset: 0;
+                z-index: 9999999;
+                background: rgba(2, 6, 23, 0.84) !important;
+                backdrop-filter: blur(6px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 16px;
+                direction: rtl;
+            }
+            #onboardingWizardModal .onboarding-card {
+                width: min(540px, 95vw);
+                background: #0f172a !important;
+                color: #f8fafc !important;
+                border-radius: 14px;
+                overflow: hidden;
+                border: 1px solid rgba(56, 189, 248, 0.35);
+                box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75);
+                display: flex;
+                flex-direction: column;
+            }
+            #onboardingWizardModal .onboarding-header {
+                background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+                border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+                padding: 22px 24px;
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            #onboardingWizardModal .onboarding-form {
+                padding: 24px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                background: #0f172a;
+            }
+            #onboardingWizardModal .onboarding-label {
+                display: block;
+                font-size: 0.92rem;
+                font-weight: 700;
+                color: #f1f5f9 !important;
+                margin-bottom: 7px;
+            }
+            #onboardingWizardModal .onboarding-input {
+                width: 100%;
+                box-sizing: border-box;
+                background: #1e293b !important;
+                border: 1.5px solid #475569 !important;
+                border-radius: 9px;
+                padding: 11px 14px;
+                color: #ffffff !important;
+                font-size: 0.96rem;
+                outline: none;
+                transition: border-color 0.2s, box-shadow 0.2s;
+            }
+            #onboardingWizardModal .onboarding-input::placeholder {
+                color: #94a3b8 !important;
+                opacity: 1;
+            }
+            #onboardingWizardModal .onboarding-input:focus {
+                border-color: #38bdf8 !important;
+                box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+            }
+            #onboardingWizardModal .onboarding-error {
+                display: none;
+                background: rgba(239, 68, 68, 0.15);
+                border: 1px solid rgba(248, 113, 113, 0.45);
+                color: #fecaca;
+                border-radius: 8px;
+                padding: 9px 12px;
+                font-size: 0.88rem;
+                font-weight: 600;
+            }
+            #onboardingWizardModal .onboarding-submit {
+                width: 100%;
+                background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
+                color: #ffffff !important;
+                padding: 12px 16px;
+                font-size: 1rem;
+                font-weight: 700;
+                border-radius: 9px;
+                cursor: pointer;
+                border: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                transition: opacity 0.2s;
+            }
+            #onboardingWizardModal .onboarding-submit:hover {
+                opacity: 0.92;
+            }
+            #onboardingWizardModal .onboarding-submit:disabled {
+                opacity: 0.65;
+                cursor: not-allowed;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     const modal = document.createElement('div');
     modal.id = 'onboardingWizardModal';
     modal.className = 'confirm-dialog-overlay';
-    modal.style.zIndex = '9999999';
 
     modal.innerHTML = `
-        <div class="confirm-dialog-card" style="width: min(540px, 94%); padding: 0; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); border: 1px solid rgba(56, 189, 248, 0.25);">
-            <div class="confirm-dialog-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 22px 24px; display: flex; align-items: center; gap: 14px;">
-                <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(56, 189, 248, 0.3);">
+        <div class="onboarding-card" role="dialog" aria-modal="true">
+            <div class="onboarding-header">
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(56, 189, 248, 0.16); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(56, 189, 248, 0.35); flex-shrink: 0;">
                     <i class="fas fa-building" style="color: #38bdf8; font-size: 1.4rem;"></i>
                 </div>
                 <div>
-                    <div style="font-size: 1.25rem; font-weight: 700; color: #f8fafc;">مرحباً بك في نظام المحاسبة المتكامل</div>
-                    <div style="font-size: 0.84rem; color: #94a3b8; margin-top: 2px;">يرجى تسجيل بيانات منشأتك لبدء الاستخدام وتفعيل المزامنة</div>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #ffffff;">مرحباً بك في نظام المحاسبة المتكامل</div>
+                    <div style="font-size: 0.86rem; color: #cbd5e1; margin-top: 3px;">يرجى تسجيل بيانات منشأتك لبدء الاستخدام وتفعيل المزامنة السحابية</div>
                 </div>
             </div>
             
-            <form id="onboardingWizardForm" style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+            <form id="onboardingWizardForm" class="onboarding-form" novalidate>
                 <div>
-                    <label style="display: block; font-size: 0.88rem; font-weight: 600; color: #e2e8f0; margin-bottom: 6px;">اسم المؤسسة / الشركة / المحل <span style="color: #f87171;">*</span></label>
-                    <input type="text" id="onboardingCompName" required placeholder="مثال: مؤسسة الأمل للتجارة" style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 14px; color: #f8fafc; font-size: 0.95rem; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='#38bdf8'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'" />
+                    <label class="onboarding-label" for="onboardingCompName">اسم المؤسسة / الشركة / المحل <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="onboardingCompName" class="onboarding-input" required placeholder="مثال: مؤسسة الأمل للتجارة" />
                 </div>
 
                 <div>
-                    <label style="display: block; font-size: 0.88rem; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">النشاط التجاري</label>
-                    <input type="text" id="onboardingCompActivity" placeholder="مثال: تجارة عامة، تجارة ذهب، مواد غذائية..." style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 14px; color: #f8fafc; font-size: 0.95rem; outline: none;" />
+                    <label class="onboarding-label" for="onboardingCompActivity">النشاط التجاري</label>
+                    <input type="text" id="onboardingCompActivity" class="onboarding-input" placeholder="مثال: تجارة عامة، تجارة ذهب، مواد غذائية..." />
                 </div>
 
                 <div>
-                    <label style="display: block; font-size: 0.88rem; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">رقم هاتف التواصل</label>
-                    <input type="tel" id="onboardingCompPhone" placeholder="01xxxxxxxxx" style="width: 100%; box-sizing: border-box; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 14px; color: #f8fafc; font-size: 0.95rem; outline: none;" />
+                    <label class="onboarding-label" for="onboardingCompPhone">رقم هاتف التواصل</label>
+                    <input type="tel" id="onboardingCompPhone" class="onboarding-input" placeholder="01xxxxxxxxx" />
                 </div>
 
-                <div style="margin-top: 8px; display: flex; justify-content: flex-end;">
-                    <button type="submit" id="onboardingSubmitBtn" class="confirm-dialog-btn confirm" style="width: 100%; background: #0284c7; color: #fff; padding: 12px; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.2s;">
+                <div id="onboardingErrorMsg" class="onboarding-error"></div>
+
+                <div style="margin-top: 6px; display: flex; justify-content: flex-end;">
+                    <button type="submit" id="onboardingSubmitBtn" class="onboarding-submit">
                         <i class="fas fa-check"></i> حفظ وبدء استخدام النظام
                     </button>
                 </div>
             </form>
         </div>
     `;
+
+    const preventEscapeClose = (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    };
+    document.addEventListener('keydown', preventEscapeClose, true);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    });
 
     document.body.appendChild(modal);
     requestAnimationFrame(() => {
@@ -754,6 +875,13 @@ window.showOnboardingWizardModal = function() {
 
     const form = modal.querySelector('#onboardingWizardForm');
     const submitBtn = modal.querySelector('#onboardingSubmitBtn');
+    const errorEl = modal.querySelector('#onboardingErrorMsg');
+    const showError = (msg) => {
+        if (!errorEl) return;
+        errorEl.textContent = msg;
+        errorEl.style.display = msg ? 'block' : 'none';
+    };
+
     if (form) {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -761,24 +889,40 @@ window.showOnboardingWizardModal = function() {
             const compActivity = (document.getElementById('onboardingCompActivity')?.value || '').trim();
             const compPhone = (document.getElementById('onboardingCompPhone')?.value || '').trim();
 
-            if (!compName) return;
+            if (compName.length < 2) {
+                showError('يرجى إدخال اسم الشركة أو المؤسسة (حرفين على الأقل) للمتابعة.');
+                document.getElementById('onboardingCompName')?.focus();
+                return;
+            }
 
+            showError('');
             if (submitBtn) {
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> جاري حفظ البيانات...';
+                submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> جاري حفظ البيانات وتسجيل الشركة...';
             }
 
             try {
+                let res = { success: true };
                 if (window.electronAPI && typeof window.electronAPI.completeInitialOnboarding === 'function') {
-                    await window.electronAPI.completeInitialOnboarding({
+                    res = await window.electronAPI.completeInitialOnboarding({
                         companyName: compName,
                         companyActivity: compActivity,
                         companyPhone: compPhone
                     });
                 }
+                if (res && res.success === false) {
+                    showError(res.error || 'تعذر حفظ البيانات، يرجى المحاولة مرة أخرى.');
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="fas fa-check"></i> حفظ وبدء استخدام النظام';
+                    }
+                    return;
+                }
+                document.removeEventListener('keydown', preventEscapeClose, true);
                 modal.classList.remove('show');
                 setTimeout(() => modal.remove(), 300);
             } catch (_) {
+                showError('حدث خطأ غير متوقع أثناء الحفظ، يرجى المحاولة مرة أخرى.');
                 if (submitBtn) {
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="fas fa-check"></i> حفظ وبدء استخدام النظام';

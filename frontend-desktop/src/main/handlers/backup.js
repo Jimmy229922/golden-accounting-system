@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const BetterSqlite3 = require('better-sqlite3');
 const { db } = require('../db');
+const { hasFeature } = require('../licenseService');
 
 const BACKUP_FOLDER_NAME = 'PIC';
 const MANUAL_BACKUP_FILE_PREFIX = 'accounting-manual-backup';
@@ -282,7 +283,7 @@ function getSupabaseConfig() {
         ? maxUploadBytesRaw
         : DEFAULT_MAX_UPLOAD_BYTES;
 
-    const enabled = Boolean(projectUrl && serviceKey && bucketName);
+    const enabled = Boolean(projectUrl && serviceKey && bucketName) && hasFeature(db, 'cloud_backup');
 
     return {
         enabled,

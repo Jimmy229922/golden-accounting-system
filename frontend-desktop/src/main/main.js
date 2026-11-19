@@ -604,6 +604,10 @@ ipcMain.handle('check-initial-onboarding', async () => {
 ipcMain.removeHandler('complete-initial-onboarding');
 ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
     try {
+        const cleanCompanyName = String(data?.companyName || '').trim();
+        if (cleanCompanyName.length < 2) {
+            return { success: false, error: 'يرجى إدخال اسم الشركة / المؤسسة (حرفين على الأقل).' };
+        }
         const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)');
         const transaction = db.transaction((items) => {
             for (const [key, value] of Object.entries(items)) {
@@ -611,10 +615,10 @@ ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
             }
         });
         transaction({
-            companyName: data.companyName || 'مؤسسة جديدة',
-            companyPhone: data.companyPhone || '',
-            companyAddress: data.companyAddress || '',
-            companyActivity: data.companyActivity || '',
+            companyName: cleanCompanyName,
+            companyPhone: String(data?.companyPhone || '').trim(),
+            companyAddress: String(data?.companyAddress || '').trim(),
+            companyActivity: String(data?.companyActivity || '').trim(),
             onboarding_completed: '1'
         });
 
@@ -623,15 +627,22 @@ ipcMain.handle('complete-initial-onboarding', async (_event, data) => {
         const { loadOrCreateDeviceIdentity } = require('./sync/secureKeyStore');
         const identity = loadOrCreateDeviceIdentity(storageDir, safeStorage);
         const COMPANY_ID = getOrInitializeCompanyId(db);
+        const cloudTasks = [];
         if (identity) {
-            autoRegisterClientDeviceWithCloud(
-                COMPANY_ID,
-                data.companyName,
-                identity.deviceId,
-                identity.publicKeyBase64,
-                app.getVersion ? app.getVersion() : '10.1.9'
-            ).catch(() => {});
+            cloudTasks.push(
+                autoRegisterClientDeviceWithCloud(
+                    COMPANY_ID,
+                    cleanCompanyName,
+                    identity.deviceId,
+                    identity.publicKeyBase64,
+                    app.getVersion ? app.getVersion() : '10.1.23'
+                ).catch(() => {})
+            );
         }
+        cloudTasks.push(
+            licenseService.getLicenseStatus(db).catch(() => {})
+        );
+        await Promise.allSettled(cloudTasks);
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };

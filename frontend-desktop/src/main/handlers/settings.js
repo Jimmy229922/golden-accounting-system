@@ -4,6 +4,7 @@ const path = require('path');
 const { db } = require('../db');
 const { requirePermission } = require('./auth');
 const { markMainWindowClosingForUpdate } = require('../windowManager');
+const licenseService = require('../licenseService');
 
 const CUSTOMER_COLLECTION_PENDING_RELATED_TYPE = 'customer_collection_pending';
 const CUSTOMER_COLLECTION_SHIFT_CLOSE_RELATED_TYPE = 'customer_collection_shift_close';
@@ -498,6 +499,13 @@ function register() {
                 }
             });
             transaction(settings);
+            const updatedCompanyName = String(settings?.companyName || settings?.company_name || '').trim();
+            const hasProfileUpdate = updatedCompanyName.length >= 2
+                || Object.prototype.hasOwnProperty.call(settings || {}, 'companyPhone')
+                || Object.prototype.hasOwnProperty.call(settings || {}, 'companyActivity');
+            if (hasProfileUpdate) {
+                licenseService.getLicenseStatus(db).catch(() => {});
+            }
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

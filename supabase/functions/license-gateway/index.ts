@@ -131,11 +131,15 @@ serve(async (req: Request) => {
 
         const now = new Date();
         const trialExpiry = new Date(now.getTime() + 15 * 86400000);
+        const incomingPhone = String(body.company_phone || "").trim();
+        const incomingActivity = String(body.company_activity || "").trim();
         const { data: newLic, error: createErr } = await supabase
           .from("client_licenses")
           .insert({
             company_id: companyId,
             company_name: String(body.company_name || "مؤسسة جديدة").trim(),
+            company_phone: incomingPhone,
+            company_activity: incomingActivity,
             machine_id: rawMachineId,
             bound_machine_id: rawMachineId,
             last_seen_machine_id: rawMachineId,
@@ -179,6 +183,20 @@ serve(async (req: Request) => {
           desktop_version: desktopVersion
         };
 
+        const incomingCompanyName = String(body.company_name || "").trim();
+        const defaultNames = ["مؤسسة جديدة", "اسم المؤسسة", "مؤسسة الذهب للمحاسبة", "مؤسسة غير مسماة"];
+        if (incomingCompanyName && !defaultNames.includes(incomingCompanyName) && activeRec.company_name !== incomingCompanyName) {
+          updates.company_name = incomingCompanyName;
+        }
+        const incomingPhone = String(body.company_phone || "").trim();
+        if (incomingPhone && activeRec.company_phone !== incomingPhone) {
+          updates.company_phone = incomingPhone;
+        }
+        const incomingActivity = String(body.company_activity || "").trim();
+        if (incomingActivity && activeRec.company_activity !== incomingActivity) {
+          updates.company_activity = incomingActivity;
+        }
+
         if (!activeRec.bound_machine_id && !isLifetime) {
           updates.bound_machine_id = rawMachineId;
         }
@@ -217,6 +235,12 @@ serve(async (req: Request) => {
         ? activeRec.features
         : {};
 
+      const { data: globalCfg } = await supabase
+        .from("app_global_config")
+        .select("min_supported_version, support_whatsapp, force_update_message")
+        .eq("id", 1)
+        .maybeSingle();
+
       return new Response(JSON.stringify({
         success: true,
         certificate: certPayload,
@@ -224,6 +248,9 @@ serve(async (req: Request) => {
         is_valid: isValid,
         remaining_days: remainingDays,
         features,
+        min_supported_version: String(globalCfg?.min_supported_version || "10.0.0"),
+        support_whatsapp: String(globalCfg?.support_whatsapp || ""),
+        force_update_message: String(globalCfg?.force_update_message || ""),
         server_time: now.toISOString()
       }), {
         status: 200,

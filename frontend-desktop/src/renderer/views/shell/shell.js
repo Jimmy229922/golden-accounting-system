@@ -35,7 +35,8 @@ const shellState = {
     currentHref: '',
     isNavigating: false,
     visibleItems: SHELL_ITEMS,
-    clientFeatures: {}
+    clientFeatures: {},
+    runtimeMeta: null
 };
 const NAVIGATION_WATCHDOG_MS = 1800;
 let navigationWatchdogTimer = null;
@@ -99,6 +100,7 @@ function getCurrentTheme() {
 function applyThemeToFrame(frameDoc) {
     if (!frameDoc) return;
     frameDoc.documentElement.setAttribute('data-theme', getCurrentTheme());
+    frameDoc.documentElement.classList.toggle('flex-layout-enabled', Boolean(shellState.clientFeatures?.flex_full_layout));
 }
 
 function routeToHash(routeHref) {
@@ -202,6 +204,7 @@ async function loadShellVisibleItems() {
         }
     }
     shellState.clientFeatures = clientFeatures;
+    document.documentElement.classList.toggle('flex-layout-enabled', Boolean(clientFeatures?.flex_full_layout));
     const featureFilteredItems = SHELL_ITEMS.reduce((acc, item) => {
         if (item.featureFlag && !clientFeatures[item.featureFlag]) return acc;
         if (Array.isArray(item.children)) {
@@ -287,6 +290,11 @@ function renderTopNav() {
                 <li class="nav-search-item">
                     <button class="nav-search-btn" type="button" title="${t('globalSearch.searchBtn', 'بحث')}">
                         <span class="nav-search-icon" aria-hidden="true">🔍</span> ${t('globalSearch.searchBtn', 'بحث')}
+                    </button>
+                </li>
+                <li class="nav-support-item">
+                    <button class="nav-support-btn" type="button" title="الدعم الفني وتجديد الاشتراك" style="background:rgba(34,197,94,0.16);border:1px solid rgba(34,197,94,0.45);color:#86efac;border-radius:8px;padding:6px 11px;font-size:0.84rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                        <span aria-hidden="true">💬</span> الدعم الفني
                     </button>
                 </li>
             </ul>
@@ -491,6 +499,13 @@ function bindShellNavEvents() {
             return;
         }
 
+        const supportBtn = event.target.closest('.nav-support-btn');
+        if (supportBtn) {
+            event.preventDefault();
+            openSupportModal();
+            return;
+        }
+
         const searchBtn = event.target.closest('.nav-search-btn');
         if (searchBtn) {
             event.preventDefault();
@@ -561,7 +576,189 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderTopNav();
         setHistoryRoute(initialRoute, true);
         navigateTo(initialRoute, { pushHistory: false });
+        await initializeClientRuntimeMetaUI();
     } catch (error) {
         console.error('[shell] initialization failed:', error);
     }
 });
+
+function buildSupportWhatsappUrl(meta, customPrefix = '') {
+    const phone = String(meta?.supportWhatsapp || '').replace(/[^0-9]/g, '');
+    if (!phone) return '';
+    const lines = [
+        customPrefix || 'السلام عليكم، أحتاج مساعدة من الدعم الفني لنظام المحاسبة:',
+        meta?.companyName ? `الشركة: ${meta.companyName}` : '',
+        meta?.machineId ? `رقم الجهاز: ${meta.machineId}` : '',
+        meta?.appVersion ? `الإصدار: v${meta.appVersion}` : ''
+    ].filter(Boolean);
+    return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
+
+function openExternalSupportUrl(url) {
+    if (!url) return;
+    if (window.electronAPI && typeof window.electronAPI.openExternalUrl === 'function') {
+        window.electronAPI.openExternalUrl(url);
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
+function openSupportModal() {
+    const meta = shellState.runtimeMeta || {};
+    const existing = document.getElementById('shellSupportModal');
+    if (existing) existing.remove();
+
+    const waUrl = buildSupportWhatsappUrl(meta);
+    const statusMap = { lifetime: 'دائم (Lifetime)', active: 'نشط', trial: 'فترة تجريبية', suspended: 'موقوف' };
+    const statusLabel = statusMap[meta.licenseStatus] || 'نشط';
+    const daysText = meta.licenseStatus === 'lifetime' ? 'بدون حد زمني' : `${Number(meta.remainingDays || 0)} يوم`;
+
+    const modal = document.createElement('div');
+    modal.id = 'shellSupportModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999998;background:rgba(2,6,23,0.82);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl;';
+    modal.innerHTML = `
+        <div style="width:min(460px,95vw);background:#0f172a;color:#f8fafc;border:1px solid rgba(56,189,248,0.35);border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,0.7);">
+            <div style="padding:18px 20px;background:linear-gradient(135deg,#1e293b,#0f172a);border-bottom:1px solid rgba(148,163,184,0.2);display:flex;align-items:center;justify-content:space-between;">
+                <div style="font-size:1.08rem;font-weight:700;">💬 الدعم الفني ومعلومات الاشتراك</div>
+                <button type="button" id="closeSupportModalBtn" style="border:none;background:transparent;color:#94a3b8;font-size:20px;cursor:pointer;">&times;</button>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+                <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:0.9rem;">
+                    <div><strong>الشركة:</strong> ${meta.companyName || '—'}</div>
+                    <div><strong>إصدار البرنامج:</strong> <span dir="ltr">v${meta.appVersion || '—'}</span></div>
+                    <div><strong>حالة الاشتراك:</strong> ${statusLabel} (${daysText})</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                        <span><strong>رقم الجهاز:</strong> <code style="color:#38bdf8;direction:ltr;display:inline-block;">${meta.machineId || '—'}</code></span>
+                        <button type="button" id="copySupportMachineBtn" style="border:1px solid #475569;background:#0f172a;color:#e2e8f0;border-radius:7px;padding:4px 10px;font-size:0.8rem;cursor:pointer;">نسخ</button>
+                    </div>
+                </div>
+                ${
+                    waUrl
+                        ? `<button type="button" id="openSupportWhatsappBtn" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:10px;padding:12px;font-size:0.96rem;font-weight:700;cursor:pointer;">تواصل معنا الآن عبر واتساب الدعم الفني</button>`
+                        : `<div style="font-size:0.84rem;color:#94a3b8;text-align:center;">للتواصل مع الدعم الفني أو التجديد يرجى مراسلة الإدارة برقم الجهاز أعلاه.</div>`
+                }
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    modal.querySelector('#closeSupportModalBtn')?.addEventListener('click', () => modal.remove());
+    modal.querySelector('#copySupportMachineBtn')?.addEventListener('click', () => {
+        if (meta.machineId && navigator.clipboard) {
+            navigator.clipboard.writeText(meta.machineId).then(() => {
+                const b = modal.querySelector('#copySupportMachineBtn');
+                if (b) { b.textContent = 'تم النسخ ✓'; setTimeout(() => { b.textContent = 'نسخ'; }, 1800); }
+            }).catch(() => {});
+        }
+    });
+    modal.querySelector('#openSupportWhatsappBtn')?.addEventListener('click', () => {
+        openExternalSupportUrl(waUrl);
+    });
+}
+
+function renderExpiryReminderBanner(meta) {
+    const existing = document.getElementById('shellExpiryBanner');
+    if (existing) existing.remove();
+    if (!meta || !meta.showExpiryBanner) return;
+
+    const waUrl = buildSupportWhatsappUrl(meta, `السلام عليكم، أرغب في تجديد اشتراك نظام المحاسبة (متبقي ${meta.remainingDays} يوم):`);
+    const banner = document.createElement('div');
+    banner.id = 'shellExpiryBanner';
+    banner.style.cssText = 'background:linear-gradient(90deg,#b45309,#d97706);color:#ffffff;padding:8px 18px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;font-size:0.9rem;font-weight:700;direction:rtl;z-index:30;border-bottom:1px solid rgba(255,255,255,0.2);';
+    banner.innerHTML = `
+        <span>⏳ تنبيه: متبقي ${meta.remainingDays} ${meta.remainingDays === 1 ? 'يوم واحد' : 'أيام'} فقط على انتهاء اشتراكك، يرجى التجديد لضمان استمرار العمل دون توقف.</span>
+        ${waUrl ? `<button type="button" id="expiryRenewWaBtn" style="background:#ffffff;color:#92400e;border:none;border-radius:7px;padding:4px 12px;font-size:0.84rem;font-weight:700;cursor:pointer;">تجديد عبر الواتساب</button>` : ''}
+    `;
+
+    const navHost = document.getElementById('shellNav');
+    if (navHost && navHost.parentNode) {
+        navHost.parentNode.insertBefore(banner, navHost.nextSibling);
+    } else {
+        document.body.prepend(banner);
+    }
+
+    banner.querySelector('#expiryRenewWaBtn')?.addEventListener('click', () => {
+        openExternalSupportUrl(waUrl);
+    });
+}
+
+function renderForceUpdateOverlay(meta) {
+    if (!meta || !meta.forceUpdateRequired) return;
+    const existing = document.getElementById('shellForceUpdateOverlay');
+    if (existing) existing.remove();
+
+    const waUrl = buildSupportWhatsappUrl(meta, 'السلام عليكم، أحتاج مساعدة لتحديث نظام المحاسبة إلى أحدث إصدار:');
+    const overlay = document.createElement('div');
+    overlay.id = 'shellForceUpdateOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999999;background:rgba(2,6,23,0.95);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;direction:rtl;';
+    overlay.innerHTML = `
+        <div style="width:min(520px,95vw);background:#0f172a;color:#f8fafc;border:1.5px solid rgba(56,189,248,0.45);border-radius:16px;padding:28px;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.8);">
+            <div style="width:64px;height:64px;margin:0 auto 16px;border-radius:16px;background:rgba(56,189,248,0.16);color:#38bdf8;display:flex;align-items:center;justify-content:center;font-size:28px;">⬆️</div>
+            <h2 style="font-size:1.35rem;margin-bottom:10px;color:#ffffff;">مطلوب تحديث البرنامج للمتابعة</h2>
+            <p style="font-size:0.95rem;color:#cbd5e1;line-height:1.7;margin-bottom:16px;">${meta.forceUpdateMessage || 'يرجى تحديث البرنامج إلى أحدث إصدار للمتابعة وضمان استقرار بياناتك.'}</p>
+            <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:20px;font-size:0.88rem;display:flex;justify-content:space-around;">
+                <span>إصدارك الحالي: <strong style="color:#f87171;" dir="ltr">v${meta.appVersion}</strong></span>
+                <span>أقل إصدار مطلوب: <strong style="color:#4ade80;" dir="ltr">v${meta.minSupportedVersion}</strong></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <button type="button" id="forceUpdateDownloadBtn" style="width:100%;background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;border:none;border-radius:10px;padding:13px;font-size:1rem;font-weight:700;cursor:pointer;">تنزيل وتثبيت التحديث الآن</button>
+                <button type="button" id="forceUpdateReleasePageBtn" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:10px;padding:10px;font-size:0.9rem;font-weight:600;cursor:pointer;">فتح صفحة التحميل المباشر</button>
+                ${waUrl ? `<button type="button" id="forceUpdateSupportBtn" style="width:100%;background:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.4);border-radius:10px;padding:10px;font-size:0.88rem;font-weight:600;cursor:pointer;">تواصل مع الدعم الفني عبر الواتساب</button>` : ''}
+            </div>
+            <div id="forceUpdateStatusText" style="margin-top:12px;font-size:0.85rem;color:#38bdf8;"></div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const statusEl = overlay.querySelector('#forceUpdateStatusText');
+    const dlBtn = overlay.querySelector('#forceUpdateDownloadBtn');
+
+    dlBtn?.addEventListener('click', async () => {
+        if (!window.electronAPI || typeof window.electronAPI.downloadAppUpdate !== 'function') {
+            window.electronAPI?.openAppReleasePage?.();
+            return;
+        }
+        dlBtn.disabled = true;
+        statusEl.textContent = 'جاري تنزيل التحديث الجديد، يرجى الانتظار...';
+        try {
+            const res = await window.electronAPI.downloadAppUpdate();
+            if (res && res.success && res.installerPath && typeof window.electronAPI.quitAndInstallAppUpdate === 'function') {
+                statusEl.textContent = 'تم التنزيل! جاري تشغيل المثبّت الآن...';
+                await window.electronAPI.quitAndInstallAppUpdate(res.installerPath);
+            } else {
+                statusEl.textContent = res?.error || 'تعذر التنزيل التلقائي، يمكنك استخدام زر صفحة التحميل المباشر.';
+                dlBtn.disabled = false;
+            }
+        } catch (_) {
+            statusEl.textContent = 'تعذر التنزيل التلقائي، يمكنك استخدام زر صفحة التحميل المباشر.';
+            dlBtn.disabled = false;
+        }
+    });
+
+    overlay.querySelector('#forceUpdateReleasePageBtn')?.addEventListener('click', () => {
+        window.electronAPI?.openAppReleasePage?.();
+    });
+    overlay.querySelector('#forceUpdateSupportBtn')?.addEventListener('click', () => {
+        openExternalSupportUrl(waUrl);
+    });
+}
+
+async function initializeClientRuntimeMetaUI() {
+    const api = window.electronAPI;
+    if (!api || typeof api.getClientRuntimeMeta !== 'function') return;
+    try {
+        const res = await api.getClientRuntimeMeta();
+        if (!res || !res.success || !res.meta) return;
+        shellState.runtimeMeta = res.meta;
+        if (res.meta.forceUpdateRequired) {
+            renderForceUpdateOverlay(res.meta);
+            return;
+        }
+        if (res.meta.showExpiryBanner) {
+            renderExpiryReminderBanner(res.meta);
+        }
+    } catch (_) {}
+}

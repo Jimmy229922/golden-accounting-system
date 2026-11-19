@@ -965,6 +965,28 @@ function register() {
         }
     });
 
+    ipcMain.handle('get-client-runtime-meta', () => {
+        try {
+            return { success: true, meta: licenseService.getClientRuntimeMeta(db) };
+        } catch (error) {
+            return { success: false, meta: null, error: error.message };
+        }
+    });
+
+    ipcMain.handle('open-external-url', async (_event, rawUrl) => {
+        try {
+            const url = String(rawUrl || '').trim();
+            if (!/^https:\/\/(wa\.me|api\.whatsapp\.com|github\.com)\//i.test(url)) {
+                return { success: false, error: 'الرابط غير مسموح به.' };
+            }
+            const { shell } = require('electron');
+            await shell.openExternal(url);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('get-recovery-challenge', () => {
         try {
             return { success: true, challenge: calculateRecoveryChallenge() };

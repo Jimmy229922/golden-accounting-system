@@ -24,7 +24,7 @@ function getLicenseSettings(accountingDb) {
     try {
         const rows = accountingDb.prepare(`
             SELECT key, value FROM settings 
-            WHERE key IN ('company_id', 'companyName', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at', 'client_features')
+            WHERE key IN ('company_id', 'companyName', 'companyPhone', 'companyActivity', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at', 'client_features', 'min_supported_version', 'support_whatsapp', 'force_update_message')
         `).all();
         const map = {};
         rows.forEach(r => { map[r.key] = r.value; });
@@ -248,6 +248,8 @@ async function getLicenseStatus(accountingDb) {
     const gatewayRes = await callLicenseGateway('check', {
         company_id: map.company_id,
         company_name: map.companyName || null,
+        company_phone: map.companyPhone || '',
+        company_activity: map.companyActivity || '',
         machine_id: machineId,
         desktop_version: appVersion
     });
@@ -255,6 +257,15 @@ async function getLicenseStatus(accountingDb) {
     if (gatewayRes && gatewayRes.ok && gatewayRes.data && gatewayRes.data.success) {
         if (gatewayRes.data.features && typeof gatewayRes.data.features === 'object') {
             saveClientFeatures(accountingDb, gatewayRes.data.features);
+        }
+        if (gatewayRes.data.min_supported_version) {
+            saveSetting(accountingDb, 'min_supported_version', String(gatewayRes.data.min_supported_version).trim());
+        }
+        if (gatewayRes.data.support_whatsapp !== undefined) {
+            saveSetting(accountingDb, 'support_whatsapp', String(gatewayRes.data.support_whatsapp || '').trim());
+        }
+        if (gatewayRes.data.force_update_message !== undefined) {
+            saveSetting(accountingDb, 'force_update_message', String(gatewayRes.data.force_update_message || '').trim());
         }
         const cert = gatewayRes.data.certificate;
         const signature = gatewayRes.data.signature;
@@ -656,6 +667,51 @@ async function activateLicenseWithCode(accountingDb, code) {
     };
 }
 
+function compareSemver(a, b) {
+    const pa = String(a || '0.0.0').replace(/^[^0-9]*/, '').split('.').map((n) => Number(n) || 0);
+    const pb = String(b || '0.0.0').replace(/^[^0-9]*/, '').split('.').map((n) => Number(n) || 0);
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+        const va = pa[i] || 0;
+        const vb = pb[i] || 0;
+        if (va > vb) return 1;
+        if (va < vb) return -1;
+    }
+    return 0;
+}
+
+function getClientRuntimeMeta(accountingDb) {
+    const map = getLicenseSettings(accountingDb);
+    const appVersion = (app && app.getVersion) ? app.getVersion() : '10.1.23';
+    const minSupportedVersion = String(map.min_supported_version || '10.0.0').trim() || '10.0.0';
+    const forceUpdateRequired = compareSemver(appVersion, minSupportedVersion) < 0;
+    const forceUpdateMessage = String(map.force_update_message || 'يرجى تحديث البرنامج إلى أحدث إصدار للمتابعة وضمان استقرار بياناتك.').trim();
+    const supportWhatsapp = String(map.support_whatsapp || '').trim();
+    const status = String(map.license_status || (isLegacyClient(accountingDb, map) ? 'lifetime' : 'trial'));
+    const expiresAt = map.invite_expiry ? new Date(map.invite_expiry) : null;
+    const isLifetime = status === 'lifetime' || isLegacyClient(accountingDb, map);
+    const remainingDays = isLifetime
+        ? 99999
+        : (expiresAt && !Number.isNaN(expiresAt.getTime())
+            ? Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 86400000))
+            : 0);
+    const showExpiryBanner = !isLifetime && status !== 'suspended' && remainingDays > 0 && remainingDays <= 5;
+
+    return {
+        appVersion,
+        minSupportedVersion,
+        forceUpdateRequired,
+        forceUpdateMessage,
+        supportWhatsapp,
+        companyName: String(map.companyName || '').trim(),
+        machineId: getMachineId(),
+        licenseStatus: isLifetime ? 'lifetime' : status,
+        remainingDays,
+        showExpiryBanner,
+        features: getClientFeatures(accountingDb)
+    };
+}
+
 module.exports = {
     initLicenseForDatabase,
     getLicenseStatus,
@@ -663,5 +719,6 @@ module.exports = {
     activateLicenseWithCode,
     getLicenseSettings,
     getClientFeatures,
+    getClientRuntimeMeta,
     hasFeature
 };

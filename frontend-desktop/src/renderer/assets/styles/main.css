@@ -447,3 +447,55 @@ body {
 .items-table tbody, .entry-table tbody { counter-reset: items-row; }
 .items-table tbody tr, .entry-table tbody tr { counter-increment: items-row; }
 .items-table td.row-index::before, .entry-table td.row-index::before { content: counter(items-row); display: inline-block; min-width: 24px; padding: 0 4px; height: 24px; line-height: 24px; border-radius: 4px; text-align: center; background: var(--bg-modifier-2); color: var(--text-color-2); font-weight: 600; font-size: 0.85em; }
+
+/* ============================================
+   FEATURE FLAG: flex_full_layout (Parent/Child Flex-1 Expansion)
+   Active only when enabled per client device
+   ============================================ */
+html.flex-layout-enabled,
+html.flex-layout-enabled body {
+    min-height: 100vh;
+    height: auto;
+}
+
+html.flex-layout-enabled body {
+    display: flex;
+    flex-direction: column;
+}
+
+html.flex-layout-enabled #app {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    width: 100%;
+}
+
+html.flex-layout-enabled #app > .content,
+html.flex-layout-enabled #app > main,
+html.flex-layout-enabled #app > .container,
+html.flex-layout-enabled #app > .page-container,
+html.flex-layout-enabled #app > .main-content {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+}
+
+html.flex-layout-enabled .table-card,
+html.flex-layout-enabled .table-container,
+html.flex-layout-enabled .recent-section {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+html.flex-layout-enabled .table-responsive,
+html.flex-layout-enabled .table-wrapper {
+    flex: 1 1 auto;
+    min-height: 0;
+}

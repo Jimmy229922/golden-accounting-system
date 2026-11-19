@@ -1694,12 +1694,13 @@ window.navManager = {
 };
 
 async function applyStandaloneNavFeatureFlags() {
-    if (isRunningInsideShellFrame()) return;
     const api = window.electronAPI;
     if (!api || typeof api.getClientFeatures !== 'function') return;
     try {
         const res = await api.getClientFeatures();
         const features = (res && res.success && res.features && typeof res.features === 'object') ? res.features : {};
+        document.documentElement.classList.toggle('flex-layout-enabled', Boolean(features.flex_full_layout));
+        if (isRunningInsideShellFrame()) return;
         document.querySelectorAll('[data-feature-flag]').forEach((el) => {
             const flag = el.getAttribute('data-feature-flag');
             el.style.display = features[flag] ? '' : 'none';

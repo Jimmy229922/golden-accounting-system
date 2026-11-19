@@ -1050,3 +1050,52 @@
 .due-payables {
     color: #ef4444;
 }
+
+/* ============================================
+   FEATURE FLAG: flex_full_layout — Dashboard Full Expansion
+   ============================================ */
+html.flex-layout-enabled .content {
+    max-width: 100% !important;
+    width: 100% !important;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 24px 28px;
+}
+
+html.flex-layout-enabled .dashboard-middle-grid {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+html.flex-layout-enabled .dashboard-middle-grid > .card {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+html.flex-layout-enabled .dashboard-middle-grid .recent-table-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+html.flex-layout-enabled .dashboard-bottom-grid {
+    flex: 1 1 auto;
+    align-items: stretch;
+    min-height: 0;
+}
+
+html.flex-layout-enabled .dashboard-bottom-grid > .card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+html.flex-layout-enabled .dashboard-bottom-grid .alerts-list,
+html.flex-layout-enabled .dashboard-bottom-grid .system-status-grid {
+    flex: 1 1 auto;
+}

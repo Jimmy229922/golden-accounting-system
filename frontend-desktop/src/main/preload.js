@@ -322,6 +322,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSalesInvoiceDetails: (invoiceId) => invokeChannel('get-sales-invoice-details', invoiceId),
     getPurchaseInvoiceDetails: (invoiceId) => invokeChannel('get-purchase-invoice-details', invoiceId),
 
-    // Client Feature Flags
-    getClientFeatures: () => invokeChannel('get-client-features')
+    // Client Feature Flags & Runtime Meta
+    getClientFeatures: () => invokeChannel('get-client-features'),
+    getClientRuntimeMeta: () => invokeChannel('get-client-runtime-meta'),
+    openExternalUrl: (url) => invokeChannel('open-external-url', url)
 });
