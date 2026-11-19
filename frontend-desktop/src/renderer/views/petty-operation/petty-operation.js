@@ -418,6 +418,19 @@ function renderSummary() {
     }
 }
 
+function formatOperationInvoicesCell(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '-';
+    const parts = raw
+        .split(/[,،;\n\r/|+]+|\s+و\s+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    if (parts.length <= 1) {
+        return escapeHtml(raw);
+    }
+    return `<div class="op-invoice-badges">${parts.map((num) => `<span class="op-invoice-badge">${escapeHtml(num)}</span>`).join('')}</div>`;
+}
+
 function renderRows() {
     const body = document.getElementById('expensesBody');
     if (!state.rows.length) {
@@ -429,7 +442,7 @@ function renderRows() {
         <tr>
             <td>${escapeHtml(row.document_number || '')}</td>
             <td>${escapeHtml(row.expense_date || '')}</td>
-            <td style="font-weight: 600;">${escapeHtml(row.invoice_number || '-')}</td>
+            <td style="font-weight: 600;">${formatOperationInvoicesCell(row.invoice_number)}</td>
             <td style="font-weight: 700; color: var(--primary-color);">${formatMoney(row.amount)}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
             <td class="notes-cell">${escapeHtml(row.notes || '')}</td>

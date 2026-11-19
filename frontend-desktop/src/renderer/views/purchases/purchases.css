@@ -405,6 +405,11 @@
     direction: ltr;
 }
 
+.items-table .price-input {
+    min-width: 110px;
+    padding-inline: 8px;
+}
+
 .profit-indicator {
     margin-top: 5px;
     padding: 3px 7px;

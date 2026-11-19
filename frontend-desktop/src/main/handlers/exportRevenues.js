@@ -135,9 +135,10 @@ function syncUnderCollectionForInvoice(invoiceNumber, optionalDiscountUsd, under
             SELECT id, total_usd, discount_usd, net_usd
             FROM under_collection_records
             WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
+               OR (',' || REPLACE(LOWER(TRIM(invoice_number)), ' ', '') || ',' LIKE '%,' || LOWER(TRIM(?)) || ',%')
                OR (? IS NOT NULL AND id = ?)
             ORDER BY id ASC
-        `).all(inv, targetId, targetId);
+        `).all(inv, inv, targetId, targetId);
 
     if (!underRecords.length) return;
 
@@ -353,7 +354,14 @@ function register() {
             }
 
             if (payload.invoice_number && !payload.under_collection_id) {
-                const under = db.prepare('SELECT id FROM under_collection_records WHERE LOWER(TRIM(invoice_number)) = LOWER(TRIM(?)) ORDER BY is_collected ASC, id DESC LIMIT 1').get(payload.invoice_number);
+                const under = db.prepare(`
+                    SELECT id
+                    FROM under_collection_records
+                    WHERE LOWER(TRIM(invoice_number)) = LOWER(TRIM(?))
+                       OR (',' || REPLACE(LOWER(TRIM(invoice_number)), ' ', '') || ',' LIKE '%,' || LOWER(TRIM(?)) || ',%')
+                    ORDER BY is_collected ASC, id DESC
+                    LIMIT 1
+                `).get(payload.invoice_number, payload.invoice_number);
                 if (under) {
                     payload.under_collection_id = under.id;
                 }
@@ -435,7 +443,14 @@ function register() {
                 if (existing.under_collection_id && String(existing.invoice_number || '').trim().toLowerCase() === payload.invoice_number.toLowerCase()) {
                     payload.under_collection_id = existing.under_collection_id;
                 } else {
-                    const under = db.prepare('SELECT id FROM under_collection_records WHERE LOWER(TRIM(invoice_number)) = LOWER(TRIM(?)) ORDER BY is_collected ASC, id DESC LIMIT 1').get(payload.invoice_number);
+                    const under = db.prepare(`
+                        SELECT id
+                        FROM under_collection_records
+                        WHERE LOWER(TRIM(invoice_number)) = LOWER(TRIM(?))
+                           OR (',' || REPLACE(LOWER(TRIM(invoice_number)), ' ', '') || ',' LIKE '%,' || LOWER(TRIM(?)) || ',%')
+                        ORDER BY is_collected ASC, id DESC
+                        LIMIT 1
+                    `).get(payload.invoice_number, payload.invoice_number);
                     if (under) {
                         payload.under_collection_id = under.id;
                     }
@@ -541,9 +556,10 @@ function register() {
                            discount_usd, net_usd, remaining_type, remaining_value, remaining_usd, is_collected
                     FROM under_collection_records
                     WHERE LOWER(TRIM(invoice_number)) = LOWER(?)
+                       OR (',' || REPLACE(LOWER(TRIM(invoice_number)), ' ', '') || ',' LIKE '%,' || LOWER(TRIM(?)) || ',%')
                     ORDER BY is_collected ASC, id DESC
                     LIMIT 1
-                `).get(inv);
+                `).get(inv, inv);
             }
 
             if (!underRecord) {

@@ -17,7 +17,8 @@ const state = {
     discountedCount: 0,
     discountedRows: [],
     totalCount: 0,
-    customItemNames: []
+    customItemNames: [],
+    existingInvoiceEntries: []
 };
 
 function buildTopNavHTML() {
@@ -88,7 +89,211 @@ function getContainerText(row) {
 }
 
 let modalItems = [];
+let modalInvoiceNumbers = [];
 let availableItemsList = [];
+
+function parseInvoiceNumbers(rawValue) {
+    const raw = Array.isArray(rawValue) ? rawValue.join(',') : String(rawValue || '');
+    const tokens = raw
+        .split(/[,،;\n\r/|+]+|\s+و\s+|\s+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    const seen = new Set();
+    const unique = [];
+    tokens.forEach((token) => {
+        const key = token.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        unique.push(token);
+    });
+    return unique;
+}
+
+function getExistingInvoiceConflictMap() {
+    const map = new Map();
+    const entries = Array.isArray(state.existingInvoiceEntries) ? state.existingInvoiceEntries : [];
+    entries.forEach((entry) => {
+        if (!entry || !entry.number) return;
+        if (state.editingId && Number(entry.id) === Number(state.editingId)) return;
+        const key = String(entry.number).trim().toLowerCase();
+        if (key && !map.has(key)) {
+            map.set(key, entry);
+        }
+    });
+    return map;
+}
+
+function getDuplicateInvoiceConflicts() {
+    const existingMap = getExistingInvoiceConflictMap();
+    const inputVal = String(document.getElementById('invoiceNumber')?.value || '').trim();
+    const pendingTokens = parseInvoiceNumbers(inputVal);
+    const existingTagKeys = new Set(modalInvoiceNumbers.map((n) => n.toLowerCase()));
+    const dbConflicts = [];
+    const seenDbKeys = new Set();
+    const localDuplicates = [];
+
+    [...modalInvoiceNumbers, ...pendingTokens].forEach((num) => {
+        const key = num.toLowerCase();
+        const match = existingMap.get(key);
+        if (match && !seenDbKeys.has(key)) {
+            seenDbKeys.add(key);
+            dbConflicts.push({ number: num, document_number: match.document_number });
+        }
+    });
+
+    pendingTokens.forEach((num) => {
+        if (existingTagKeys.has(num.toLowerCase())) {
+            localDuplicates.push(num);
+        }
+    });
+
+    return { dbConflicts, localDuplicates, conflictKeySet: seenDbKeys };
+}
+
+function updateInvoiceDuplicateWarningUI() {
+    const warningEl = document.getElementById('invoiceDuplicateWarning');
+    const inputEl = document.getElementById('invoiceNumber');
+    const submitBtn = document.querySelector('#underCollectionForm .submit-btn');
+    const { dbConflicts, localDuplicates, conflictKeySet } = getDuplicateInvoiceConflicts();
+
+    document.querySelectorAll('#invoiceTagsList .uc-invoice-tag').forEach((tagEl) => {
+        const num = String(tagEl.dataset.invoiceValue || '').toLowerCase();
+        tagEl.classList.toggle('is-duplicate', conflictKeySet.has(num));
+    });
+
+    const pendingTokens = parseInvoiceNumbers(inputEl?.value || '');
+    const inputHasConflict = pendingTokens.some((t) => conflictKeySet.has(t.toLowerCase())) || localDuplicates.length > 0;
+    if (inputEl) {
+        inputEl.classList.toggle('is-duplicate', inputHasConflict);
+    }
+
+    if (warningEl) {
+        if (dbConflicts.length > 0) {
+            const details = dbConflicts.map((c) => `${c.number} (${c.document_number})`).join('، ');
+            warningEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i><span>رقم الفاتورة متكرر ومسجل مسبقاً: ${escapeHtml(details)} — لا يمكن الحفظ</span>`;
+            warningEl.style.display = 'flex';
+        } else if (localDuplicates.length > 0) {
+            warningEl.innerHTML = `<i class="fas fa-exclamation-circle"></i><span>رقم الفاتورة (${escapeHtml(localDuplicates.join('، '))}) مضاف بالفعل في نفس العملية</span>`;
+            warningEl.style.display = 'flex';
+        } else {
+            warningEl.innerHTML = '';
+            warningEl.style.display = 'none';
+        }
+    }
+
+    if (submitBtn && !state.isSaving) {
+        const hasBlockingConflict = dbConflicts.length > 0;
+        submitBtn.disabled = hasBlockingConflict;
+        submitBtn.style.opacity = hasBlockingConflict ? '0.55' : '1';
+        submitBtn.style.cursor = hasBlockingConflict ? 'not-allowed' : 'pointer';
+    }
+
+    return { dbConflicts, localDuplicates };
+}
+
+function renderInvoiceTags() {
+    const listEl = document.getElementById('invoiceTagsList');
+    if (!listEl) return;
+    listEl.innerHTML = modalInvoiceNumbers.map((num, idx) => `
+        <span class="uc-invoice-tag" data-invoice-value="${escapeHtml(num)}">
+            <span>${escapeHtml(num)}</span>
+            <button type="button" class="uc-invoice-tag-remove" data-remove-invoice-index="${idx}" title="حذف رقم الفاتورة" aria-label="حذف">
+                <i class="fas fa-times"></i>
+            </button>
+        </span>
+    `).join('');
+
+    listEl.querySelectorAll('[data-remove-invoice-index]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const idx = Number(btn.dataset.removeInvoiceIndex);
+            if (Number.isInteger(idx) && idx >= 0 && idx < modalInvoiceNumbers.length) {
+                modalInvoiceNumbers.splice(idx, 1);
+                renderInvoiceTags();
+            }
+        });
+    });
+
+    updateInvoiceDuplicateWarningUI();
+}
+
+function addInvoiceTagsFromValue(rawValue) {
+    const incoming = parseInvoiceNumbers(rawValue);
+    if (!incoming.length) return false;
+    const existingKeys = new Set(modalInvoiceNumbers.map((n) => n.toLowerCase()));
+    let added = false;
+    incoming.forEach((token) => {
+        const key = token.toLowerCase();
+        if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            modalInvoiceNumbers.push(token);
+            added = true;
+        }
+    });
+    if (added) {
+        renderInvoiceTags();
+    }
+    return added;
+}
+
+function commitPendingInvoiceInput() {
+    const input = document.getElementById('invoiceNumber');
+    if (!input) return;
+    const raw = String(input.value || '').trim();
+    if (!raw) {
+        updateInvoiceDuplicateWarningUI();
+        return;
+    }
+    const incoming = parseInvoiceNumbers(raw);
+    const existingKeys = new Set(modalInvoiceNumbers.map((n) => n.toLowerCase()));
+    const dbConflictMap = getExistingInvoiceConflictMap();
+    const validToAdd = [];
+    const keptDuplicates = [];
+    let hasLocalDup = false;
+
+    incoming.forEach((token) => {
+        const key = token.toLowerCase();
+        if (existingKeys.has(key)) {
+            hasLocalDup = true;
+            keptDuplicates.push(token);
+        } else if (dbConflictMap.has(key)) {
+            keptDuplicates.push(token);
+        } else {
+            existingKeys.add(key);
+            validToAdd.push(token);
+        }
+    });
+
+    if (validToAdd.length > 0) {
+        addInvoiceTagsFromValue(validToAdd);
+    }
+    input.value = keptDuplicates.join(', ');
+    if (hasLocalDup) {
+        showMessage('رقم الفاتورة مضاف بالفعل في نفس العملية', 'warning');
+    }
+    updateInvoiceDuplicateWarningUI();
+}
+
+function getModalInvoiceNumbersString() {
+    const inputVal = document.getElementById('invoiceNumber')?.value || '';
+    const merged = parseInvoiceNumbers([...modalInvoiceNumbers, inputVal]);
+    return merged.join(', ');
+}
+
+function formatUnderCollectionInvoicesHtml(rawValue, isDuplicateInvoice, dupTotalCount) {
+    const numbers = parseInvoiceNumbers(rawValue);
+    if (!numbers.length) {
+        return escapeHtml(rawValue || '');
+    }
+    if (numbers.length === 1) {
+        return isDuplicateInvoice
+            ? `<span class="dup-invoice-badge" title="رقم فاتورة متكرر (${dupTotalCount} فواتير بنفس الرقم)"><i class="fas fa-clone"></i> ${escapeHtml(numbers[0])}</span>`
+            : escapeHtml(numbers[0]);
+    }
+    const chipsHtml = numbers.map((num) => `<span class="uc-invoice-chip-badge">${escapeHtml(num)}</span>`).join('');
+    return isDuplicateInvoice
+        ? `<div class="uc-invoice-badges"><span class="dup-invoice-badge" title="رقم فاتورة متكرر (${dupTotalCount} فواتير بنفس الرقم)"><i class="fas fa-clone"></i></span>${chipsHtml}</div>`
+        : `<div class="uc-invoice-badges">${chipsHtml}</div>`;
+}
 let activeProductDropdownIndex = null;
 let highlightedProductOptionIndex = -1;
 
@@ -853,8 +1058,19 @@ function renderPage() {
                                     <input type="date" id="recordDate" class="form-control" required>
                                 </div>
                                 <div class="form-group">
-                                    <label><i class="fas fa-file-invoice text-icon"></i> رقم الفاتورة <span class="required-asterisk">*</span></label>
-                                    <input type="text" id="invoiceNumber" class="form-control" placeholder="رقم الفاتورة" required>
+                                    <div class="uc-invoice-label-row">
+                                        <label><i class="fas fa-file-invoice text-icon"></i> أرقام الفواتير <span class="required-asterisk">*</span></label>
+                                        <div class="uc-invoice-tags-list" id="invoiceTagsList"></div>
+                                    </div>
+                                    <div class="uc-invoice-tags-box" id="invoiceTagsBox">
+                                        <div class="uc-invoice-input-row">
+                                            <input type="text" id="invoiceNumber" class="form-control" placeholder="اكتب رقم الفاتورة واضغط Enter أو +" autocomplete="off">
+                                            <button type="button" class="btn btn-outline uc-add-invoice-btn" id="addInvoiceTagBtn" title="إضافة رقم فاتورة">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                        <div id="invoiceDuplicateWarning" class="uc-invoice-duplicate-warning" style="display: none;"></div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1055,6 +1271,24 @@ function bindEvents() {
     document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
     document.getElementById('discountUsd')?.addEventListener('input', updateTotalPreview);
 
+    const invoiceInputEl = document.getElementById('invoiceNumber');
+    document.getElementById('addInvoiceTagBtn')?.addEventListener('click', () => {
+        commitPendingInvoiceInput();
+        invoiceInputEl?.focus();
+    });
+    invoiceInputEl?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ',' || e.key === '،') {
+            e.preventDefault();
+            commitPendingInvoiceInput();
+        }
+    });
+    invoiceInputEl?.addEventListener('input', () => {
+        updateInvoiceDuplicateWarningUI();
+    });
+    invoiceInputEl?.addEventListener('blur', () => {
+        commitPendingInvoiceInput();
+    });
+
     document.getElementById('addItemRowBtn')?.addEventListener('click', () => {
         syncModalItemsFromDOM();
         modalItems.push({ name: '', item_name: '', tons: '', price: '', total: 0 });
@@ -1065,7 +1299,9 @@ function bindEvents() {
     document.getElementById('openAddModalBtn').addEventListener('click', async () => {
         closeProductDropdown();
         state.editingId = null;
+        modalInvoiceNumbers = [];
         document.getElementById('underCollectionForm').reset();
+        renderInvoiceTags();
         document.getElementById('recordDate').value = today();
         document.getElementById('discountUsd').value = '';
         document.getElementById('remainingType').value = 'percent';
@@ -1138,7 +1374,8 @@ function openOperationPreview() {
     });
     totalTons = Math.round((totalTons + Number.EPSILON) * 1000) / 1000;
 
-    const invoiceNumber = document.getElementById('invoiceNumber')?.value?.trim() || '---';
+    commitPendingInvoiceInput();
+    const invoiceNumber = getModalInvoiceNumbersString() || '---';
     const recordDate = document.getElementById('recordDate')?.value || today();
     const statement = document.getElementById('statement')?.value?.trim() || '---';
     const operationAmount = roundMoney(totalTons * 2000);
@@ -1371,6 +1608,7 @@ async function loadRecords() {
     state.rows = Array.isArray(result.rows) ? result.rows : [];
     state.discountedRows = Array.isArray(result.discountedRows) ? result.discountedRows : [];
     state.customItemNames = Array.isArray(result.customItemNames) ? result.customItemNames : state.customItemNames;
+    state.existingInvoiceEntries = Array.isArray(result.existingInvoiceEntries) ? result.existingInvoiceEntries : state.existingInvoiceEntries;
     state.page = Number(result.page) || state.page;
     state.pageSize = Number(result.pageSize) || state.pageSize;
     state.totalPages = Number(result.totalPages) || 1;
@@ -1494,7 +1732,7 @@ function renderRows() {
             <td>${escapeHtml(row.record_date || '')}</td>
             <td>${escapeHtml(getContainerText(row))}</td>
             <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
-            <td>${isFullyPaid ? `<i class="fas fa-check-circle" style="color: #22c55e; margin-inline-end: 6px; font-size: 1rem;" title="مسددة بالكامل (المتبقي = صفر)"></i>` : ''}${isDuplicateInvoice ? `<span class="dup-invoice-badge" title="رقم فاتورة متكرر (${dupTotalCount} فواتير بنفس الرقم)"><i class="fas fa-clone"></i> ${escapeHtml(row.invoice_number || '')}</span>` : escapeHtml(row.invoice_number || '')}</td>
+            <td>${isFullyPaid ? `<i class="fas fa-check-circle" style="color: #22c55e; margin-inline-end: 6px; font-size: 1rem;" title="مسددة بالكامل (المتبقي = صفر)"></i>` : ''}${formatUnderCollectionInvoicesHtml(row.invoice_number, isDuplicateInvoice, dupTotalCount)}</td>
             <td>${getTonsPriceDisplay(row)}</td>
             <td>
                 <div class="invoice-total-cell">
@@ -1561,7 +1799,9 @@ async function openEditModal(id) {
     document.getElementById('container20').checked = Boolean(Number(row.container_20));
     document.getElementById('container40').checked = Boolean(Number(row.container_40));
     document.getElementById('statement').value = row.statement || '';
-    document.getElementById('invoiceNumber').value = row.invoice_number || '';
+    modalInvoiceNumbers = parseInvoiceNumbers(row.invoice_number);
+    document.getElementById('invoiceNumber').value = '';
+    renderInvoiceTags();
     document.getElementById('discountUsd').value = row.discount_usd ? Number(row.discount_usd) : '';
     document.getElementById('remainingType').value = row.remaining_type || 'percent';
     document.getElementById('remainingValue').value = row.remaining_value ?? '';
@@ -1668,13 +1908,34 @@ async function saveRecord(event) {
     totalUsd = roundMoney(totalUsd);
     const tonPrice = totalTons > 0 ? roundMoney(totalUsd / totalTons) : (cleanItems[0]?.price || 0);
 
+    commitPendingInvoiceInput();
+    const normalizedInvoiceNumbers = getModalInvoiceNumbersString();
+    if (!normalizedInvoiceNumbers) {
+        showMessage('يرجى إدخال رقم فاتورة واحد على الأقل', 'error');
+        document.getElementById('invoiceNumber')?.focus();
+        return;
+    }
+
+    const { dbConflicts, localDuplicates } = updateInvoiceDuplicateWarningUI();
+    if (dbConflicts.length > 0) {
+        const details = dbConflicts.map((c) => `${c.number} (${c.document_number})`).join('، ');
+        showMessage(`رقم الفاتورة متكرر ومسجل مسبقاً: ${details} — لا يمكن الحفظ`, 'error');
+        document.getElementById('invoiceNumber')?.focus();
+        return;
+    }
+    if (localDuplicates.length > 0) {
+        showMessage(`رقم الفاتورة (${localDuplicates.join('، ')}) مضاف بالفعل في نفس العملية`, 'warning');
+        document.getElementById('invoiceNumber')?.focus();
+        return;
+    }
+
     const payload = {
         record_date: document.getElementById('recordDate').value || today(),
         container_count: document.getElementById('containerCount').value,
         container_20: document.getElementById('container20').checked ? 1 : 0,
         container_40: document.getElementById('container40').checked ? 1 : 0,
         statement: document.getElementById('statement').value,
-        invoice_number: document.getElementById('invoiceNumber').value,
+        invoice_number: normalizedInvoiceNumbers,
         tons_count: totalTons,
         ton_price: tonPrice,
         total_usd: totalUsd,

@@ -729,3 +729,33 @@ body.petty-pdf-mode .petty-table th {
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+.op-invoice-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    max-width: 230px;
+}
+
+.op-invoice-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(6, 182, 212, 0.12);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    color: #0e7490;
+    font-size: 0.8rem;
+    font-weight: 700;
+    direction: ltr;
+    white-space: nowrap;
+}
+
+[data-theme="dark"] .op-invoice-badge {
+    background: rgba(6, 182, 212, 0.18);
+    border-color: rgba(103, 232, 249, 0.35);
+    color: #67e8f9;
+}

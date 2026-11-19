@@ -574,19 +574,40 @@
     border-color: rgba(167, 139, 250, 0.35);
 }
 
+#addRecordModal.petty-modal-overlay {
+    align-items: flex-start;
+    padding: 16px 20px;
+    overflow-y: auto;
+}
+
 #addRecordModal .petty-modal-card {
     width: min(96vw, 1140px);
     max-width: 1140px;
+    max-height: calc(100vh - 32px);
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#addRecordModal #exportRevenuesForm {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
 }
 
 #addRecordModal .petty-modal-header {
     padding: 14px 24px;
+    flex-shrink: 0;
 }
 
 #addRecordModal .petty-modal-body {
     padding: 16px 24px 18px;
-    max-height: none;
-    overflow: visible;
+    max-height: calc(90vh - 130px);
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 #addRecordModal .petty-modal-grid {
@@ -595,4 +616,5 @@
 
 #addRecordModal .petty-modal-footer {
     padding: 12px 24px;
+    flex-shrink: 0;
 }

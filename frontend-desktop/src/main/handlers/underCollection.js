@@ -52,6 +52,74 @@ function normalizeDate(value) {
     return text || new Date().toISOString().slice(0, 10);
 }
 
+function splitInvoiceTokens(rawValue) {
+    const raw = Array.isArray(rawValue) ? rawValue.join(',') : String(rawValue || '');
+    const tokens = raw
+        .split(/[,،;\n\r/|+]+|\s+و\s+|\s+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    const seen = new Set();
+    const unique = [];
+    for (const token of tokens) {
+        const key = token.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(token);
+    }
+    return unique;
+}
+
+function normalizeInvoiceNumbers(rawValue) {
+    return splitInvoiceTokens(rawValue).join(', ');
+}
+
+function getAllExistingInvoiceEntries() {
+    const rows = db.prepare(`
+        SELECT id, document_number, invoice_number
+        FROM under_collection_records
+        WHERE invoice_number IS NOT NULL AND TRIM(invoice_number) != ''
+        ORDER BY id DESC
+    `).all();
+    const entries = [];
+    for (const row of rows) {
+        const tokens = splitInvoiceTokens(row.invoice_number);
+        for (const num of tokens) {
+            entries.push({
+                id: row.id,
+                document_number: row.document_number || `#${row.id}`,
+                number: num
+            });
+        }
+    }
+    return entries;
+}
+
+function findDuplicateInvoiceNumbers(invoiceNumbersStr, excludeId = null) {
+    const incoming = splitInvoiceTokens(invoiceNumbersStr);
+    if (!incoming.length) return [];
+    const existingEntries = getAllExistingInvoiceEntries();
+    const existingMap = new Map();
+    for (const entry of existingEntries) {
+        if (excludeId && Number(entry.id) === Number(excludeId)) continue;
+        const key = entry.number.toLowerCase();
+        if (!existingMap.has(key)) {
+            existingMap.set(key, entry);
+        }
+    }
+    const conflicts = [];
+    for (const num of incoming) {
+        const match = existingMap.get(num.toLowerCase());
+        if (match) {
+            conflicts.push({
+                number: num,
+                document_number: match.document_number,
+                id: match.id
+            });
+        }
+    }
+    return conflicts;
+}
+
 function ensureCustomItemsRegistered(itemsJson) {
     if (!itemsJson || typeof itemsJson !== 'string') return;
     let parsed = null;
@@ -173,7 +241,7 @@ function normalizePayload(data = {}) {
         container_20: isContainer20,
         container_40: isContainer40,
         statement: String(data.statement || '').trim(),
-        invoice_number: String(data.invoice_number || '').trim(),
+        invoice_number: normalizeInvoiceNumbers(data.invoice_number),
         tons_count: tonsCount,
         ton_price: roundMoney(tonPrice),
         total_usd: totalUsd,
@@ -489,11 +557,14 @@ function register() {
                 } catch (_) {}
             }
 
+            const existingInvoiceEntries = getAllExistingInvoiceEntries();
+
             return {
                 success: true,
                 rows,
                 discountedRows,
                 customItemNames,
+                existingInvoiceEntries,
                 total,
                 totalBaseAmount: roundMoney(totalBaseAmount),
                 totalAmount: roundMoney(totalAmount),
@@ -517,6 +588,15 @@ function register() {
             const validationError = validatePayload(payload);
             if (validationError) {
                 return { success: false, error: validationError };
+            }
+
+            const duplicateConflicts = findDuplicateInvoiceNumbers(payload.invoice_number);
+            if (duplicateConflicts.length) {
+                const details = duplicateConflicts.map((c) => `${c.number} (${c.document_number})`).join('، ');
+                return {
+                    success: false,
+                    error: `رقم الفاتورة متكرر ومسجل مسبقاً: ${details} — لا يمكن الحفظ`
+                };
             }
 
             const operationAmount = roundMoney(payload.tons_count * 2000);
@@ -600,6 +680,15 @@ function register() {
             const validationError = validatePayload(payload);
             if (validationError) {
                 return { success: false, error: validationError };
+            }
+
+            const duplicateConflicts = findDuplicateInvoiceNumbers(payload.invoice_number, id);
+            if (duplicateConflicts.length) {
+                const details = duplicateConflicts.map((c) => `${c.number} (${c.document_number})`).join('، ');
+                return {
+                    success: false,
+                    error: `رقم الفاتورة متكرر ومسجل مسبقاً: ${details} — لا يمكن الحفظ`
+                };
             }
 
             const existing = db.prepare('SELECT id, document_number, operation_expense_id FROM under_collection_records WHERE id = ?').get(id);

@@ -101,13 +101,13 @@
                                     <tr>
                                         <th style="width: 4%; text-align: center;">#</th>
                                         <th style="width: 13%;">${t('items.barcode', 'الباركود')}</th>
-                                        <th style="width: 29%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
+                                        <th style="width: 27%;">${t('purchases.tableHeaders.item', 'الصنف')}</th>
                                         <th style="width: 8%;">${t('purchases.tableHeaders.unit', 'الوحدة')}</th>
                                         <th style="width: 11%;">${t('purchases.raw_quantity', 'خام')}</th>
                                         <th style="width: 11%;">${t('purchases.net_1_percent', 'صافي 1%')}</th>
                                         <th style="width: 10%;">${t('purchases.rate_percent', 'المعدل %')}</th>
                                         <th style="width: 10%;">${t('purchases.final_net', 'الكمية النهائية')}</th>
-                                        <th style="width: 10%;">${t('purchases.tableHeaders.price', 'سعر الشراء')}</th>
+                                        <th style="width: 12%;">${t('purchases.tableHeaders.price', 'سعر الشراء')}</th>
                                         <th style="width: 12%;">${t('purchases.tableHeaders.total', 'الإجمالي')}</th>
                                         <th style="width: 4%;"></th>
                                     </tr>
