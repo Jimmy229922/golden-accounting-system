@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { db } = require('../db');
+const { hasFeature } = require('../licenseService');
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -96,7 +97,15 @@ function validatePayload(payload, currentId = null) {
 }
 
 function register() {
-    ipcMain.handle('get-next-external-work-shipment-number', () => {
+    const registerGatedHandle = (channel, handler) => {
+        ipcMain.handle(channel, async (event, ...args) => {
+            if (!hasFeature(db, 'external_work')) {
+                return { success: false, error: 'هذه الميزة غير مفعّلة لهذا الحساب.' };
+            }
+            return handler(event, ...args);
+        });
+    };
+    registerGatedHandle('get-next-external-work-shipment-number', () => {
         try {
             return { success: true, shipmentNumber: getNextShipmentNumber() };
         } catch (error) {
@@ -104,7 +113,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-external-work-shipments', (event, params = {}) => {
+    registerGatedHandle('get-external-work-shipments', (event, params = {}) => {
         try {
             const pageSize = Math.max(1, Number(params.pageSize) || DEFAULT_PAGE_SIZE);
             const page = Math.max(1, Number(params.page) || 1);
@@ -217,7 +226,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-external-work-shipment-by-id', (event, id) => {
+    registerGatedHandle('get-external-work-shipment-by-id', (event, id) => {
         try {
             const shipment = db.prepare('SELECT * FROM external_work_shipments WHERE id = ?').get(id);
             if (!shipment) {
@@ -229,7 +238,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('save-external-work-shipment', (event, data = {}) => {
+    registerGatedHandle('save-external-work-shipment', (event, data = {}) => {
         try {
             const payload = normalizePayload(data);
             const validationError = validatePayload(payload);
@@ -265,7 +274,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('update-external-work-shipment', (event, data = {}) => {
+    registerGatedHandle('update-external-work-shipment', (event, data = {}) => {
         try {
             const id = Number(data.id);
             if (!id) {
@@ -323,7 +332,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('delete-external-work-shipment', (event, id) => {
+    registerGatedHandle('delete-external-work-shipment', (event, id) => {
         try {
             const shipmentId = Number(id);
             if (!shipmentId) {
@@ -350,7 +359,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-external-work-shipment-profitability', (event, id) => {
+    registerGatedHandle('get-external-work-shipment-profitability', (event, id) => {
         try {
             const shipmentId = Number(id);
             if (!shipmentId) {
@@ -395,7 +404,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('save-external-work-shipments-pdf', async (event, payload = {}) => {
+    registerGatedHandle('save-external-work-shipments-pdf', async (event, payload = {}) => {
         try {
             const win = BrowserWindow.fromWebContents(event.sender);
             if (!win) {

@@ -83,6 +83,7 @@ function ensurePortableRootStructure(portableRoot) {
 
     fs.mkdirSync(portableRoot, { recursive: true });
     fs.mkdirSync(path.join(portableRoot, 'PIC'), { recursive: true });
+    fs.mkdirSync(path.join(portableRoot, 'Image'), { recursive: true });
     fs.mkdirSync(path.join(portableRoot, 'DATA'), { recursive: true });
     fs.mkdirSync(path.join(portableRoot, 'DATA', 'userData'), { recursive: true });
 

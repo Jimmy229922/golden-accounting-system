@@ -99,6 +99,7 @@ function renderVoucherModalContent(reportType, transaction, entity) {
         <div class="voucher-notes-card">
             <h4><i class="fas fa-sticky-note"></i> ${t('reports.modal.notes', 'البيان')}</h4>
             <p>${notesText}</p>
+            <div style="margin-top:10px;"><span class="ta-slot" data-ta-tx-id="${transaction.id}" data-ta-voucher="${voucherNumber}"></span></div>
         </div>
     `;
 }
@@ -136,6 +137,7 @@ async function openVoucherModal(reportId, reportType) {
             voucherModalSubtitleEl.textContent = `${t('reports.tableHeaders.invoiceNumber', 'رقم الفاتورة')}: ${transaction.voucher_number || '-'}`;
         }
         renderVoucherModalContent(reportType, transaction, entity);
+        window.treasuryAttachmentsViewer?.hydrateSlots?.(voucherModalBodyEl);
     } catch (error) {
         console.error(error);
         renderVoucherModalError(t('reports.modal.loadError', 'تعذر تحميل بيانات السند.'));

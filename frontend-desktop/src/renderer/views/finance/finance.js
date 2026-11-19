@@ -347,10 +347,11 @@ function renderTransactions(transactions) {
             <td style="font-weight: bold; direction: ltr;">${formatNumberWithCommas(tr.amount)}</td>
             <td>${escapeHtml(tr.description)}</td>
             <td>${escapeHtml(relatedText)}</td>
-            <td>${actions}</td>
+            <td><span class="ta-slot" data-ta-tx-id="${tr.id}" data-ta-voucher="${escapeHtml(tr.voucher_number || '')}" style="margin-left:6px;"></span>${actions}</td>
         `;
         transactionsTableBody.appendChild(row);
     });
+    window.treasuryAttachmentsViewer?.hydrateSlots?.(transactionsTableBody);
 }
 
 function renderPagination() {

@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { db } = require('../db');
+const { hasFeature } = require('../licenseService');
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -122,7 +123,15 @@ function validatePayload(payload, currentId = null) {
 }
 
 function register() {
-    ipcMain.handle('get-next-external-work-sale-number', () => {
+    const registerGatedHandle = (channel, handler) => {
+        ipcMain.handle(channel, async (event, ...args) => {
+            if (!hasFeature(db, 'external_work')) {
+                return { success: false, error: 'هذه الميزة غير مفعّلة لهذا الحساب.' };
+            }
+            return handler(event, ...args);
+        });
+    };
+    registerGatedHandle('get-next-external-work-sale-number', () => {
         try {
             return { success: true, saleNumber: getNextSaleNumber() };
         } catch (error) {
@@ -130,7 +139,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-external-work-available-shipments', (event, params = {}) => {
+    registerGatedHandle('get-external-work-available-shipments', (event, params = {}) => {
         try {
             const excludeSaleId = params && params.excludeSaleId ? Number(params.excludeSaleId) : null;
             const shipments = db.prepare(`
@@ -172,7 +181,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-external-work-sales', (event, params = {}) => {
+    registerGatedHandle('get-external-work-sales', (event, params = {}) => {
         try {
             const pageSize = Math.max(1, Number(params.pageSize) || DEFAULT_PAGE_SIZE);
             const page = Math.max(1, Number(params.page) || 1);
@@ -259,7 +268,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('get-external-work-sale-by-id', (event, id) => {
+    registerGatedHandle('get-external-work-sale-by-id', (event, id) => {
         try {
             const sale = db.prepare('SELECT * FROM external_work_sales WHERE id = ?').get(id);
             if (!sale) {
@@ -271,7 +280,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('save-external-work-sale', (event, data = {}) => {
+    registerGatedHandle('save-external-work-sale', (event, data = {}) => {
         try {
             const payload = normalizePayload(data);
             const validationError = validatePayload(payload);
@@ -301,7 +310,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('update-external-work-sale', (event, data = {}) => {
+    registerGatedHandle('update-external-work-sale', (event, data = {}) => {
         try {
             const id = Number(data.id);
             if (!id) {
@@ -350,7 +359,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('delete-external-work-sale', (event, id) => {
+    registerGatedHandle('delete-external-work-sale', (event, id) => {
         try {
             const saleId = Number(id);
             if (!saleId) {
@@ -369,7 +378,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('save-external-work-sales-pdf', async (event, options = {}) => {
+    registerGatedHandle('save-external-work-sales-pdf', async (event, options = {}) => {
         try {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (!focusedWindow) {

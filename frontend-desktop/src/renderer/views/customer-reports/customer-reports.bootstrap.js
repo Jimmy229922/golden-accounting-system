@@ -498,7 +498,7 @@ function renderStatementTable({ renderAll = false } = {}) {
             <td class="idx-cell">${globalIdx + 1} ${toggleBtn}</td>
             <td>${item.trans_date}</td>
             <td>${typeBadge}</td>
-            <td>${docNumberCellHtml}</td>
+            <td>${docNumberCellHtml}${(item.type === 'payment_in' || item.type === 'payment_out') ? ` <span class="ta-slot" data-ta-tx-id="${item.id}" data-ta-voucher="${escapeHtml(item.doc_number || '')}" style="margin-right:6px;"></span>` : ''}</td>
             <td class="notes-cell">${escapeHtml(item.notes || '—')}</td>
             <td class="amt-cell">${totalInvoiceVal}</td>
             <td class="amt-cell">${paidVal}</td>
@@ -518,6 +518,7 @@ function renderStatementTable({ renderAll = false } = {}) {
             customerReportTableBody.appendChild(detailRow);
         }
     });
+    window.treasuryAttachmentsViewer?.hydrateSlots?.(customerReportTableBody);
 }
 
 async function toggleItems(rowId, btn, type, id) {

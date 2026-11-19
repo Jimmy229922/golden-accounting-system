@@ -1,4 +1,4 @@
-﻿let shellDictionary = {};
+let shellDictionary = {};
 const helpers = window.i18n?.createPageHelpers?.(() => shellDictionary) || { t: (_k, fallback = '') => fallback };
 const t = helpers.t;
 
@@ -34,7 +34,8 @@ const SHELL_HREF_TO_PERMISSION = [
 const shellState = {
     currentHref: '',
     isNavigating: false,
-    visibleItems: SHELL_ITEMS
+    visibleItems: SHELL_ITEMS,
+    clientFeatures: {}
 };
 const NAVIGATION_WATCHDOG_MS = 1800;
 let navigationWatchdogTimer = null;
@@ -189,7 +190,29 @@ function filterShellItemsByPermissions(items, permissions = [], isAdmin = false)
 }
 
 async function loadShellVisibleItems() {
-    shellState.visibleItems = SHELL_ITEMS;
+    let clientFeatures = {};
+    if (window.electronAPI && typeof window.electronAPI.getClientFeatures === 'function') {
+        try {
+            const featRes = await window.electronAPI.getClientFeatures();
+            if (featRes && featRes.success && featRes.features && typeof featRes.features === 'object') {
+                clientFeatures = featRes.features;
+            }
+        } catch (error) {
+            console.error('[shell] failed to load client features:', error);
+        }
+    }
+    shellState.clientFeatures = clientFeatures;
+    const featureFilteredItems = SHELL_ITEMS.reduce((acc, item) => {
+        if (item.featureFlag && !clientFeatures[item.featureFlag]) return acc;
+        if (Array.isArray(item.children)) {
+            const allowedChildren = item.children.filter((child) => !child.featureFlag || Boolean(clientFeatures[child.featureFlag]));
+            if (allowedChildren.length > 0) acc.push({ ...item, children: allowedChildren });
+            return acc;
+        }
+        acc.push(item);
+        return acc;
+    }, []);
+    shellState.visibleItems = featureFilteredItems;
 
     const api = window.electronAPI;
     if (!api || typeof api.getMyPermissions !== 'function') {
@@ -208,7 +231,7 @@ async function loadShellVisibleItems() {
         }
 
         shellState.visibleItems = filterShellItemsByPermissions(
-            SHELL_ITEMS,
+            featureFilteredItems,
             result.permissions,
             result.isAdmin
         );
@@ -369,6 +392,10 @@ function navigateTo(rawTarget, options = {}) {
         targetUrl = toUrl(rawTarget || DEFAULT_ROUTE);
     } catch (_e) {
         return false;
+    }
+
+    if (normalizePath(targetUrl.pathname).includes('/views/external-work/') && !shellState.clientFeatures?.external_work) {
+        targetUrl = toUrl(DEFAULT_ROUTE);
     }
 
     if (!isViewsUrl(targetUrl)) {

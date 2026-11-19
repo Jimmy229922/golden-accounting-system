@@ -167,6 +167,7 @@ function buildTopNavItems(prefix) {
         {
             key: '',
             fallback: 'شغل خارجي',
+            featureFlag: 'external_work',
             children: [
                 { key: '', fallback: 'المشتريات', href: withPrefix('external-work/index.html') },
                 { key: '', fallback: 'المبيعات', href: withPrefix('external-work/sales.html') }
@@ -1300,7 +1301,7 @@ function buildTopNavDropdown(item, t) {
         .join('');
 
     return `
-        <li class="dropdown">
+        <li class="dropdown"${item.featureFlag ? ` data-feature-flag="${item.featureFlag}" style="display:none;"` : ''}>
             <a href="#"${activeClass}>${t(item.key, item.fallback)}</a>
             <div class="dropdown-content">
                 ${childrenHtml}
@@ -1691,6 +1692,24 @@ window.navManager = {
     openSalesShiftCloseModal,
     closeSalesShiftCloseModal
 };
+
+async function applyStandaloneNavFeatureFlags() {
+    if (isRunningInsideShellFrame()) return;
+    const api = window.electronAPI;
+    if (!api || typeof api.getClientFeatures !== 'function') return;
+    try {
+        const res = await api.getClientFeatures();
+        const features = (res && res.success && res.features && typeof res.features === 'object') ? res.features : {};
+        document.querySelectorAll('[data-feature-flag]').forEach((el) => {
+            const flag = el.getAttribute('data-feature-flag');
+            el.style.display = features[flag] ? '' : 'none';
+        });
+    } catch (_) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(applyStandaloneNavFeatureFlags, 50);
+});
 
 initializeAppUpdateFloatingIndicator();
 

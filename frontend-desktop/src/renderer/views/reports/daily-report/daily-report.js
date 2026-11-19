@@ -485,7 +485,7 @@ function renderReportData(data) {
 
     renderTableBody('treasuryIncomeBody', income.treasuryIncome, (row) => `
         <tr>
-            <td><strong>#${row.voucher_number || row.id}</strong></td>
+            <td><strong>#${row.voucher_number || row.id}</strong> <span class="ta-slot" data-ta-tx-id="${row.id}" data-ta-voucher="${escapeHtml(row.voucher_number || '')}" style="margin-right:6px;"></span></td>
             <td>${escapeHtml(row.customer_name || '—')}</td>
             <td>${escapeHtml(row.description || '—')}</td>
             <td class="text-green font-weight-bold">${formatCurrency(row.amount)}</td>
@@ -521,12 +521,13 @@ function renderReportData(data) {
 
     renderTableBody('treasuryExpenseBody', expense.treasuryExpense, (row) => `
         <tr>
-            <td><strong>#${row.voucher_number || row.id}</strong></td>
+            <td><strong>#${row.voucher_number || row.id}</strong> <span class="ta-slot" data-ta-tx-id="${row.id}" data-ta-voucher="${escapeHtml(row.voucher_number || '')}" style="margin-right:6px;"></span></td>
             <td>${escapeHtml(row.party_name || '—')}</td>
             <td>${escapeHtml(row.description || '—')}</td>
             <td class="text-red font-weight-bold">${formatCurrency(row.amount)}</td>
         </tr>
     `, 4);
+    window.treasuryAttachmentsViewer?.hydrateSlots?.(document.getElementById('app'));
 }
 
 function renderTableBody(containerId, list, rowRenderer, colSpan) {

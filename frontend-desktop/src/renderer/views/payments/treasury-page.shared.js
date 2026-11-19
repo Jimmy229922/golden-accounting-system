@@ -8,6 +8,10 @@
         let suggestedVoucherNumber = '';
         let currentEditId = null;
         let isSubmitting = false;
+        let attachmentsEnabled = false;
+        let pendingAttachments = [];
+        let existingEditAttachments = [];
+        let recentAttachmentCounts = {};
 
         const { t, fmt } = window.i18n?.createPageHelpers?.(() => ar) || { t: (k, f = '') => f, fmt: (t, v = {}) => String(t || '') };
         const tx = (suffix, fallback = '') => t(`${config.i18nPrefix}.${suffix}`, fallback);
@@ -82,9 +86,93 @@
                     await searchVoucher();
                 }
 
+                await loadExistingAttachmentsForEdit(target.id);
+
                 showToast(text('toastLoadedFromReport'), 'success');
             } catch (error) {
                 console.error(`Error loading ${config.pageId} voucher from report:`, error);
+            }
+        }
+
+        function escapeHtmlSimple(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function initAttachmentsFeature() {
+            attachmentsEnabled = Boolean(await window.treasuryAttachmentsViewer?.isEnabled?.());
+            const section = document.getElementById('treasuryAttachmentsSection');
+            if (section) {
+                section.style.display = attachmentsEnabled ? '' : 'none';
+            }
+        }
+
+        function renderSelectedAttachmentsList() {
+            const listEl = document.getElementById('treasuryAttachmentsList');
+            if (!listEl) return;
+
+            const existingHtml = existingEditAttachments.map((item) => {
+                const isPdf = item.mime_type === 'application/pdf';
+                const sizeText = window.treasuryAttachmentsViewer?.formatBytes?.(item.file_size) || '';
+                return `
+                    <div class="ta-file-chip ta-file-saved">
+                        <span class="ta-file-icon">${isPdf ? '<i class="fas fa-file-pdf" style="color:#ef4444;"></i>' : '<i class="fas fa-image" style="color:#2563eb;"></i>'}</span>
+                        <span class="ta-file-name" title="${escapeHtmlSimple(item.original_name)}">${escapeHtmlSimple(item.original_name)}</span>
+                        <span class="ta-file-size">${sizeText}</span>
+                        <button type="button" class="ta-chip-btn" data-action="view-attachments" data-tx-id="${item.transaction_id}" title="معاينة"><i class="fas fa-eye"></i></button>
+                        <button type="button" class="ta-chip-btn ta-chip-del" data-action="delete-existing-attachment" data-attachment-id="${item.id}" title="حذف"><i class="fas fa-times"></i></button>
+                    </div>
+                `;
+            }).join('');
+
+            const pendingHtml = pendingAttachments.map((item, idx) => {
+                const isPdf = item.mimeType === 'application/pdf';
+                const sizeText = window.treasuryAttachmentsViewer?.formatBytes?.(item.fileSize) || '';
+                const thumbHtml = !isPdf && item.previewUrl
+                    ? `<img class="ta-file-thumb" src="${item.previewUrl}" alt="">`
+                    : `<span class="ta-file-icon"><i class="fas fa-file-pdf" style="color:#ef4444;"></i></span>`;
+                return `
+                    <div class="ta-file-chip">
+                        ${thumbHtml}
+                        <span class="ta-file-name" title="${escapeHtmlSimple(item.originalName)}">${escapeHtmlSimple(item.originalName)}</span>
+                        <span class="ta-file-size">${sizeText}</span>
+                        <button type="button" class="ta-chip-btn ta-chip-del" data-action="remove-pending-attachment" data-pending-idx="${idx}" title="إزالة"><i class="fas fa-times"></i></button>
+                    </div>
+                `;
+            }).join('');
+
+            listEl.innerHTML = existingHtml + pendingHtml;
+        }
+
+        async function loadExistingAttachmentsForEdit(txId) {
+            if (!attachmentsEnabled || !txId) {
+                existingEditAttachments = [];
+                renderSelectedAttachmentsList();
+                return;
+            }
+            try {
+                const res = await window.electronAPI.getTreasuryAttachments(txId);
+                existingEditAttachments = (res && res.success && Array.isArray(res.attachments)) ? res.attachments : [];
+            } catch (_) {
+                existingEditAttachments = [];
+            }
+            renderSelectedAttachmentsList();
+        }
+
+        async function handleAttachmentFilesSelected(fileList) {
+            if (!attachmentsEnabled || !window.treasuryAttachmentsViewer) return;
+            const currentCount = existingEditAttachments.length + pendingAttachments.length;
+            const { files, errors } = await window.treasuryAttachmentsViewer.prepareFilesForUpload(fileList, currentCount);
+            if (errors && errors.length > 0) {
+                showToast(errors[0], 'warning');
+            }
+            if (files && files.length > 0) {
+                pendingAttachments = pendingAttachments.concat(files);
+                renderSelectedAttachmentsList();
             }
         }
 
@@ -117,6 +205,19 @@
                 }
             });
             document.getElementById('voucherSearchBtn').addEventListener('click', searchVoucher);
+
+            const pickBtn = document.getElementById('treasuryAttachmentPickBtn');
+            const fileInput = document.getElementById('treasuryAttachmentInput');
+            if (pickBtn && fileInput) {
+                pickBtn.addEventListener('click', () => fileInput.click());
+                fileInput.addEventListener('change', async (e) => {
+                    const files = e.target.files;
+                    if (files && files.length > 0) {
+                        await handleAttachmentFilesSelected(files);
+                    }
+                    fileInput.value = '';
+                });
+            }
         }
 
         function normalizeNumberString(value) {
@@ -222,6 +323,55 @@
                 if (resultContainer) {
                     resultContainer.style.display = 'none';
                 }
+                return;
+            }
+
+            if (action === 'remove-pending-attachment') {
+                const idx = Number(actionEl.dataset.pendingIdx);
+                if (Number.isInteger(idx) && idx >= 0 && idx < pendingAttachments.length) {
+                    pendingAttachments.splice(idx, 1);
+                    renderSelectedAttachmentsList();
+                }
+                return;
+            }
+
+            if (action === 'delete-existing-attachment') {
+                const attachmentId = Number(actionEl.dataset.attachmentId);
+                if (attachmentId > 0) {
+                    (async () => {
+                        const confirmed = typeof window.showConfirmDialog === 'function'
+                            ? await window.showConfirmDialog('هل أنت متأكد من حذف هذا المرفق نهائياً؟')
+                            : window.confirm('هل أنت متأكد من حذف هذا المرفق نهائياً؟');
+                        if (!confirmed) return;
+                        const res = await window.electronAPI.deleteTreasuryAttachment(attachmentId);
+                        if (res && res.success) {
+                            existingEditAttachments = existingEditAttachments.filter((a) => Number(a.id) !== attachmentId);
+                            renderSelectedAttachmentsList();
+                            showToast('تم حذف المرفق بنجاح', 'success');
+                            loadData();
+                        } else {
+                            showToast(res?.error || 'تعذر حذف المرفق.', 'error');
+                        }
+                    })();
+                }
+                return;
+            }
+
+            if (action === 'view-attachments') {
+                const txId = Number(actionEl.dataset.txId);
+                const voucherNumber = actionEl.dataset.voucher || '';
+                if (txId > 0 && window.treasuryAttachmentsViewer) {
+                    window.treasuryAttachmentsViewer.openViewer(txId, {
+                        voucherNumber,
+                        allowManage: true,
+                        onChanged: () => {
+                            loadData();
+                            if (currentEditId && Number(currentEditId) === txId) {
+                                loadExistingAttachmentsForEdit(txId);
+                            }
+                        }
+                    });
+                }
             }
         }
 
@@ -280,6 +430,14 @@
                 recentTransactions = transactions
                     .filter((tr) => tr.type === config.transactionType && tr.customer_id)
                     .slice(0, 5);
+
+                if (attachmentsEnabled && window.treasuryAttachmentsViewer && recentTransactions.length > 0) {
+                    recentAttachmentCounts = await window.treasuryAttachmentsViewer.getCounts(
+                        recentTransactions.map((tr) => tr.id)
+                    );
+                } else {
+                    recentAttachmentCounts = {};
+                }
 
                 renderRecentTransactions();
                 calculateStats();
@@ -424,7 +582,12 @@
 
         function renderRecentTransactions() {
             if (!renderer) return;
-            renderer.renderRecentTransactions({ recentTransactions, allEntities });
+            renderer.renderRecentTransactions({
+                recentTransactions,
+                allEntities,
+                attachmentCounts: recentAttachmentCounts,
+                attachmentsEnabled
+            });
         }
 
         function calculateStats() {
@@ -519,6 +682,22 @@
                 }
 
                 if (result.success) {
+                    const savedTxId = currentEditId ? Number(currentEditId) : Number(result.id);
+                    if (attachmentsEnabled && pendingAttachments.length > 0 && savedTxId > 0) {
+                        const attachRes = await window.electronAPI.saveTreasuryAttachments({
+                            transactionId: savedTxId,
+                            files: pendingAttachments.map((f) => ({
+                                originalName: f.originalName,
+                                mimeType: f.mimeType,
+                                base64Data: f.base64Data
+                            }))
+                        });
+                        if (!attachRes || !attachRes.success) {
+                            showToast(attachRes?.error || 'تم حفظ السند لكن تعذر حفظ بعض المرفقات.', 'warning');
+                        }
+                        pendingAttachments = [];
+                        renderSelectedAttachmentsList();
+                    }
                     showToast(text('toastSaveSuccess'), 'success');
                     if (currentEditId) {
                         setTimeout(() => {
@@ -582,9 +761,12 @@
                     : [];
 
                 if (res.success && results.length > 0) {
+                    const searchCounts = (attachmentsEnabled && window.treasuryAttachmentsViewer)
+                        ? await window.treasuryAttachmentsViewer.getCounts(results.map((r) => r.id))
+                        : {};
                     resultContainer.style.display = 'block';
                     resultContainer.innerHTML = renderer
-                        ? renderer.renderVoucherSearchResults(results)
+                        ? renderer.renderVoucherSearchResults(results, searchCounts, attachmentsEnabled)
                         : '';
                 } else {
                     resultContainer.style.display = 'block';
@@ -599,6 +781,7 @@
             ar = (await window.i18n?.loadArabicDictionary?.()) || {};
             renderPage();
             initializeElements();
+            await initAttachmentsFeature();
             await loadData();
             await handleVoucherViewRequest();
         });

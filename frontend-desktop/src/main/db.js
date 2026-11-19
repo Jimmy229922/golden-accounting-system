@@ -1495,6 +1495,20 @@ function initDB() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_external_work_sales_number ON external_work_sales(sale_number)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_external_work_sales_shipment ON external_work_sales(shipment_id)`);
 
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS treasury_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id INTEGER NOT NULL,
+            file_name TEXT NOT NULL,
+            original_name TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            file_size INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (transaction_id) REFERENCES treasury_transactions(id) ON DELETE CASCADE
+        )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_treasury_attachments_tx_id ON treasury_attachments(transaction_id)`);
+
     console.log('Database initialized at:', dbPath);
 }
 

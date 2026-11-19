@@ -119,6 +119,19 @@
                                     <textarea id="description" class="form-control" rows="3" placeholder="${text('descriptionPlaceholder')}"></textarea>
                                 </div>
 
+                                <div class="form-group treasury-attachments-section" id="treasuryAttachmentsSection" style="display:none;">
+                                    <label><i class="fas fa-paperclip"></i> ${t('payments.attachments.attachmentsLabel', 'مرفقات التحويل / الاستلام (صور أو PDF)')}</label>
+                                    <div class="ta-upload-bar">
+                                        <button type="button" class="ta-upload-btn" id="treasuryAttachmentPickBtn">
+                                            <i class="fas fa-cloud-upload-alt"></i>
+                                            ${t('payments.attachments.addFilesBtn', 'إضافة صور أو PDF')}
+                                        </button>
+                                        <span class="ta-upload-hint">حد أقصى 5 ملفات • 5 ميجا للصورة أو PDF • ضغط تلقائي للصور</span>
+                                        <input type="file" id="treasuryAttachmentInput" accept="image/jpeg,image/png,image/webp,application/pdf" multiple hidden>
+                                    </div>
+                                    <div class="ta-selected-list" id="treasuryAttachmentsList"></div>
+                                </div>
+
                                 <button type="submit" class="btn-submit ${config.visuals.submitClass}" id="submitBtn">
                                     <i class="fas fa-save"></i>
                                     ${text('submitBtn')}
@@ -239,7 +252,7 @@
             `;
         }
 
-        function renderRecentTransactions({ recentTransactions, allEntities }) {
+        function renderRecentTransactions({ recentTransactions, allEntities, attachmentCounts = {}, attachmentsEnabled = false }) {
             const container = document.getElementById('recentTransactions');
 
             if (recentTransactions.length === 0) {
@@ -266,14 +279,24 @@
                                     <span>${escapeHtml(tr.transaction_date)} - ${escapeHtml(tr.description || text('defaultDescription'))}</span>
                                 </div>
                             </div>
-                            <div class="transaction-amount ${config.visuals.transactionClass}">${config.visuals.transactionAmountPrefix}${formatMoney(tr.amount)}</div>
+                            <div class="transaction-right-actions">
+                                ${
+                                    attachmentsEnabled && Number(attachmentCounts[tr.id] || 0) > 0
+                                        ? `<button type="button" class="ta-trigger-btn" data-action="view-attachments" data-tx-id="${tr.id}" data-voucher="${escapeHtml(tr.voucher_number || '')}" title="معاينة المرفقات">
+                                                <i class="fas fa-paperclip"></i>
+                                                <span>${Number(attachmentCounts[tr.id])}</span>
+                                           </button>`
+                                        : ''
+                                }
+                                <div class="transaction-amount ${config.visuals.transactionClass}">${config.visuals.transactionAmountPrefix}${formatMoney(tr.amount)}</div>
+                            </div>
                         </div>
                     `;
                 })
                 .join('');
         }
 
-        function renderVoucherSearchResults(results) {
+        function renderVoucherSearchResults(results, attachmentCounts = {}, attachmentsEnabled = false) {
             return `
                 <div class="voucher-result-header">
                     <i class="fas fa-file-alt"></i>
@@ -308,6 +331,17 @@
                             <span class="voucher-result-label">${text('descriptionLabel')}:</span>
                             <span>${escapeHtml(tr.description || '\u2014')}</span>
                         </div>
+                        ${
+                            attachmentsEnabled && Number(attachmentCounts[tr.id] || 0) > 0
+                                ? `<div class="voucher-result-row">
+                                        <span class="voucher-result-label">المرفقات:</span>
+                                        <button type="button" class="ta-trigger-btn" data-action="view-attachments" data-tx-id="${tr.id}" data-voucher="${escapeHtml(tr.voucher_number || '')}">
+                                            <i class="fas fa-paperclip"></i>
+                                            <span>معاينة (${Number(attachmentCounts[tr.id])})</span>
+                                        </button>
+                                   </div>`
+                                : ''
+                        }
                     </div>
                 `;
                         }

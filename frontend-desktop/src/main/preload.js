@@ -105,6 +105,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateTreasuryTransaction: (data) => invokeChannel('update-treasury-transaction', data),
     deleteTreasuryTransaction: (id) => invokeChannel('delete-treasury-transaction', id),
     searchTreasuryByVoucher: (voucherNumber) => invokeChannel('search-treasury-by-voucher', voucherNumber),
+    getTreasuryAttachments: (transactionId) => invokeChannel('get-treasury-attachments', transactionId),
+    getTreasuryAttachmentCounts: (transactionIds) => invokeChannel('get-treasury-attachment-counts', transactionIds),
+    saveTreasuryAttachments: (payload) => invokeChannel('save-treasury-attachments', payload),
+    readTreasuryAttachment: (attachmentId) => invokeChannel('read-treasury-attachment', attachmentId),
+    openTreasuryAttachmentExternal: (attachmentId) => invokeChannel('open-treasury-attachment-external', attachmentId),
+    deleteTreasuryAttachment: (attachmentId) => invokeChannel('delete-treasury-attachment', attachmentId),
 
     // Petty Expenses API
     getNextPettyExpenseNumber: () => invokeChannel('get-next-petty-expense-number'),
