@@ -213,6 +213,9 @@ serve(async (req: Request) => {
       };
 
       const signature = await signCertificatePayload(certPayload);
+      const features = (activeRec.features && typeof activeRec.features === "object" && !Array.isArray(activeRec.features))
+        ? activeRec.features
+        : {};
 
       return new Response(JSON.stringify({
         success: true,
@@ -220,6 +223,7 @@ serve(async (req: Request) => {
         signature,
         is_valid: isValid,
         remaining_days: remainingDays,
+        features,
         server_time: now.toISOString()
       }), {
         status: 200,
@@ -301,6 +305,9 @@ serve(async (req: Request) => {
       };
 
       const signature = await signCertificatePayload(certPayload);
+      const features = (renewed.features && typeof renewed.features === "object" && !Array.isArray(renewed.features))
+        ? renewed.features
+        : {};
 
       return new Response(JSON.stringify({
         success: true,
@@ -309,6 +316,7 @@ serve(async (req: Request) => {
         signature,
         is_valid: true,
         expires_at: newExpiry.toISOString(),
+        features,
         server_time: now.toISOString()
       }), {
         status: 200,

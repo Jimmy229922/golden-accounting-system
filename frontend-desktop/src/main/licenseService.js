@@ -24,7 +24,7 @@ function getLicenseSettings(accountingDb) {
     try {
         const rows = accountingDb.prepare(`
             SELECT key, value FROM settings 
-            WHERE key IN ('company_id', 'companyName', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at')
+            WHERE key IN ('company_id', 'companyName', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at', 'client_features')
         `).all();
         const map = {};
         rows.forEach(r => { map[r.key] = r.value; });
@@ -32,6 +32,42 @@ function getLicenseSettings(accountingDb) {
     } catch (_) {
         return {};
     }
+}
+
+function parseFeaturesObject(rawValue) {
+    if (!rawValue) return {};
+    if (typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+        return rawValue;
+    }
+    try {
+        const parsed = JSON.parse(String(rawValue));
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function saveClientFeatures(accountingDb, featuresValue) {
+    const normalized = parseFeaturesObject(featuresValue);
+    saveSetting(accountingDb, 'client_features', JSON.stringify(normalized));
+    return normalized;
+}
+
+function getClientFeatures(accountingDb) {
+    try {
+        const row = accountingDb.prepare("SELECT value FROM settings WHERE key = 'client_features' LIMIT 1").get();
+        return parseFeaturesObject(row?.value);
+    } catch (_) {
+        return {};
+    }
+}
+
+function hasFeature(accountingDb, featureKey, defaultValue = false) {
+    const features = getClientFeatures(accountingDb);
+    if (Object.prototype.hasOwnProperty.call(features, featureKey)) {
+        return Boolean(features[featureKey]);
+    }
+    return Boolean(defaultValue);
 }
 
 function saveSetting(accountingDb, key, value) {
@@ -217,6 +253,9 @@ async function getLicenseStatus(accountingDb) {
     });
 
     if (gatewayRes && gatewayRes.ok && gatewayRes.data && gatewayRes.data.success) {
+        if (gatewayRes.data.features && typeof gatewayRes.data.features === 'object') {
+            saveClientFeatures(accountingDb, gatewayRes.data.features);
+        }
         const cert = gatewayRes.data.certificate;
         const signature = gatewayRes.data.signature;
         if (cert && signature && verifyServerCertificate(cert, signature)) {
@@ -558,6 +597,9 @@ async function activateLicenseWithCode(accountingDb, code) {
                     stmt.run({ key: 'license_signature', value: sig });
                     stmt.run({ key: 'license_last_verified_at', value: new Date().toISOString() });
                 }
+                if (gatewayRes.data.features && typeof gatewayRes.data.features === 'object') {
+                    stmt.run({ key: 'client_features', value: JSON.stringify(parseFeaturesObject(gatewayRes.data.features)) });
+                }
             });
             tx();
 
@@ -619,5 +661,7 @@ module.exports = {
     getLicenseStatus,
     isLicenseCurrentlyValid,
     activateLicenseWithCode,
-    getLicenseSettings
+    getLicenseSettings,
+    getClientFeatures,
+    hasFeature
 };

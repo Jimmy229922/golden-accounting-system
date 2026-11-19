@@ -314,5 +314,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Invoice Details API (for Global Search)
     getSalesInvoiceDetails: (invoiceId) => invokeChannel('get-sales-invoice-details', invoiceId),
-    getPurchaseInvoiceDetails: (invoiceId) => invokeChannel('get-purchase-invoice-details', invoiceId)
+    getPurchaseInvoiceDetails: (invoiceId) => invokeChannel('get-purchase-invoice-details', invoiceId),
+
+    // Client Feature Flags
+    getClientFeatures: () => invokeChannel('get-client-features')
 });

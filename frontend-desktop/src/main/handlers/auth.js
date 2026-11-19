@@ -957,6 +957,14 @@ function register() {
         return await licenseService.activateLicenseWithCode(db, code);
     });
 
+    ipcMain.handle('get-client-features', () => {
+        try {
+            return { success: true, features: licenseService.getClientFeatures(db) };
+        } catch (error) {
+            return { success: false, features: {}, error: error.message };
+        }
+    });
+
     ipcMain.handle('get-recovery-challenge', () => {
         try {
             return { success: true, challenge: calculateRecoveryChallenge() };
