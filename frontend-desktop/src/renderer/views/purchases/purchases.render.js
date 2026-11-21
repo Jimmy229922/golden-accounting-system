@@ -167,16 +167,27 @@
         <div id="baskeelModal" class="baskeel-modal-overlay" aria-hidden="true">
             <div class="baskeel-modal" role="dialog" aria-modal="true" aria-labelledby="baskeelModalTitle">
                 <div class="baskeel-modal-header">
-                    <h3 id="baskeelModalTitle">${t('purchases.baskeels_weights', 'أوزان البساكيل')}</h3>
+                    <div class="baskeel-modal-title-group">
+                        <h3 id="baskeelModalTitle">${t('purchases.baskeels_weights', 'أوزان البساكيل')}</h3>
+                        <span id="baskeelModalItemLabel" class="baskeel-item-badge" style="display: none;"></span>
+                    </div>
                     <button type="button" class="baskeel-modal-close" data-action="close-weights" aria-label="${t('common.actions.cancel', 'إلغاء')}">
                         ×
                     </button>
                 </div>
                 <div class="baskeel-modal-body">
+                    <div class="baskeel-toolbar">
+                        <span id="baskeelWeightsCount" class="baskeel-count-badge">0 وزنة</span>
+                        <div class="baskeel-toolbar-actions">
+                            <button class="btn btn-outline baskeel-add-btn" type="button" data-action="add-weight">
+                                + ${t('purchases.add_weight', 'إضافة وزن')}
+                            </button>
+                            <button class="btn btn-outline baskeel-clear-btn" type="button" data-action="clear-weights">
+                                مسح الكل
+                            </button>
+                        </div>
+                    </div>
                     <div id="baskeelWeightsList" class="baskeel-weights-list"></div>
-                    <button class="btn btn-outline baskeel-add-btn" type="button" data-action="add-weight">
-                        ${t('purchases.add_weight', 'إضافة وزن')}
-                    </button>
                 </div>
                 <div class="baskeel-modal-footer">
                     <div class="baskeel-summary">
@@ -188,14 +199,14 @@
                             <span>خصم 1%</span>
                             <strong id="baskeelDiscountTotal">0</strong>
                         </div>
-                        <div class="baskeel-summary-item">
+                        <div class="baskeel-summary-item baskeel-summary-item-net">
                             <span>${t('purchases.net_quantity', 'الكمية الصافية')}</span>
                             <strong id="baskeelNetTotal">0</strong>
                         </div>
                     </div>
                     <div class="baskeel-actions">
-                        <button class="btn btn-secondary" type="button" data-action="close-weights">${t('common.actions.cancel', 'إلغاء')}</button>
-                        <button class="btn btn-success" type="button" data-action="save-weights">${t('common.actions.save', 'حفظ')}</button>
+                        <button class="btn btn-outline baskeel-cancel-btn" type="button" data-action="close-weights">${t('common.actions.cancel', 'إلغاء')}</button>
+                        <button class="btn btn-success baskeel-save-btn" type="button" data-action="save-weights">${t('common.actions.save', 'حفظ')}</button>
                     </div>
                 </div>
             </div>

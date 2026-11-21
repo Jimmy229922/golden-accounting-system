@@ -18,6 +18,13 @@ document.addEventListener('DOMContentLoaded', async () => {    // Reset submitti
         purchasesState.ar = await window.i18n.loadArabicDictionary();
     }
 
+    try {
+        if (window.electronAPI && typeof window.electronAPI.getClientFeatures === 'function') {
+            const featRes = await window.electronAPI.getClientFeatures();
+            purchasesState.roundFiftyEnabled = Boolean(featRes?.success && featRes?.features?.purchase_round_fifty);
+        }
+    } catch (_) {}
+
     purchasesRender.renderPage({ t, getNavHTML: buildTopNavHTML });
 
     if (window.FieldSystem && typeof window.FieldSystem.enable === 'function') {
@@ -69,6 +76,7 @@ function initializeElements() {
             onOpenWeights: openWeightsModal,
             onOpenQuickRaw: openQuickRawModal,
             onAddWeight: addWeightRow,
+            onClearWeights: clearWeightsInModal,
             onRemoveWeight: removeWeightRow,
             onSaveWeights: saveWeightsFromModal,
             onSaveQuickRaw: saveQuickRawModal,
@@ -137,6 +145,22 @@ function initializeElements() {
                     input.setSelectionRange(start - 2, start - 2);
                     input.dispatchEvent(new Event('input'));
                 }
+            }
+        });
+    }
+
+    const paymentTypeSelect = document.getElementById('paymentType');
+    if (paymentTypeSelect) {
+        paymentTypeSelect.addEventListener('change', () => {
+            if (isEditLocked()) return;
+            resetCustomRemainingState();
+            if (paymentTypeSelect.value === 'cash') {
+                calculateInvoiceTotal({ syncCashPaid: true });
+            } else {
+                if (purchasesState.dom.paidAmountInput) {
+                    purchasesState.dom.paidAmountInput.value = '0';
+                }
+                calculateInvoiceTotal({ syncCashPaid: false });
             }
         });
     }
@@ -895,17 +919,27 @@ function updateSelectedItemAvailability(row) {
     purchasesState.dom.selectedItemAvailability.textContent = `المتاح الحالي: ${formatQty(availableQty)}`;
 }
 
-function renderWeightsRows(weights) {
+function refreshBaskeelRowIndices() {
+    const list = purchasesState.dom.baskeelWeightsList;
+    if (!list) return;
+    list.querySelectorAll('.baskeel-weight-row').forEach((row, index) => {
+        const indexEl = row.querySelector('.baskeel-weight-index');
+        if (indexEl) indexEl.textContent = String(index + 1);
+    });
+}
+
+function renderWeightsRows(weights = []) {
     const list = purchasesState.dom.baskeelWeightsList;
     if (!list) return;
 
     list.innerHTML = '';
     const safeWeights = Array.isArray(weights) && weights.length > 0 ? weights : [''];
 
-    safeWeights.forEach((value) => {
+    safeWeights.forEach((value, index) => {
         const row = document.createElement('div');
         row.className = 'baskeel-weight-row';
         row.innerHTML = `
+            <span class="baskeel-weight-index">${index + 1}</span>
             <input type="text" class="form-control baskeel-weight-input" autocomplete="off" value="${Number.isFinite(Number(value)) && Number(value) > 0 ? value : ''}" placeholder="0">
             <button type="button" class="baskeel-remove-btn" data-action="remove-weight">×</button>
         `;
@@ -925,6 +959,11 @@ function updateBaskeelSummary() {
     purchasesState.dom.baskeelRawTotal.textContent = rawTotal > 0 ? formatBaskeelNumber(rawTotal) : '0';
     purchasesState.dom.baskeelDiscountTotal.textContent = discountTotal > 0 ? discountTotal.toFixed(2) : '0.00';
     purchasesState.dom.baskeelNetTotal.textContent = netTotal > 0 ? netTotal.toFixed(2) : '0.00';
+
+    const countEl = document.getElementById('baskeelWeightsCount');
+    if (countEl) {
+        countEl.textContent = `${weights.length} وزنة`;
+    }
 }
 
 function onWeightsInputChange(event) {
@@ -984,10 +1023,28 @@ function openWeightsModal(actionEl) {
     renderWeightsRows(weights);
     updateBaskeelSummary();
 
+    const itemLabelEl = document.getElementById('baskeelModalItemLabel');
+    if (itemLabelEl) {
+        const select = row.querySelector('.item-select');
+        const selectedOption = select && select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+        const itemName = selectedOption && selectedOption.value ? selectedOption.textContent.trim() : '';
+        itemLabelEl.textContent = itemName;
+        itemLabelEl.style.display = itemName ? 'inline-flex' : 'none';
+    }
+
     if (purchasesState.dom.baskeelModal) {
         purchasesState.dom.baskeelModal.classList.add('is-open');
         purchasesState.dom.baskeelModal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('modal-open');
+
+        setTimeout(() => {
+            const inputs = Array.from(purchasesState.dom.baskeelWeightsList?.querySelectorAll('.baskeel-weight-input') || []);
+            const targetInput = inputs.find((el) => !String(el.value || '').trim()) || inputs[inputs.length - 1];
+            if (targetInput) {
+                targetInput.focus();
+                if (typeof targetInput.select === 'function') targetInput.select();
+            }
+        }, 60);
     }
 }
 
@@ -1119,9 +1176,11 @@ function addWeightRow(options = {}) {
     const list = purchasesState.dom.baskeelWeightsList;
     if (!list) return;
 
+    const nextIndex = list.querySelectorAll('.baskeel-weight-row').length + 1;
     const row = document.createElement('div');
     row.className = 'baskeel-weight-row';
     row.innerHTML = `
+        <span class="baskeel-weight-index">${nextIndex}</span>
         <input type="text" class="form-control baskeel-weight-input" autocomplete="off" value="" placeholder="0">
         <button type="button" class="baskeel-remove-btn" data-action="remove-weight">×</button>
     `;
@@ -1131,6 +1190,13 @@ function addWeightRow(options = {}) {
     if (input && options.focus !== false) input.focus();
 
     updateBaskeelSummary();
+}
+
+function clearWeightsInModal() {
+    renderWeightsRows(['']);
+    updateBaskeelSummary();
+    const firstInput = purchasesState.dom.baskeelWeightsList?.querySelector('.baskeel-weight-input');
+    if (firstInput) firstInput.focus();
 }
 
 function removeWeightRow(actionEl) {
@@ -1144,6 +1210,7 @@ function removeWeightRow(actionEl) {
         return;
     }
 
+    refreshBaskeelRowIndices();
     updateBaskeelSummary();
 }
 
@@ -1605,7 +1672,7 @@ function handlePaidAmountInput(event) {
     if (!input) return;
     formatInputWithCursor(input);
     resetCustomRemainingState();
-    calculateInvoiceTotal();
+    calculateInvoiceTotal({ syncCashPaid: false });
 }
 
 const PURCHASE_WASTE_RATE = 0.01;
@@ -1751,7 +1818,7 @@ function getInvoiceFinancials(rawSubtotal, netSubtotal) {
     const paidAmountRaw = parseLocaleFloat(purchasesState.dom.paidAmountInput?.value || '0');
     const paidAmount = Number.isFinite(paidAmountRaw) && paidAmountRaw > 0 ? paidAmountRaw : 0;
     const netTotalRaw = Math.max(safeRawSubtotal - discountAmount, 0);
-    const netTotal = applyIntegerFiftyRounding(netTotalRaw);
+    const netTotal = purchasesState.roundFiftyEnabled ? applyIntegerFiftyRounding(netTotalRaw) : roundMoney(netTotalRaw);
     const supplierRemaining = netTotal - paidAmount;
 
     return {
@@ -1783,8 +1850,14 @@ function calculateInvoiceFinancialsFromForm() {
     return getInvoiceFinancials(rawSubtotal, netSubtotal);
 }
 
-function calculateInvoiceTotal() {
-    const financials = calculateInvoiceFinancialsFromForm();
+function calculateInvoiceTotal({ syncCashPaid = true } = {}) {
+    let financials = calculateInvoiceFinancialsFromForm();
+
+    const paymentTypeSelect = document.getElementById('paymentType');
+    if (syncCashPaid && paymentTypeSelect && paymentTypeSelect.value === 'cash' && purchasesState.dom.paidAmountInput) {
+        purchasesState.dom.paidAmountInput.value = formatMoneyInputValue(financials.netTotal.toFixed(2));
+        financials = calculateInvoiceFinancialsFromForm();
+    }
 
     if (purchasesState.dom.invoiceSubtotalSpan) {
         purchasesState.dom.invoiceSubtotalSpan.textContent = formatMoneyWithCommas(financials.rawSubtotal);

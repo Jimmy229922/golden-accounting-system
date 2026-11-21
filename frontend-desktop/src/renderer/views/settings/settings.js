@@ -20,6 +20,25 @@ const SETTINGS_TRACKING_FIELDS = [
 ];
 const CHANGELOG_HISTORY = [
     {
+        version: '10.1.25',
+        title: 'ما الجديد في التحديثات (سجل الإصدارات)',
+        intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار 10.1.25 بنجاح. يمكنك التمرير بالأسفل لاستعراض كافة التحديثات والإضافات في الإصدار الحالي وجميع الإصدارات السابقة:',
+        items: [
+            {
+                title: 'إصلاح حساب الإجمالي والدفع النقدي التلقائي في الفواتير',
+                desc: 'إصلاح الحساب الفوري لإجماليات فاتورة المبيعات مع الإضافة التلقائية لصف الصنف التالي، وتفعيل التعبئة التلقائية للمدفوع وتصفير المتبقي عند اختيار الدفع كاش (نقدي) في المبيعات والمشتريات.'
+            },
+            {
+                title: 'تطوير نافذة أوزان البساكيل وتخصيص التقريب لأقرب 50',
+                desc: 'تحسين تصميم نافذة أوزان البساكيل بإضافة ترقيم الوزنات واسم الصنف وعداد الوزنات وزر مسح الكل وتنسيق أزرار الحفظ والإلغاء، مع إتاحة تفعيل أو إيقاف التقريب لأقرب 50 في المشتريات حسب العميل.'
+            },
+            {
+                title: 'التحكم في مسار قاعدة البيانات ومجلد النسخ الاحتياطية وصلاحيات القوائم',
+                desc: 'إتاحة تغيير وحفظ مسار قاعدة البيانات ومجلد النسخ الاحتياطية من صفحة الإعدادات لأي قرص أو مجلد بشكل دائم، مع ربط إقفال الوردية وصفحات التعاملات المالية بصلاحيات الظهور المخصصة.'
+            }
+        ]
+    },
+    {
         version: '10.1.24',
         title: 'ما الجديد في التحديثات (سجل الإصدارات)',
         intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار 10.1.24 بنجاح. يمكنك التمرير بالأسفل لاستعراض كافة التحديثات والإضافات في الإصدار الحالي وجميع الإصدارات السابقة:',
@@ -477,14 +496,20 @@ function renderPage() {
                     <div class="info-item">
                         <div class="info-item-icon"><i class="fas fa-database"></i></div>
                         <div class="info-item-content">
-                            <div class="info-item-label">مسار قاعدة البيانات</div>
+                            <div class="info-item-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                                <span>مسار قاعدة البيانات</span>
+                                <button type="button" id="changeDatabasePathBtn" class="btn btn-outline" style="padding:3px 10px;font-size:0.78rem;min-height:28px;">تغيير المسار</button>
+                            </div>
                             <div class="info-item-value is-path" id="databasePathValue">-</div>
                         </div>
                     </div>
                     <div class="info-item">
                         <div class="info-item-icon"><i class="fas fa-folder-open"></i></div>
                         <div class="info-item-content">
-                            <div class="info-item-label">مجلد النسخ الاحتياطية</div>
+                            <div class="info-item-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                                <span>مجلد النسخ الاحتياطية</span>
+                                <button type="button" id="changeBackupFolderBtn" class="btn btn-outline" style="padding:3px 10px;font-size:0.78rem;min-height:28px;">تغيير المجلد</button>
+                            </div>
                             <div class="info-item-value is-path" id="backupFolderValue">-</div>
                         </div>
                     </div>
@@ -577,6 +602,37 @@ function initializeElements() {
     settingsForm.addEventListener('submit', saveSettings);
     backupBtn.addEventListener('click', handleBackup);
     restoreBtn.addEventListener('click', handleRestore);
+    const changeDatabasePathBtn = document.getElementById('changeDatabasePathBtn');
+    if (changeDatabasePathBtn) {
+        changeDatabasePathBtn.addEventListener('click', async () => {
+            if (!window.electronAPI || typeof window.electronAPI.chooseDatabaseFolder !== 'function') return;
+            const res = await window.electronAPI.chooseDatabaseFolder();
+            if (!res || res.canceled) return;
+            if (!res.success) {
+                if (window.showToast) window.showToast(res.error || 'تعذر تغيير مسار قاعدة البيانات', 'error');
+                return;
+            }
+            if (res.unchanged) {
+                if (window.showToast) window.showToast('المسار المختار هو المسار الحالي بالفعل', 'info');
+                return;
+            }
+            if (window.showToast) window.showToast('تم حفظ مسار قاعدة البيانات الجديد، جاري إعادة تشغيل البرنامج...', 'success');
+        });
+    }
+    const changeBackupFolderBtn = document.getElementById('changeBackupFolderBtn');
+    if (changeBackupFolderBtn) {
+        changeBackupFolderBtn.addEventListener('click', async () => {
+            if (!window.electronAPI || typeof window.electronAPI.chooseBackupFolder !== 'function') return;
+            const res = await window.electronAPI.chooseBackupFolder();
+            if (!res || res.canceled) return;
+            if (!res.success) {
+                if (window.showToast) window.showToast(res.error || 'تعذر تغيير مجلد النسخ الاحتياطية', 'error');
+                return;
+            }
+            setInfoText(backupFolderValueEl, res.backupRootPath || '-');
+            if (window.showToast) window.showToast('تم حفظ مجلد النسخ الاحتياطية بنجاح', 'success');
+        });
+    }
     if (updateBtn) {
         updateBtn.addEventListener('click', handleAppUpdate);
     }

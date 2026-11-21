@@ -4,6 +4,7 @@ const path = require('path');
 const BetterSqlite3 = require('better-sqlite3');
 const { db } = require('../db');
 const { hasFeature } = require('../licenseService');
+const { getCustomStoragePaths, saveCustomStoragePaths } = require('../storagePaths');
 
 const BACKUP_FOLDER_NAME = 'PIC';
 const MANUAL_BACKUP_FILE_PREFIX = 'accounting-manual-backup';
@@ -63,7 +64,8 @@ function getBackupCompanyId() {
 }
 
 function getSharedBackupRootPath() {
-    const backupRootPath = path.join(getProgramRootPath(), BACKUP_FOLDER_NAME);
+    const customPaths = getCustomStoragePaths();
+    const backupRootPath = customPaths.backupDir || path.join(getProgramRootPath(), BACKUP_FOLDER_NAME);
     fs.mkdirSync(backupRootPath, { recursive: true });
     return backupRootPath;
 }
@@ -875,6 +877,61 @@ function register() {
             lastCloudBackupAt: savedStatus.last_cloud_backup_at || '',
             lastCloudBackupError: savedStatus.last_cloud_backup_error || ''
         };
+    });
+
+    ipcMain.handle('choose-backup-folder', async () => {
+        try {
+            const { canceled, filePaths } = await dialog.showOpenDialog({
+                title: 'اختر مجلد النسخ الاحتياطية',
+                defaultPath: getSharedBackupRootPath(),
+                properties: ['openDirectory', 'createDirectory']
+            });
+            if (canceled || !filePaths || filePaths.length === 0) {
+                return { success: false, canceled: true };
+            }
+            const selectedDir = path.normalize(filePaths[0]);
+            fs.mkdirSync(selectedDir, { recursive: true });
+            saveCustomStoragePaths({ backupDir: selectedDir });
+            return { success: true, backupRootPath: selectedDir };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('choose-database-folder', async () => {
+        try {
+            const currentDir = path.dirname(dbFilePath);
+            const { canceled, filePaths } = await dialog.showOpenDialog({
+                title: 'اختر مجلد قاعدة البيانات',
+                defaultPath: currentDir,
+                properties: ['openDirectory', 'createDirectory']
+            });
+            if (canceled || !filePaths || filePaths.length === 0) {
+                return { success: false, canceled: true };
+            }
+            const selectedDir = path.normalize(filePaths[0]);
+            if (path.resolve(selectedDir).toLowerCase() === path.resolve(currentDir).toLowerCase()) {
+                return { success: true, unchanged: true, databasePath: dbFilePath };
+            }
+            fs.mkdirSync(selectedDir, { recursive: true });
+            const targetDbPath = path.join(selectedDir, 'accounting.db');
+            if (!fs.existsSync(targetDbPath)) {
+                await db.backup(targetDbPath);
+            }
+            const identitySrc = path.join(currentDir, 'device_sync_identity.json');
+            const identityDst = path.join(selectedDir, 'device_sync_identity.json');
+            if (fs.existsSync(identitySrc) && !fs.existsSync(identityDst)) {
+                fs.copyFileSync(identitySrc, identityDst);
+            }
+            saveCustomStoragePaths({ databaseDir: selectedDir });
+            setTimeout(() => {
+                app.relaunch();
+                app.exit(0);
+            }, 400);
+            return { success: true, databasePath: targetDbPath, relaunching: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('list-cloud-backups', async (event, payload = {}) => {

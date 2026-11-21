@@ -9,6 +9,7 @@
             supplierAutocomplete: null,
             isSubmitting: false,
             activeWeightsRow: null,
+            roundFiftyEnabled: false,
             ar: {},
             dom: {
                 app: null,

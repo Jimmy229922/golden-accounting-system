@@ -128,7 +128,7 @@ function buildTopNavItems(prefix) {
             fallback: 'Sales',
             children: [
                 { key: 'common.nav.salesInvoice', fallback: 'Sales Invoice', href: withPrefix('sales/index.html') },
-                { key: '', fallback: 'إقفال وردية', href: withPrefix('sales/index.html?openShiftClose=1') }
+                { key: '', fallback: 'إقفال وردية', href: withPrefix('sales/index.html?openShiftClose=1'), featureFlag: 'sales_shift_close' }
             ]
         },
         { key: 'common.nav.purchases', fallback: 'Purchases', href: withPrefix('purchases/index.html') },
@@ -137,17 +137,17 @@ function buildTopNavItems(prefix) {
             key: '',
             fallback: 'التعاملات المالية',
             children: [
-                { key: 'common.nav.finance', fallback: 'المالية', href: withPrefix('finance/index.html') },
-                { key: '', fallback: 'النثريات', href: withPrefix('petty-expenses/index.html') },
-                { key: '', fallback: 'الشكاير', href: withPrefix('petty-bags/index.html') },
-                { key: '', fallback: 'الفحص', href: withPrefix('petty-inspection/index.html') },
-                { key: '', fallback: 'الشحن و التخليص', href: withPrefix('petty-shipping-clearance/index.html') },
-                { key: '', fallback: 'التشغيل', href: withPrefix('petty-operation/index.html') },
-                { key: '', fallback: 'تحت التحصيل', href: withPrefix('under-collection/index.html') },
-                { key: '', fallback: 'بيان المتبقي من تحت التحصيل', href: withPrefix('remaining-under-collection/index.html') },
+                { key: 'common.nav.finance', fallback: 'المالية', href: withPrefix('finance/index.html'), featureFlag: 'finance_treasury' },
+                { key: '', fallback: 'النثريات', href: withPrefix('petty-expenses/index.html'), featureFlag: 'petty_expenses' },
+                { key: '', fallback: 'الشكاير', href: withPrefix('petty-bags/index.html'), featureFlag: 'petty_bags' },
+                { key: '', fallback: 'الفحص', href: withPrefix('petty-inspection/index.html'), featureFlag: 'petty_inspection' },
+                { key: '', fallback: 'الشحن و التخليص', href: withPrefix('petty-shipping-clearance/index.html'), featureFlag: 'petty_shipping_clearance' },
+                { key: '', fallback: 'التشغيل', href: withPrefix('petty-operation/index.html'), featureFlag: 'petty_operation' },
+                { key: '', fallback: 'تحت التحصيل', href: withPrefix('under-collection/index.html'), featureFlag: 'under_collection' },
+                { key: '', fallback: 'بيان المتبقي من تحت التحصيل', href: withPrefix('remaining-under-collection/index.html'), featureFlag: 'remaining_under_collection' },
                 { divider: true },
-                { key: '', fallback: 'إيرادات التصدير', href: withPrefix('export-revenues/index.html') },
-                { key: '', fallback: 'المبيعات المحلية', href: withPrefix('local-sales/index.html') }
+                { key: '', fallback: 'إيرادات التصدير', href: withPrefix('export-revenues/index.html'), featureFlag: 'export_revenues' },
+                { key: '', fallback: 'المبيعات المحلية', href: withPrefix('local-sales/index.html'), featureFlag: 'local_sales' }
             ]
         },
         { key: 'common.nav.receipt', fallback: 'Receipt', href: withPrefix('payments/receipt.html') },
@@ -1296,7 +1296,8 @@ function buildTopNavDropdown(item, t) {
             }
 
             const childActive = isTopNavLinkActive(child.href) ? ' class="active"' : '';
-            return `<a href="${child.href}"${childActive}>${t(child.key, child.fallback)}</a>`;
+            const featureAttr = child.featureFlag ? ` data-feature-flag="${child.featureFlag}" style="display:none;"` : '';
+            return `<a href="${child.href}"${childActive}${featureAttr}>${t(child.key, child.fallback)}</a>`;
         })
         .join('');
 
@@ -1704,6 +1705,13 @@ async function applyStandaloneNavFeatureFlags() {
         document.querySelectorAll('[data-feature-flag]').forEach((el) => {
             const flag = el.getAttribute('data-feature-flag');
             el.style.display = features[flag] ? '' : 'none';
+        });
+        document.querySelectorAll('.top-nav li.dropdown').forEach((dropdownEl) => {
+            if (dropdownEl.hasAttribute('data-feature-flag')) return;
+            const links = Array.from(dropdownEl.querySelectorAll('.dropdown-content a'));
+            if (!links.length) return;
+            const hasVisibleLink = links.some((link) => link.style.display !== 'none');
+            dropdownEl.style.display = hasVisibleLink ? '' : 'none';
         });
     } catch (_) {}
 }

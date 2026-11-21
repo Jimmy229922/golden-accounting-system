@@ -138,6 +138,21 @@ function initializeElements() {
         });
     }
 
+    const paymentTypeSelect = document.getElementById('paymentType');
+    if (paymentTypeSelect) {
+        paymentTypeSelect.addEventListener('change', () => {
+            if (isEditLocked()) return;
+            if (paymentTypeSelect.value === 'cash') {
+                calculateInvoiceTotal({ syncCashPaid: true });
+            } else {
+                if (salesState.dom.paidAmountInput) {
+                    salesState.dom.paidAmountInput.value = '0';
+                }
+                calculateInvoiceTotal({ syncCashPaid: false });
+            }
+        });
+    }
+
     const invoiceNumberInput = document.getElementById('invoiceNumber');
     if (invoiceNumberInput) {
         invoiceNumberInput.addEventListener('input', updateInvoiceNavigationButtons);
@@ -189,6 +204,11 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function roundMoney(value) {
+    const n = Number(value) || 0;
+    return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 function formatMoneyForUi(value) {
@@ -1862,7 +1882,7 @@ function handlePaidAmountInput(event) {
     const input = event?.target;
     if (!input) return;
     formatInputWithCursor(input);
-    calculateInvoiceTotal();
+    calculateInvoiceTotal({ syncCashPaid: false });
 }
 
 function getInvoiceFinancials(subtotal) {
@@ -1905,14 +1925,20 @@ function calculateRowTotal(element) {
     updateProfitIndicator(row);
 }
 
-function calculateInvoiceTotal() {
+function calculateInvoiceTotal({ syncCashPaid = true } = {}) {
     let subtotal = 0;
     salesState.dom.invoiceItemsBody.querySelectorAll('tr').forEach((row) => {
         const rowTotal = parseLocaleFloat(row.querySelector('.row-total').textContent) || 0;
         subtotal += rowTotal;
     });
 
-    const financials = getInvoiceFinancials(subtotal);
+    let financials = getInvoiceFinancials(subtotal);
+
+    const paymentTypeSelect = document.getElementById('paymentType');
+    if (syncCashPaid && paymentTypeSelect && paymentTypeSelect.value === 'cash' && salesState.dom.paidAmountInput) {
+        salesState.dom.paidAmountInput.value = formatMoneyInputValue(financials.netTotal.toFixed(2));
+        financials = getInvoiceFinancials(subtotal);
+    }
 
     if (salesState.dom.invoiceSubtotalSpan) {
         salesState.dom.invoiceSubtotalSpan.textContent = formatMoneyForUi(subtotal);

@@ -2,6 +2,7 @@ const { app, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { db } = require('./db');
+const { getCustomStoragePaths } = require('./storagePaths');
 
 const AUTO_BACKUP_FOLDER_NAME = 'DATA';
 const AUTO_BACKUP_FILE_NAME = 'accounting-auto-backup.db';
@@ -42,7 +43,8 @@ function removeFileIfExists(filePath) {
 
 function getBackupPaths() {
     const programRootPath = getProgramRootPath();
-    const backupRootPath = path.join(programRootPath, AUTO_BACKUP_FOLDER_NAME);
+    const customPaths = getCustomStoragePaths();
+    const backupRootPath = customPaths.databaseDir || path.join(programRootPath, AUTO_BACKUP_FOLDER_NAME);
     const backupFilePath = path.join(backupRootPath, AUTO_BACKUP_FILE_NAME);
     const fallbackFlagPath = path.join(backupRootPath, QUIT_BACKUP_FALLBACK_FLAG_FILE_NAME);
     return { programRootPath, backupRootPath, backupFilePath, fallbackFlagPath };

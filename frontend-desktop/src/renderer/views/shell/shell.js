@@ -705,8 +705,13 @@ function renderForceUpdateOverlay(meta) {
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;">
                 <button type="button" id="forceUpdateDownloadBtn" style="width:100%;background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;border:none;border-radius:10px;padding:13px;font-size:1rem;font-weight:700;cursor:pointer;">تنزيل وتثبيت التحديث الآن</button>
-                <button type="button" id="forceUpdateReleasePageBtn" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:10px;padding:10px;font-size:0.9rem;font-weight:600;cursor:pointer;">فتح صفحة التحميل المباشر</button>
                 ${waUrl ? `<button type="button" id="forceUpdateSupportBtn" style="width:100%;background:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.4);border-radius:10px;padding:10px;font-size:0.88rem;font-weight:600;cursor:pointer;">تواصل مع الدعم الفني عبر الواتساب</button>` : ''}
+            </div>
+            <div id="forceUpdateProgressWrap" style="display:none;margin-top:14px;">
+                <div style="width:100%;height:10px;background:#1e293b;border-radius:999px;overflow:hidden;border:1px solid #334155;">
+                    <div id="forceUpdateProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,#38bdf8,#2563eb);transition:width 0.2s ease;"></div>
+                </div>
+                <div id="forceUpdateProgressPct" style="margin-top:6px;font-size:0.82rem;color:#94a3b8;font-weight:700;">0%</div>
             </div>
             <div id="forceUpdateStatusText" style="margin-top:12px;font-size:0.85rem;color:#38bdf8;"></div>
         </div>
@@ -715,32 +720,48 @@ function renderForceUpdateOverlay(meta) {
 
     const statusEl = overlay.querySelector('#forceUpdateStatusText');
     const dlBtn = overlay.querySelector('#forceUpdateDownloadBtn');
+    const progressWrap = overlay.querySelector('#forceUpdateProgressWrap');
+    const progressBar = overlay.querySelector('#forceUpdateProgressBar');
+    const progressPct = overlay.querySelector('#forceUpdateProgressPct');
+
+    if (window.electronAPI && typeof window.electronAPI.onAppUpdateProgress === 'function') {
+        window.electronAPI.onAppUpdateProgress((payload) => {
+            if (!progressWrap || !progressBar || !progressPct) return;
+            const pct = Math.max(0, Math.min(100, Math.round(Number(payload?.percent) || 0)));
+            progressWrap.style.display = 'block';
+            progressBar.style.width = `${pct}%`;
+            progressPct.textContent = `${pct}%`;
+            if (payload?.message && statusEl) {
+                statusEl.textContent = payload.message;
+            }
+        });
+    }
 
     dlBtn?.addEventListener('click', async () => {
         if (!window.electronAPI || typeof window.electronAPI.downloadAppUpdate !== 'function') {
-            window.electronAPI?.openAppReleasePage?.();
+            statusEl.textContent = 'تعذر بدء التحديث التلقائي، يرجى التواصل مع الدعم الفني.';
             return;
         }
         dlBtn.disabled = true;
-        statusEl.textContent = 'جاري تنزيل التحديث الجديد، يرجى الانتظار...';
+        if (progressWrap) progressWrap.style.display = 'block';
+        statusEl.textContent = 'جاري فحص وتنزيل التحديث الجديد داخل البرنامج، يرجى الانتظار...';
         try {
             const res = await window.electronAPI.downloadAppUpdate();
             if (res && res.success && res.installerPath && typeof window.electronAPI.quitAndInstallAppUpdate === 'function') {
-                statusEl.textContent = 'تم التنزيل! جاري تشغيل المثبّت الآن...';
+                if (progressBar) progressBar.style.width = '100%';
+                if (progressPct) progressPct.textContent = '100%';
+                statusEl.textContent = 'تم التنزيل بنجاح! جاري تثبيت التحديث الآن...';
                 await window.electronAPI.quitAndInstallAppUpdate(res.installerPath);
             } else {
-                statusEl.textContent = res?.error || 'تعذر التنزيل التلقائي، يمكنك استخدام زر صفحة التحميل المباشر.';
+                statusEl.textContent = res?.error || 'تعذر تنزيل التحديث حالياً، يرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني.';
                 dlBtn.disabled = false;
             }
         } catch (_) {
-            statusEl.textContent = 'تعذر التنزيل التلقائي، يمكنك استخدام زر صفحة التحميل المباشر.';
+            statusEl.textContent = 'تعذر تنزيل التحديث حالياً، يرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني.';
             dlBtn.disabled = false;
         }
     });
 
-    overlay.querySelector('#forceUpdateReleasePageBtn')?.addEventListener('click', () => {
-        window.electronAPI?.openAppReleasePage?.();
-    });
     overlay.querySelector('#forceUpdateSupportBtn')?.addEventListener('click', () => {
         openExternalSupportUrl(waUrl);
     });

@@ -69,6 +69,11 @@
                     return;
                 }
 
+                if (action === 'clear-weights') {
+                    if (typeof handlers.onClearWeights === 'function') handlers.onClearWeights();
+                    return;
+                }
+
                 if (action === 'remove-weight') {
                     handlers.onRemoveWeight(actionEl);
                     return;

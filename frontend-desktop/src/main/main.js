@@ -1,6 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, shell, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { getCustomStoragePaths } = require('./storagePaths');
 
 // Handle uncaught exceptions to show errors when running from executable
 process.on('uncaughtException', (error) => {
@@ -115,7 +116,8 @@ function removePortableFileIfExists(filePath) {
 }
 
 function configurePortableUserDataPath(portableRoot) {
-    const primaryDataPath = getPortablePrimaryDataPath(portableRoot);
+    const customPaths = getCustomStoragePaths();
+    const primaryDataPath = customPaths.databaseDir || getPortablePrimaryDataPath(portableRoot);
     fs.mkdirSync(primaryDataPath, { recursive: true });
     app.setPath('userData', primaryDataPath);
 }
