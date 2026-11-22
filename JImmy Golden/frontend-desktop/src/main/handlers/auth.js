@@ -616,6 +616,20 @@ function register() {
             return { success: false, error: 'اسم المستخدم موجود بالفعل.' };
         }
 
+        try {
+            const meta = licenseService.getClientRuntimeMeta(db);
+            const maxDesktopUsers = Number(meta?.maxDesktopUsers || 0);
+            if (maxDesktopUsers > 0) {
+                const countRow = db.prepare('SELECT COUNT(*) AS cnt FROM auth_users').get();
+                if (Number(countRow?.cnt || 0) >= maxDesktopUsers) {
+                    return {
+                        success: false,
+                        error: `تم الوصول للحد الأقصى لعدد المستخدمين المسموح به في باقتك (${maxDesktopUsers} مستخدم). يرجى التواصل مع الدعم الفني لرفع الباقة.`
+                    };
+                }
+            }
+        } catch (_) {}
+
         const salt = crypto.randomBytes(16).toString('hex');
         const passwordHash = hashPassword(password, salt);
         const now = new Date().toISOString();
@@ -988,6 +1002,81 @@ function register() {
         } catch (error) {
             return { success: false, error: error.message };
         }
+    });
+
+    ipcMain.handle('submit-support-ticket', async (_event, payload = {}) => {
+        try {
+            return await licenseService.submitSupportTicket(db, payload);
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-smart-alerts', () => {
+        const alerts = [];
+        try {
+            const lowStock = db.prepare(`
+                SELECT id, name, stock_quantity, reorder_level
+                FROM items
+                WHERE COALESCE(is_deleted, 0) = 0
+                  AND stock_quantity <= CASE WHEN COALESCE(reorder_level, 0) > 0 THEN reorder_level ELSE 5 END
+                ORDER BY stock_quantity ASC
+                LIMIT 8
+            `).all();
+            lowStock.forEach((it) => {
+                alerts.push({
+                    id: `smart_stock_${it.id}_${Math.floor(Number(it.stock_quantity || 0))}`,
+                    kind: 'smart_stock',
+                    tag: 'نواقص المخزن',
+                    text: `الصنف «${it.name}» وصل للحد الأدنى — الرصيد الحالي: ${Number(it.stock_quantity || 0)}`,
+                    createdAt: null
+                });
+            });
+        } catch (_) {}
+
+        try {
+            const overdueSales = db.prepare(`
+                SELECT s.id, s.invoice_number, s.invoice_date, s.remaining_amount, COALESCE(p.name, 'عميل') AS party_name
+                FROM sales_invoices s
+                LEFT JOIN parties p ON p.id = s.customer_id
+                WHERE COALESCE(s.remaining_amount, 0) > 0.01
+                  AND date(s.invoice_date) <= date('now', '-7 days')
+                ORDER BY date(s.invoice_date) ASC
+                LIMIT 8
+            `).all();
+            overdueSales.forEach((inv) => {
+                alerts.push({
+                    id: `smart_sales_${inv.id}`,
+                    kind: 'smart_sales',
+                    tag: 'فاتورة آجلة متأخرة',
+                    text: `فاتورة مبيعات #${inv.invoice_number || inv.id} (${inv.party_name}) بتاريخ ${inv.invoice_date} — متبقي: ${Number(inv.remaining_amount || 0).toFixed(2)}`,
+                    createdAt: inv.invoice_date
+                });
+            });
+        } catch (_) {}
+
+        try {
+            const overduePurchases = db.prepare(`
+                SELECT pi.id, pi.invoice_number, pi.invoice_date, pi.remaining_amount, COALESCE(p.name, 'مورد') AS party_name
+                FROM purchase_invoices pi
+                LEFT JOIN parties p ON p.id = pi.supplier_id
+                WHERE COALESCE(pi.remaining_amount, 0) > 0.01
+                  AND date(pi.invoice_date) <= date('now', '-7 days')
+                ORDER BY date(pi.invoice_date) ASC
+                LIMIT 8
+            `).all();
+            overduePurchases.forEach((inv) => {
+                alerts.push({
+                    id: `smart_purchase_${inv.id}`,
+                    kind: 'smart_purchase',
+                    tag: 'مستحقات موردين',
+                    text: `فاتورة مشتريات #${inv.invoice_number || inv.id} (${inv.party_name}) بتاريخ ${inv.invoice_date} — متبقي سداد: ${Number(inv.remaining_amount || 0).toFixed(2)}`,
+                    createdAt: inv.invoice_date
+                });
+            });
+        } catch (_) {}
+
+        return { success: true, alerts };
     });
 
     ipcMain.handle('open-external-url', async (_event, rawUrl) => {

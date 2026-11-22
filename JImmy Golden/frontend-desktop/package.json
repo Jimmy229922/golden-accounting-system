@@ -1,6 +1,6 @@
 {
   "name": "accounting-system-desktop",
-  "version": "10.1.28",
+  "version": "10.1.29",
   "description": "Professional Accounting System",
   "main": "src/main/main.js",
   "scripts": {
@@ -29,7 +29,7 @@
       "uninstallerIcon": "src/main/assets/icon.ico",
       "installerHeaderIcon": "src/main/assets/icon.ico",
       "include": "build/installer.nsh",
-      "shortcutName": "تشغيل نظام الحسابات",
+      "shortcutName": "المحاسب الذهبي",
       "createDesktopShortcut": "always",
       "differentialPackage": true,
       "artifactName": "Accounting-System-Setup-${version}.${ext}"

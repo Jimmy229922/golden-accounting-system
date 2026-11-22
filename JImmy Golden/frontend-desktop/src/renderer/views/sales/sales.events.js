@@ -97,6 +97,21 @@
                     return;
                 }
 
+                if (action === 'open-delete-confirm') {
+                    if (typeof handlers.onOpenDeleteConfirm === 'function') handlers.onOpenDeleteConfirm();
+                    return;
+                }
+
+                if (action === 'close-delete-confirm') {
+                    if (typeof handlers.onCloseDeleteConfirm === 'function') handlers.onCloseDeleteConfirm();
+                    return;
+                }
+
+                if (action === 'confirm-delete-invoice') {
+                    if (typeof handlers.onConfirmDeleteInvoice === 'function') handlers.onConfirmDeleteInvoice();
+                    return;
+                }
+
                 if (action === 'remove-row') {
                     handlers.onRemoveRow(actionEl);
                 }

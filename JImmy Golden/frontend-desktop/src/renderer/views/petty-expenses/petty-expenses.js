@@ -89,7 +89,7 @@ function renderPage() {
                     <span class="hero-shape shape-3"></span>
                 </div>
                 <div class="hero-content">
-                    <h1>النثريات</h1>
+                    <h1>نثريات الشركة</h1>
                     <p>تسجيل ومتابعة المصاريف اليومية الخارجة من المكتب</p>
                 </div>
                 <div class="hero-bottom">
@@ -110,7 +110,7 @@ function renderPage() {
                 <div class="stat-card stat-expense">
                     <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
                     <div class="stat-info">
-                        <div class="stat-title">إجمالي النثريات</div>
+                        <div class="stat-title">إجمالي نثريات الشركة</div>
                         <div class="stat-value" id="pettyTotalAmount">0.00</div>
                     </div>
                 </div>
@@ -158,11 +158,11 @@ function renderPage() {
             <section class="invoice-form-container print-container">
                 <div class="invoice-shell" style="padding-bottom: 10px;">
                     <div class="form-title-row" style="border-bottom: none; padding-bottom: 0;">
-                        <h2 class="form-title">كشف النثريات</h2>
+                        <h2 class="form-title">كشف نثريات الشركة</h2>
                     </div>
                     
                     <div class="petty-print-title">
-                        <h2>كشف النثريات</h2>
+                        <h2>كشف نثريات الشركة</h2>
                         <p id="printRange"></p>
                     </div>
 

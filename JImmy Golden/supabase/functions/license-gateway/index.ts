@@ -87,7 +87,7 @@ serve(async (req: Request) => {
     const rawMachineId = String(body.machine_id || "").trim();
     const desktopVersion = String(body.desktop_version || "10.1.1").trim();
 
-    if (!companyId || (!rawMachineId && action !== "poll_notices" && action !== "mark_notices_read")) {
+    if (!companyId || (!rawMachineId && action !== "poll_notices" && action !== "mark_notices_read" && action !== "submit_support_ticket" && action !== "report_security_alert")) {
       return new Response(JSON.stringify({ success: false, error: "MISSING_REQUIRED_FIELDS", message: "معرف الشركة ورقم الماكينة مطلوبان" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -191,6 +191,30 @@ serve(async (req: Request) => {
         const isLifetime = activeRec.license_status === "lifetime";
 
         if (activeRec.bound_machine_id && activeRec.bound_machine_id !== rawMachineId) {
+          try {
+            const { data: tgCfg } = await supabase
+              .from("app_global_config")
+              .select("telegram_alerts_enabled, telegram_bot_token, telegram_chat_id")
+              .eq("id", 1)
+              .maybeSingle();
+            if (tgCfg?.telegram_alerts_enabled && tgCfg?.telegram_bot_token && tgCfg?.telegram_chat_id) {
+              const alertText =
+                `<b>🚨 تحذير أمني: محاولة فتح الترخيص على جهاز آخر</b>\n` +
+                `• الشركة: <b>${String(activeRec.company_name || companyId)}</b>\n` +
+                `• الجهاز المعتمد: <code>${activeRec.bound_machine_id}</code>\n` +
+                `• الجهاز المحاول: <code>${rawMachineId}</code>\n` +
+                `• الإصدار: v${desktopVersion}`;
+              fetch(`https://api.telegram.org/bot${tgCfg.telegram_bot_token}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: tgCfg.telegram_chat_id,
+                  text: alertText,
+                  parse_mode: "HTML"
+                })
+              }).catch(() => {});
+            }
+          } catch (_) {}
           return new Response(JSON.stringify({
             success: false,
             error: "UNAUTHORIZED_DEVICE",
@@ -237,18 +261,35 @@ serve(async (req: Request) => {
         }
       }
 
-      const isLifetime = activeRec.license_status === "lifetime";
-      const isSuspended = activeRec.license_status === "suspended";
       const now = new Date();
+      let currentStatus = String(activeRec.license_status || "trial");
+      let readOnlyUntilIso = activeRec.read_only_until ? String(activeRec.read_only_until) : "";
+      let readOnlyMode = false;
+
+      if (currentStatus === "read_only") {
+        const roMs = readOnlyUntilIso ? new Date(readOnlyUntilIso).getTime() : 0;
+        if (roMs > now.getTime()) {
+          readOnlyMode = true;
+        } else {
+          currentStatus = "suspended";
+          await supabase
+            .from("client_licenses")
+            .update({ license_status: "suspended", updated_at: now.toISOString() })
+            .eq("id", activeRec.id);
+        }
+      }
+
+      const isLifetime = currentStatus === "lifetime";
+      const isSuspended = currentStatus === "suspended";
       const expiresAtDate = new Date(activeRec.expires_at);
-      const isValid = isLifetime ? true : (!isSuspended && expiresAtDate > now);
+      const isValid = isLifetime ? true : readOnlyMode ? true : (!isSuspended && expiresAtDate > now);
       const remainingDays = isLifetime ? 99999 : Math.max(0, Math.ceil((expiresAtDate.getTime() - now.getTime()) / 86400000));
       const offlineGraceDays = isLifetime ? 99999 : 14;
 
       const certPayload = {
         company_id: activeRec.company_id,
         machine_id: rawMachineId,
-        status: activeRec.license_status,
+        status: currentStatus,
         expires_at: activeRec.expires_at,
         issued_at: now.toISOString(),
         offline_grace_days: offlineGraceDays
@@ -287,6 +328,10 @@ serve(async (req: Request) => {
         announcement_active: Boolean(globalCfg?.announcement_active),
         custom_notice: String(activeRec.custom_notice || ""),
         remote_command: pendingRemoteCommand,
+        read_only_mode: readOnlyMode,
+        read_only_until: readOnlyUntilIso,
+        max_desktop_users: Number(activeRec.max_desktop_users || 0),
+        force_update_target: Boolean(activeRec.force_update_target),
         server_time: now.toISOString()
       }), {
         status: 200,
@@ -519,25 +564,53 @@ serve(async (req: Request) => {
 
     if (action === "poll_notices") {
       const companyId = String(body.company_id || "").trim();
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
       let customNotice = "";
+      let readOnlyMode = false;
+      let readOnlyUntilIso = "";
+      let maxDesktopUsers = 0;
+      let forceUpdateTarget = false;
+      let pendingRemoteCommand: string | null = null;
+      let licenseStatusOut = "";
+
       if (companyId) {
         const { data: rec } = await supabase
           .from("client_licenses")
-          .select("id, custom_notice")
+          .select("id, custom_notice, license_status, read_only_until, max_desktop_users, force_update_target, remote_command")
           .eq("company_id", companyId)
           .maybeSingle();
         if (rec) {
           customNotice = String(rec.custom_notice || "");
+          maxDesktopUsers = Number(rec.max_desktop_users || 0);
+          forceUpdateTarget = Boolean(rec.force_update_target);
+          pendingRemoteCommand = rec.remote_command ? String(rec.remote_command) : null;
+          licenseStatusOut = String(rec.license_status || "");
+          readOnlyUntilIso = rec.read_only_until ? String(rec.read_only_until) : "";
+
+          const pollUpdates: Record<string, unknown> = { last_heartbeat_at: nowIso };
+          if (pendingRemoteCommand) {
+            pollUpdates.remote_command = null;
+          }
+          if (licenseStatusOut === "read_only") {
+            const roMs = readOnlyUntilIso ? new Date(readOnlyUntilIso).getTime() : 0;
+            if (roMs > now.getTime()) {
+              readOnlyMode = true;
+            } else {
+              licenseStatusOut = "suspended";
+              pollUpdates.license_status = "suspended";
+              pollUpdates.updated_at = nowIso;
+            }
+          }
           await supabase
             .from("client_licenses")
-            .update({ last_heartbeat_at: nowIso })
+            .update(pollUpdates)
             .eq("id", rec.id);
         }
       }
       const { data: globalCfg } = await supabase
         .from("app_global_config")
-        .select("announcement_message, announcement_active")
+        .select("announcement_message, announcement_active, min_supported_version, force_update_message")
         .eq("id", 1)
         .maybeSingle();
 
@@ -546,8 +619,113 @@ serve(async (req: Request) => {
         custom_notice: customNotice,
         announcement_message: String(globalCfg?.announcement_message || ""),
         announcement_active: Boolean(globalCfg?.announcement_active),
+        min_supported_version: String(globalCfg?.min_supported_version || "10.0.0"),
+        force_update_message: String(globalCfg?.force_update_message || ""),
+        read_only_mode: readOnlyMode,
+        read_only_until: readOnlyUntilIso,
+        license_status: licenseStatusOut,
+        max_desktop_users: maxDesktopUsers,
+        force_update_target: forceUpdateTarget,
+        remote_command: pendingRemoteCommand,
         server_time: nowIso
       }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (action === "report_security_alert") {
+      const alertType = String(body.alert_type || "CLOCK_TAMPERING").trim();
+      const companyName = String(body.company_name || companyId).trim();
+      const details = String(body.details || "").trim();
+      await supabase.from("client_error_logs").insert({
+        company_id: companyId,
+        device_id: rawMachineId || null,
+        company_name: companyName,
+        desktop_version: desktopVersion,
+        severity: "critical",
+        module: "security",
+        error_message: `[${alertType}] ${details || "نشاط أمني مشبوه"}`
+      });
+      try {
+        const { data: tgCfg } = await supabase
+          .from("app_global_config")
+          .select("telegram_alerts_enabled, telegram_bot_token, telegram_chat_id")
+          .eq("id", 1)
+          .maybeSingle();
+        if (tgCfg?.telegram_alerts_enabled && tgCfg?.telegram_bot_token && tgCfg?.telegram_chat_id) {
+          const title = alertType === "CLOCK_TAMPERING"
+            ? "🚨 تحذير أمني: تلاعب بساعة النظام (Clock Tampering)"
+            : `🚨 تحذير أمني (${alertType})`;
+          const msg =
+            `<b>${title}</b>\n` +
+            `• الشركة: <b>${companyName}</b>\n` +
+            `• الجهاز: <code>${rawMachineId || "—"}</code>\n` +
+            `• التفاصيل: ${details || "تم رصد رجوع ساعة النظام للخلف"}`;
+          fetch(`https://api.telegram.org/bot${tgCfg.telegram_bot_token}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: tgCfg.telegram_chat_id, text: msg, parse_mode: "HTML" })
+          }).catch(() => {});
+        }
+      } catch (_) {}
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (action === "submit_support_ticket") {
+      const subject = String(body.subject || "").trim();
+      const message = String(body.message || "").trim();
+      const companyName = String(body.company_name || companyId).trim();
+      const recentErrors = String(body.recent_errors || "").trim();
+      if (!subject || !message) {
+        return new Response(JSON.stringify({ success: false, error: "يرجى كتابة عنوان وتفاصيل المشكلة." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      const { data: ticket, error: ticketErr } = await supabase
+        .from("support_tickets")
+        .insert({
+          company_id: companyId,
+          company_name: companyName,
+          desktop_version: desktopVersion,
+          machine_id: rawMachineId || null,
+          subject,
+          message,
+          recent_errors: recentErrors || null,
+          status: "open"
+        })
+        .select("id, created_at")
+        .single();
+      if (ticketErr) {
+        return new Response(JSON.stringify({ success: false, error: ticketErr.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      try {
+        const { data: tgCfg } = await supabase
+          .from("app_global_config")
+          .select("telegram_alerts_enabled, telegram_bot_token, telegram_chat_id")
+          .eq("id", 1)
+          .maybeSingle();
+        if (tgCfg?.telegram_alerts_enabled && tgCfg?.telegram_bot_token && tgCfg?.telegram_chat_id) {
+          const msg =
+            `<b>🎫 تذكرة دعم فني جديدة</b>\n` +
+            `• الشركة: <b>${companyName}</b> (v${desktopVersion})\n` +
+            `• الموضوع: <b>${subject}</b>\n` +
+            `• الرسالة: ${message.slice(0, 350)}`;
+          fetch(`https://api.telegram.org/bot${tgCfg.telegram_bot_token}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: tgCfg.telegram_chat_id, text: msg, parse_mode: "HTML" })
+          }).catch(() => {});
+        }
+      } catch (_) {}
+      return new Response(JSON.stringify({ success: true, ticket }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });

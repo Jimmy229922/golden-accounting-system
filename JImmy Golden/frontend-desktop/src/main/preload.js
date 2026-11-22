@@ -327,6 +327,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getClientRuntimeMeta: () => invokeChannel('get-client-runtime-meta'),
     pollClientNotices: () => invokeChannel('poll-client-notices'),
     markClientNoticesRead: (noticeIds) => invokeChannel('mark-client-notices-read', noticeIds),
+    submitSupportTicket: (payload) => invokeChannel('submit-support-ticket', payload),
+    getSmartAlerts: () => invokeChannel('get-smart-alerts'),
     openExternalUrl: (url) => invokeChannel('open-external-url', url),
     chooseBackupFolder: () => invokeChannel('choose-backup-folder'),
     chooseDatabaseFolder: () => invokeChannel('choose-database-folder')

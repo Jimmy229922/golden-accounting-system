@@ -665,9 +665,16 @@ function openSupportModal() {
                         <button type="button" id="copySupportMachineBtn" style="border:1px solid #475569;background:#0f172a;color:#e2e8f0;border-radius:7px;padding:4px 10px;font-size:0.8rem;cursor:pointer;">نسخ</button>
                     </div>
                 </div>
+                <div style="background:#1e293b;border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+                    <div style="font-weight:700;font-size:0.92rem;color:#38bdf8;">🎫 إرسال تذكرة دعم فني مباشرة</div>
+                    <input type="text" id="supportTicketSubject" placeholder="عنوان المشكلة أو الاستفسار..." style="width:100%;box-sizing:border-box;background:#0f172a;color:#f8fafc;border:1px solid #334155;border-radius:8px;padding:8px 10px;font-size:0.86rem;">
+                    <textarea id="supportTicketMessage" rows="3" placeholder="اشرح المشكلة بالتفصيل وسيصلك رد الدعم في جرس الإشعارات..." style="width:100%;box-sizing:border-box;background:#0f172a;color:#f8fafc;border:1px solid #334155;border-radius:8px;padding:8px 10px;font-size:0.86rem;resize:vertical;"></textarea>
+                    <button type="button" id="submitSupportTicketBtn" style="width:100%;background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;border:none;border-radius:9px;padding:10px;font-size:0.9rem;font-weight:700;cursor:pointer;">إرسال تذكرة الدعم الفني</button>
+                    <div id="supportTicketStatus" style="font-size:0.8rem;color:#94a3b8;min-height:16px;"></div>
+                </div>
                 ${
                     waUrl
-                        ? `<button type="button" id="openSupportWhatsappBtn" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:10px;padding:12px;font-size:0.96rem;font-weight:700;cursor:pointer;">تواصل معنا الآن عبر واتساب الدعم الفني</button>`
+                        ? `<button type="button" id="openSupportWhatsappBtn" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.92rem;font-weight:700;cursor:pointer;">أو تواصل عبر واتساب الدعم الفني</button>`
                         : `<div style="font-size:0.84rem;color:#94a3b8;text-align:center;">للتواصل مع الدعم الفني أو التجديد يرجى مراسلة الإدارة برقم الجهاز أعلاه.</div>`
                 }
             </div>
@@ -679,6 +686,36 @@ function openSupportModal() {
         if (e.target === modal) modal.remove();
     });
     modal.querySelector('#closeSupportModalBtn')?.addEventListener('click', () => modal.remove());
+    modal.querySelector('#submitSupportTicketBtn')?.addEventListener('click', async () => {
+        const subj = (modal.querySelector('#supportTicketSubject')?.value || '').trim();
+        const msg = (modal.querySelector('#supportTicketMessage')?.value || '').trim();
+        const statusEl = modal.querySelector('#supportTicketStatus');
+        const btn = modal.querySelector('#submitSupportTicketBtn');
+        if (!subj || !msg) {
+            if (statusEl) { statusEl.style.color = '#f87171'; statusEl.textContent = 'يرجى كتابة عنوان وتفاصيل المشكلة أولاً.'; }
+            return;
+        }
+        if (!window.electronAPI || typeof window.electronAPI.submitSupportTicket !== 'function') {
+            if (statusEl) { statusEl.style.color = '#f87171'; statusEl.textContent = 'الخدمة غير متاحة حالياً.'; }
+            return;
+        }
+        if (btn) btn.disabled = true;
+        if (statusEl) { statusEl.style.color = '#38bdf8'; statusEl.textContent = 'جاري إرسال التذكرة...'; }
+        try {
+            const res = await window.electronAPI.submitSupportTicket({ subject: subj, message: msg });
+            if (res && res.success) {
+                if (statusEl) { statusEl.style.color = '#4ade80'; statusEl.textContent = 'تم إرسال التذكرة بنجاح! سيصلك الرد في جرس الإشعارات بالبرنامج.'; }
+                if (modal.querySelector('#supportTicketSubject')) modal.querySelector('#supportTicketSubject').value = '';
+                if (modal.querySelector('#supportTicketMessage')) modal.querySelector('#supportTicketMessage').value = '';
+            } else {
+                if (statusEl) { statusEl.style.color = '#f87171'; statusEl.textContent = res?.error || 'تعذر إرسال التذكرة.'; }
+            }
+        } catch (_) {
+            if (statusEl) { statusEl.style.color = '#f87171'; statusEl.textContent = 'تعذر إرسال التذكرة حالياً.'; }
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    });
     modal.querySelector('#copySupportMachineBtn')?.addEventListener('click', () => {
         if (meta.machineId && navigator.clipboard) {
             navigator.clipboard.writeText(meta.machineId).then(() => {
@@ -878,14 +915,19 @@ function escapeShellHtml(str) {
 }
 
 function collectActiveShellNotifications(meta) {
-    if (!meta) return [];
-    const priv = parseShellNotifications(meta.customNotice, 'private');
-    const glob = meta.announcementActive ? parseShellNotifications(meta.announcementMessage, 'global') : [];
-    return [...priv, ...glob].sort((a, b) => {
-        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tb - ta;
-    });
+    const adminItems = [];
+    if (meta) {
+        const priv = parseShellNotifications(meta.customNotice, 'private');
+        const glob = meta.announcementActive ? parseShellNotifications(meta.announcementMessage, 'global') : [];
+        adminItems.push(...priv, ...glob);
+        adminItems.sort((a, b) => {
+            const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return tb - ta;
+        });
+    }
+    const smartItems = Array.isArray(shellState.smartAlerts) ? shellState.smartAlerts : [];
+    return [...adminItems, ...smartItems];
 }
 
 function renderShellNotificationsPopover() {
@@ -909,12 +951,12 @@ function renderShellNotificationsPopover() {
 
     listEl.innerHTML = items.map((item) => {
         const isUnread = !readIds.has(item.id);
-        const tagLabel = item.kind === 'private' ? 'إشعار خاص من الإدارة' : 'إعلان عام';
+        const tagLabel = item.tag || (item.kind === 'private' ? 'إشعار خاص من الإدارة' : 'إعلان عام');
         const timeStr = formatShellNotifyTime(item.createdAt);
         return `
             <div class="nav-notify-item${isUnread ? ' unread' : ''}">
                 <div class="nav-notify-item-top">
-                    <span class="nav-notify-tag ${item.kind}">${tagLabel}</span>
+                    <span class="nav-notify-tag ${item.kind}">${escapeShellHtml(tagLabel)}</span>
                     ${timeStr ? `<span class="nav-notify-time">${escapeShellHtml(timeStr)}</span>` : ''}
                 </div>
                 <div class="nav-notify-text">${escapeShellHtml(item.text)}</div>
@@ -980,13 +1022,60 @@ function bindShellNotificationBellEvents() {
     }
 }
 
+function renderReadOnlyBanner(meta) {
+    const existing = document.getElementById('shellReadOnlyBanner');
+    if (!meta || !meta.readOnlyMode) {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) existing.remove();
+    const navHost = document.getElementById('shellNav');
+    if (!navHost) return;
+    const waUrl = buildSupportWhatsappUrl(meta, 'السلام عليكم، أرغب في تجديد اشتراك نظام المحاسبة لإلغاء وضع القراءة فقط:');
+    const bar = document.createElement('div');
+    bar.id = 'shellReadOnlyBanner';
+    bar.setAttribute('dir', 'rtl');
+    bar.style.cssText = 'background:linear-gradient(90deg,rgba(180,83,9,0.96),rgba(146,64,14,0.96));border-bottom:1px solid rgba(251,191,36,0.55);color:#fef3c7;padding:9px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:0.86rem;font-weight:700;z-index:60;';
+    bar.innerHTML = `
+        <span>🔒 وضع القراءة فقط (متبقي ${Number(meta.readOnlyRemainingDays || 1)} يوم قبل الإيقاف الكامل) — يمكنك استعراض الحسابات والتقارير فقط بدون إضافة أو تعديل لحين تجديد الاشتراك.</span>
+        ${waUrl ? '<button type="button" id="readOnlyRenewWaBtn" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:0.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">تجديد الآن عبر واتساب</button>' : ''}
+    `;
+    navHost.insertAdjacentElement('afterend', bar);
+    bar.querySelector('#readOnlyRenewWaBtn')?.addEventListener('click', () => openExternalSupportUrl(waUrl));
+}
+
+async function refreshSmartAlerts() {
+    try {
+        if (window.electronAPI && typeof window.electronAPI.getSmartAlerts === 'function') {
+            const res = await window.electronAPI.getSmartAlerts();
+            if (res && res.success && Array.isArray(res.alerts)) {
+                shellState.smartAlerts = res.alerts;
+            }
+        }
+    } catch (_) {}
+}
+
 async function applyClientRuntimeMeta(meta) {
     if (!meta) return;
+    if (meta.forceLogoutTriggered) {
+        try {
+            sessionStorage.removeItem('authSessionToken');
+            localStorage.removeItem('authSessionToken');
+        } catch (_) {}
+        window.location.href = '../auth/index.html';
+        return;
+    }
+    if (meta.readOnlyExpired || meta.licenseStatus === 'suspended') {
+        window.location.reload();
+        return;
+    }
     shellState.runtimeMeta = meta;
     if (meta.forceUpdateRequired) {
         renderForceUpdateOverlay(meta);
         return;
     }
+    renderReadOnlyBanner(meta);
+    await refreshSmartAlerts();
     renderShellNotificationsPopover();
     if (meta.showExpiryBanner) {
         renderExpiryReminderBanner(meta);

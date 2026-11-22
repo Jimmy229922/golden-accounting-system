@@ -95,6 +95,7 @@ import com.goldenwolfeg.accountingmobile.data.model.AdminBackupFileDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminClientDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminErrorLogDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminStatsDto
+import com.goldenwolfeg.accountingmobile.data.model.AdminSupportTicketDto
 import com.goldenwolfeg.accountingmobile.data.model.diagnoseClientError
 import com.goldenwolfeg.accountingmobile.ui.theme.BalancePayable
 import com.goldenwolfeg.accountingmobile.ui.theme.BalanceReceivable
@@ -127,6 +128,9 @@ fun AdminPanelScreen(
     val auditLogs by viewModel.auditLogs.collectAsState()
     val auditPage by viewModel.auditPage.collectAsState()
     val auditTotalPages by viewModel.auditTotalPages.collectAsState()
+    val supportTickets by viewModel.supportTickets.collectAsState()
+    val ticketsPage by viewModel.ticketsPage.collectAsState()
+    val ticketsTotalPages by viewModel.ticketsTotalPages.collectAsState()
     val clientBackups by viewModel.clientBackups.collectAsState()
     val detectedChatId by viewModel.detectedChatId.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -258,14 +262,20 @@ fun AdminPanelScreen(
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { viewModel.onTabSelected(2) },
-                        text = { Text("النشاط", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                        icon = { Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        text = { Text("النشاط", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                        icon = { Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(17.dp)) }
                     )
                     Tab(
                         selected = selectedTab == 3,
                         onClick = { viewModel.onTabSelected(3) },
-                        text = { Text("الإعدادات", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        text = { Text("التذاكر", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                        icon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(17.dp)) }
+                    )
+                    Tab(
+                        selected = selectedTab == 4,
+                        onClick = { viewModel.onTabSelected(4) },
+                        text = { Text("الإعدادات", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(17.dp)) }
                     )
                 }
             }
@@ -318,7 +328,15 @@ fun AdminPanelScreen(
                         onPageChange = { viewModel.loadAuditLogs(it) },
                         onRefresh = { viewModel.loadAuditLogs(auditPage) }
                     )
-                    3 -> GlobalConfigTabContent(
+                    3 -> SupportTicketsTabContent(
+                        tickets = supportTickets,
+                        page = ticketsPage,
+                        totalPages = ticketsTotalPages,
+                        onPageChange = { viewModel.loadSupportTickets(it) },
+                        onRefresh = { viewModel.loadSupportTickets(ticketsPage) },
+                        onReply = { tid, reply, st -> viewModel.replySupportTicket(tid, reply, st) }
+                    )
+                    4 -> GlobalConfigTabContent(
                         minVersion = globalConfig.minSupportedVersion,
                         supportWhatsapp = globalConfig.supportWhatsapp,
                         forceMessage = globalConfig.forceUpdateMessage,
@@ -360,6 +378,14 @@ fun AdminPanelScreen(
             },
             onSetLifetime = {
                 viewModel.setLifetimeLicense(client.id)
+                renewClient = null
+            },
+            onSetReadOnly = {
+                viewModel.setReadOnlyLicense(client.id, 3)
+                renewClient = null
+            },
+            onSaveQuotas = { maxDesktop, maxAndroid ->
+                viewModel.updateClientQuotas(client.id, maxDesktop, maxAndroid)
                 renewClient = null
             },
             onSaveNotes = { notes ->
@@ -552,6 +578,14 @@ fun AdminPanelScreen(
             },
             onForceBackup = {
                 viewModel.sendForceBackupCommand(liveClient.id)
+                remoteCommandClient = null
+            },
+            onForceUpdate = {
+                viewModel.sendForceUpdateCommand(liveClient.id, liveClient.forceUpdateTarget)
+                remoteCommandClient = null
+            },
+            onForceLogout = {
+                viewModel.sendForceLogoutCommand(liveClient.id)
                 remoteCommandClient = null
             },
             onResetDesktopPassword = { newPass ->
@@ -750,6 +784,7 @@ private fun ClientCard(
         "lifetime" -> "دائم" to GoldBright
         "active" -> "نشط (${client.remainingDays} يوم)" to BalanceReceivable
         "trial" -> "تجريبي (${client.remainingDays} يوم)" to Color(0xFF06B6D4)
+        "read_only" -> "قراءة فقط (${client.remainingDays} يوم)" to Color(0xFFF59E0B)
         "suspended" -> "موقوف" to BalancePayable
         else -> "منتهي" to BalancePayable
     }
@@ -1619,10 +1654,14 @@ private fun RenewAndNotesDialog(
     onDismiss: () -> Unit,
     onExtendDays: (Int) -> Unit,
     onSetLifetime: () -> Unit,
+    onSetReadOnly: () -> Unit,
+    onSaveQuotas: (Int, Int) -> Unit,
     onSaveNotes: (String) -> Unit
 ) {
     var daysText by remember { mutableStateOf("30") }
     var notesText by remember { mutableStateOf(client.notes ?: "") }
+    var maxDesktopText by remember(client.id) { mutableStateOf(client.maxDesktopUsers.toString()) }
+    var maxAndroidText by remember(client.id) { mutableStateOf(client.maxAndroidUsers.toString()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1673,6 +1712,38 @@ private fun RenewAndNotesDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = GoldMetallic, contentColor = NavyDark)
                 ) {
                     Text("تفعيل ترخيص دائم (Lifetime)", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = onSetReadOnly,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("🔒 وضع القراءة فقط (مهلة 3 أيام ثم قفل)", color = Color(0xFFFBBF24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                HorizontalDivider(color = NavySecondary)
+
+                Text("حدود الباقة (0 = غير محدود)", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AdminTextField(
+                        value = maxDesktopText,
+                        onValueChange = { maxDesktopText = it.filter { ch -> ch.isDigit() } },
+                        label = "موظفي الديسكتوب",
+                        modifier = Modifier.weight(1f)
+                    )
+                    AdminTextField(
+                        value = maxAndroidText,
+                        onValueChange = { maxAndroidText = it.filter { ch -> ch.isDigit() } },
+                        label = "حسابات الأندرويد",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Button(
+                    onClick = { onSaveQuotas(maxDesktopText.toIntOrNull() ?: 0, maxAndroidText.toIntOrNull() ?: 0) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                ) {
+                    Text("حفظ حدود الباقة", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 HorizontalDivider(color = NavySecondary)
@@ -2006,6 +2077,8 @@ private fun ClientRemoteCommandDialog(
     onSendNotice: (String) -> Unit,
     onDeleteNotice: (String) -> Unit,
     onForceBackup: () -> Unit,
+    onForceUpdate: () -> Unit,
+    onForceLogout: () -> Unit,
     onResetDesktopPassword: (String) -> Unit
 ) {
     var noticeText by remember(client.id) { mutableStateOf("") }
@@ -2111,6 +2184,27 @@ private fun ClientRemoteCommandDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = BalanceReceivable)
                 ) {
                     Text("أمر أخذ نسخة احتياطية سحابية الآن", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onForceUpdate,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B), contentColor = NavyDark)
+                    ) {
+                        Text(
+                            if (client.forceUpdateTarget) "إلغاء فرض التحديث" else "فرض تحديث للعميل",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Button(
+                        onClick = onForceLogout,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = BalancePayable)
+                    ) {
+                        Text("تسجيل خروج فوري", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 HorizontalDivider(color = NavySecondary)
@@ -2271,9 +2365,9 @@ private fun computePresenceInfo(isoDate: String?): PresenceInfo {
             color = Color(0xFF22C55E)
         )
         diffHours < 24L -> PresenceInfo(
-            statusLabel = "نشط اليوم",
+            statusLabel = "ظهر اليوم",
             relativeTime = relative,
-            color = Color(0xFF10B981)
+            color = Color(0xFFF59E0B)
         )
         else -> PresenceInfo(
             statusLabel = "غير متصل",
@@ -2353,4 +2447,135 @@ private fun serializeAdminNotices(list: List<AdminNoticeEntry>): String {
         arr.put(obj)
     }
     return arr.toString()
+}
+
+@Composable
+private fun SupportTicketsTabContent(
+    tickets: List<AdminSupportTicketDto>,
+    page: Int,
+    totalPages: Int,
+    onPageChange: (Int) -> Unit,
+    onRefresh: () -> Unit,
+    onReply: (String, String, String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("تذاكر الدعم الفني (${tickets.size})", color = GoldBright, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            OutlinedButton(onClick = onRefresh) {
+                Text("تحديث", color = Color.White, fontSize = 11.sp)
+            }
+        }
+
+        if (tickets.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text("لا توجد تذاكر دعم فني حالياً.", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 12.dp)
+            ) {
+                items(tickets, key = { it.id }) { tk ->
+                    var replyText by remember(tk.id) { mutableStateOf("") }
+                    val (statusLabel, statusColor) = when (tk.status.lowercase()) {
+                        "closed" -> "مغلقة" to BalancePayable
+                        "replied" -> "تم الرد" to BalanceReceivable
+                        else -> "مفتوحة" to Color(0xFFF59E0B)
+                    }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = NavyPrimary),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, NavySecondary, RoundedCornerShape(12.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(tk.subject, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(statusColor.copy(alpha = 0.16f))
+                                        .border(1.dp, statusColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(statusLabel, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Text(
+                                text = "${tk.companyName ?: tk.companyId} • v${tk.desktopVersion ?: "—"}",
+                                color = Color(0xFF38BDF8),
+                                fontSize = 11.sp
+                            )
+                            Text(tk.message, color = Color.White.copy(alpha = 0.88f), fontSize = 12.sp)
+                            if (!tk.adminReply.isNullOrBlank()) {
+                                Text(
+                                    text = "رد الإدارة: ${tk.adminReply}",
+                                    color = Color(0xFF4ADE80),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            AdminTextField(
+                                value = replyText,
+                                onValueChange = { replyText = it },
+                                label = "اكتب ردك (يصل للعميل في جرس الإشعارات)",
+                                singleLine = false
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        if (replyText.trim().isNotEmpty()) {
+                                            onReply(tk.id, replyText.trim(), "replied")
+                                            replyText = ""
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                                ) {
+                                    Text("إرسال الرد", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                if (!tk.status.equals("closed", ignoreCase = true)) {
+                                    OutlinedButton(onClick = { onReply(tk.id, "", "closed") }) {
+                                        Text("إغلاق", color = Color.White, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (totalPages > 1) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(onClick = { if (page > 1) onPageChange(page - 1) }, enabled = page > 1) {
+                    Text("السابق", color = Color.White, fontSize = 11.sp)
+                }
+                Text("صفحة $page من $totalPages", color = GoldBright, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                OutlinedButton(onClick = { if (page < totalPages) onPageChange(page + 1) }, enabled = page < totalPages) {
+                    Text("التالي", color = Color.White, fontSize = 11.sp)
+                }
+            }
+        }
+    }
 }

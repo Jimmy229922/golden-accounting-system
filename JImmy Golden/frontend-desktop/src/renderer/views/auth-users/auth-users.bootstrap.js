@@ -445,9 +445,20 @@ async function handleOpenPermissions(userId, username, isAdmin) {
     renderPermissionsTable(result.permissions, isAdmin);
 }
 
+function updatePermActiveCounter() {
+    const counter = document.getElementById('permActiveCounter');
+    if (!counter) return;
+    const all = document.querySelectorAll('#permTableBody .perm-cb');
+    const checked = document.querySelectorAll('#permTableBody .perm-cb:checked');
+    counter.textContent = `${checked.length} / ${all.length} مفعّل`;
+}
+
 function renderPermissionsTable(permissions, isAdmin) {
     const permTableBody = document.getElementById('permTableBody');
     if (!permTableBody) return;
+
+    const searchInput = document.getElementById('permSearchInput');
+    if (searchInput) searchInput.value = '';
 
     const rows = PERMISSION_PAGES.map((page) => {
         const perm = permissions.find((p) => p.page === page) || {};
@@ -456,24 +467,106 @@ function renderPermissionsTable(permissions, isAdmin) {
         const editChecked = isAdmin || perm.can_edit ? 'checked' : '';
         const deleteChecked = isAdmin || perm.can_delete ? 'checked' : '';
         const disabled = isAdmin ? 'disabled' : '';
+        const label = getPageLabel(page);
 
         return `
-            <tr data-page="${page}">
-                <td class="perm-page-name">${getPageLabel(page)}</td>
-                <td><input type="checkbox" class="perm-cb" data-perm="can_view" ${viewChecked} ${disabled}></td>
-                <td><input type="checkbox" class="perm-cb" data-perm="can_add" ${addChecked} ${disabled}></td>
-                <td><input type="checkbox" class="perm-cb" data-perm="can_edit" ${editChecked} ${disabled}></td>
-                <td><input type="checkbox" class="perm-cb" data-perm="can_delete" ${deleteChecked} ${disabled}></td>
+            <tr data-page="${page}" data-label="${escapeHtml(label).toLowerCase()}">
+                <td class="perm-page-name">
+                    <div class="perm-page-cell">
+                        <span>${escapeHtml(label)}</span>
+                        ${isAdmin ? '' : '<button type="button" class="perm-row-toggle-btn" title="تحديد/إلغاء كل صلاحيات هذه الصفحة">الكل</button>'}
+                    </div>
+                </td>
+                <td><label class="perm-switch sw-view"><input type="checkbox" class="perm-cb" data-perm="can_view" ${viewChecked} ${disabled}><span class="perm-slider"></span></label></td>
+                <td><label class="perm-switch sw-add"><input type="checkbox" class="perm-cb" data-perm="can_add" ${addChecked} ${disabled}><span class="perm-slider"></span></label></td>
+                <td><label class="perm-switch sw-edit"><input type="checkbox" class="perm-cb" data-perm="can_edit" ${editChecked} ${disabled}><span class="perm-slider"></span></label></td>
+                <td><label class="perm-switch sw-delete"><input type="checkbox" class="perm-cb" data-perm="can_delete" ${deleteChecked} ${disabled}><span class="perm-slider"></span></label></td>
             </tr>
         `;
     }).join('');
 
     permTableBody.innerHTML = rows;
+    updatePermActiveCounter();
+
+    if (!permTableBody.dataset.proBound) {
+        permTableBody.dataset.proBound = '1';
+        permTableBody.addEventListener('change', (e) => {
+            const cb = e.target.closest('.perm-cb');
+            if (!cb) return;
+            const tr = cb.closest('tr');
+            if (tr && cb.checked && cb.dataset.perm !== 'can_view') {
+                const viewCb = tr.querySelector('.perm-cb[data-perm="can_view"]');
+                if (viewCb && !viewCb.disabled) viewCb.checked = true;
+            }
+            if (tr && !cb.checked && cb.dataset.perm === 'can_view') {
+                tr.querySelectorAll('.perm-cb:not([data-perm="can_view"]):not(:disabled)').forEach((other) => {
+                    other.checked = false;
+                });
+            }
+            updatePermActiveCounter();
+        });
+        permTableBody.addEventListener('click', (e) => {
+            const rowBtn = e.target.closest('.perm-row-toggle-btn');
+            if (!rowBtn) return;
+            const tr = rowBtn.closest('tr');
+            if (!tr) return;
+            const cbs = Array.from(tr.querySelectorAll('.perm-cb:not(:disabled)'));
+            const allChecked = cbs.every((c) => c.checked);
+            cbs.forEach((c) => { c.checked = !allChecked; });
+            updatePermActiveCounter();
+        });
+    }
+
+    const modal = document.getElementById('permissionsModal');
+    if (modal && !modal.dataset.proControlsBound) {
+        modal.dataset.proControlsBound = '1';
+        modal.querySelector('#permPresetCashier')?.addEventListener('click', () => {
+            const cashierPages = new Set(['dashboard', 'sales', 'customers', 'inventory', 'items']);
+            modal.querySelectorAll('#permTableBody tr').forEach((tr) => {
+                const pg = tr.getAttribute('data-page');
+                const inScope = cashierPages.has(pg);
+                tr.querySelectorAll('.perm-cb:not(:disabled)').forEach((cb) => {
+                    const p = cb.dataset.perm;
+                    cb.checked = inScope && (p === 'can_view' || (p === 'can_add' && (pg === 'sales' || pg === 'customers')));
+                });
+            });
+            updatePermActiveCounter();
+        });
+        modal.querySelector('#permPresetViewer')?.addEventListener('click', () => {
+            modal.querySelectorAll('#permTableBody .perm-cb:not(:disabled)').forEach((cb) => {
+                cb.checked = cb.dataset.perm === 'can_view';
+            });
+            updatePermActiveCounter();
+        });
+        modal.querySelectorAll('.perm-col-toggle').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const col = btn.dataset.col;
+                const cbs = Array.from(modal.querySelectorAll(`#permTableBody .perm-cb[data-perm="${col}"]:not(:disabled)`));
+                const allChecked = cbs.every((c) => c.checked);
+                cbs.forEach((cb) => {
+                    cb.checked = !allChecked;
+                    if (!allChecked && col !== 'can_view') {
+                        const viewCb = cb.closest('tr')?.querySelector('.perm-cb[data-perm="can_view"]:not(:disabled)');
+                        if (viewCb) viewCb.checked = true;
+                    }
+                });
+                updatePermActiveCounter();
+            });
+        });
+        modal.querySelector('#permSearchInput')?.addEventListener('input', (e) => {
+            const q = String(e.target.value || '').trim().toLowerCase();
+            modal.querySelectorAll('#permTableBody tr').forEach((tr) => {
+                const lbl = tr.getAttribute('data-label') || '';
+                tr.style.display = (!q || lbl.includes(q)) ? '' : 'none';
+            });
+        });
+    }
 }
 
 function toggleAllPermissions(checked) {
     const checkboxes = document.querySelectorAll('#permTableBody .perm-cb:not(:disabled)');
     checkboxes.forEach((cb) => { cb.checked = checked; });
+    updatePermActiveCounter();
 }
 
 function closePermissionsModal() {

@@ -16,7 +16,7 @@
         { key: 'master_customers', category: 'البيانات الأساسية', label: 'العملاء والموردين', desc: 'إظهار صفحة العملاء والموردين ضمن قائمة البيانات الأساسية.' },
         { key: 'master_users', category: 'البيانات الأساسية', label: 'إدارة المستخدمين', desc: 'إظهار صفحة إدارة المستخدمين ضمن قائمة البيانات الأساسية.' },
         { key: 'finance_treasury', category: 'التعاملات المالية', label: 'المالية', desc: 'إظهار صفحة المالية ضمن قائمة التعاملات المالية.' },
-        { key: 'petty_expenses', category: 'التعاملات المالية', label: 'النثريات', desc: 'إظهار صفحة النثريات ضمن قائمة التعاملات المالية.' },
+        { key: 'petty_expenses', category: 'التعاملات المالية', label: 'نثريات الشركة', desc: 'إظهار صفحة نثريات الشركة ضمن قائمة التعاملات المالية.' },
         { key: 'petty_bags', category: 'التعاملات المالية', label: 'الشكاير', desc: 'إظهار صفحة الشكاير ضمن قائمة التعاملات المالية.' },
         { key: 'petty_inspection', category: 'التعاملات المالية', label: 'الفحص', desc: 'إظهار صفحة الفحص ضمن قائمة التعاملات المالية.' },
         { key: 'petty_shipping_clearance', category: 'التعاملات المالية', label: 'الشحن والتخليص', desc: 'إظهار صفحة الشحن والتخليص ضمن قائمة التعاملات المالية.' },
@@ -244,6 +244,12 @@
             state.stats = data.stats || {};
             state.globalConfig = data.global_config || state.globalConfig;
             state.clients = Array.isArray(data.clients) ? data.clients : [];
+            const openTk = Number(data.open_tickets_count || 0);
+            const tkBadge = $('openTicketsBadge');
+            if (tkBadge) {
+                tkBadge.textContent = String(openTk);
+                tkBadge.style.display = openTk > 0 ? 'inline-block' : 'none';
+            }
             showDashboardScreen();
             renderStats();
             renderClientsTable();
@@ -253,6 +259,95 @@
             if (!state.clients.length) {
                 showLoginScreen(err.message);
             }
+        }
+    }
+
+    async function loadSupportTickets(page = state.ticketsPage || 1) {
+        const container = $('ticketsListContainer');
+        if (!container) return;
+        state.ticketsPage = Math.max(1, Number(page) || 1);
+        const statusFilter = $('ticketsStatusFilter')?.value || 'all';
+        container.innerHTML = '<div class="empty-cell">جاري تحميل تذاكر الدعم الفني...</div>';
+        try {
+            const data = await callAdminApi('get_support_tickets', {
+                page: state.ticketsPage,
+                per_page: 15,
+                status: statusFilter
+            });
+            const tickets = data.tickets || [];
+            renderPaginationBar('ticketsPaginationBar', state.ticketsPage, Math.max(1, Number(data.total_pages || 1)), Number(data.total || tickets.length), (nextPg) => loadSupportTickets(nextPg));
+            if (!tickets.length) {
+                container.innerHTML = '<div class="empty-cell">لا توجد تذاكر دعم فني حالياً.</div>';
+                return;
+            }
+            container.innerHTML = tickets.map((tk) => {
+                const stBadge = tk.status === 'closed'
+                    ? '<span class="badge badge-suspended">مغلقة</span>'
+                    : tk.status === 'replied'
+                        ? '<span class="badge badge-active">تم الرد</span>'
+                        : '<span class="badge badge-trial" style="background:rgba(245,158,11,0.18);color:#fbbf24;border-color:rgba(245,158,11,0.45);">مفتوحة</span>';
+                return `
+                    <div style="background:rgba(15,23,42,0.75);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <strong style="color:#f8fafc;font-size:0.95rem;">${escapeHtml(tk.subject)}</strong>
+                                ${stBadge}
+                            </div>
+                            <span style="font-size:0.76rem;color:#94a3b8;">${formatRelativeTime(tk.created_at)} • ${formatExactDateTime(tk.created_at)}</span>
+                        </div>
+                        <div style="font-size:0.8rem;color:#38bdf8;">
+                            <i class="fas fa-building"></i> ${escapeHtml(tk.company_name || tk.company_id)} • v${escapeHtml(tk.desktop_version || '—')}
+                        </div>
+                        <div style="font-size:0.86rem;color:#e2e8f0;line-height:1.6;white-space:pre-wrap;background:rgba(30,41,59,0.55);padding:10px;border-radius:8px;">${escapeHtml(tk.message)}</div>
+                        ${tk.admin_reply ? `<div style="font-size:0.82rem;color:#86efac;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);padding:8px 10px;border-radius:8px;"><strong>رد الإدارة:</strong> ${escapeHtml(tk.admin_reply)}</div>` : ''}
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                            <input type="text" class="ticket-reply-input" data-tid="${escapeHtml(tk.id)}" placeholder="اكتب ردك هنا (سيصل للعميل فوراً في جرس الإشعارات)..." style="flex:1;min-width:220px;background:var(--bg-elevated);border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;color:#f8fafc;font-size:0.84rem;">
+                            <button type="button" class="btn btn-primary btn-sm send-ticket-reply-btn" data-tid="${escapeHtml(tk.id)}"><i class="fas fa-reply"></i> إرسال الرد للعميل</button>
+                            ${tk.status !== 'closed' ? `<button type="button" class="btn btn-ghost btn-sm close-ticket-btn" data-tid="${escapeHtml(tk.id)}">إغلاق التذكرة</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.querySelectorAll('.send-ticket-reply-btn').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const tid = btn.dataset.tid;
+                    const inp = container.querySelector(`.ticket-reply-input[data-tid="${tid}"]`);
+                    const reply = (inp?.value || '').trim();
+                    if (!reply) {
+                        showToast('اكتب نص الرد أولاً.', 'error');
+                        return;
+                    }
+                    btn.disabled = true;
+                    try {
+                        await callAdminApi('reply_support_ticket', { ticket_id: tid, reply, status: 'replied' });
+                        showToast('تم إرسال الرد للعميل في جرس الإشعارات بنجاح!', 'success');
+                        await loadSupportTickets(state.ticketsPage);
+                        await loadOverview();
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                        btn.disabled = false;
+                    }
+                });
+            });
+
+            container.querySelectorAll('.close-ticket-btn').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const tid = btn.dataset.tid;
+                    btn.disabled = true;
+                    try {
+                        await callAdminApi('reply_support_ticket', { ticket_id: tid, reply: '', status: 'closed' });
+                        showToast('تم إغلاق التذكرة', 'success');
+                        await loadSupportTickets(state.ticketsPage);
+                        await loadOverview();
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                        btn.disabled = false;
+                    }
+                });
+            });
+        } catch (err) {
+            container.innerHTML = `<div class="empty-cell">${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -273,6 +368,9 @@
         }
         if (st === 'suspended') {
             return `<span class="badge badge-suspended"><i class="fas fa-ban"></i> موقوف</span>`;
+        }
+        if (st === 'read_only') {
+            return `<span class="badge badge-expired" style="background:rgba(245,158,11,0.18);border-color:rgba(245,158,11,0.5);color:#fbbf24;"><i class="fas fa-lock"></i> قراءة فقط (${client.remaining_days} يوم)</span>`;
         }
         if (st === 'expired') {
             return `<span class="badge badge-expired"><i class="fas fa-clock"></i> منتهي</span>`;
@@ -365,13 +463,13 @@
                         ${(() => {
                             const fiveMinAgo = Date.now() - 5 * 60 * 1000;
                             const isLiveNow = hbMs >= fiveMinAgo;
-                            const statusLabel = isLiveNow ? 'متصل الآن' : isOnline ? 'نشط اليوم' : (hbMs > 0 ? 'غير متصل' : 'لم يتصل');
-                            const dotColor = isLiveNow ? '#22c55e' : isOnline ? '#10b981' : '#64748b';
-                            const pillBg = isLiveNow ? 'rgba(34,197,94,0.16)' : isOnline ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.16)';
-                            const pillBorder = isLiveNow ? 'rgba(34,197,94,0.45)' : isOnline ? 'rgba(16,185,129,0.35)' : 'rgba(100,116,139,0.3)';
+                            const statusLabel = isLiveNow ? 'متصل الآن' : isOnline ? 'ظهر اليوم' : (hbMs > 0 ? 'غير متصل' : 'لم يتصل');
+                            const dotColor = isLiveNow ? '#22c55e' : isOnline ? '#f59e0b' : '#64748b';
+                            const pillBg = isLiveNow ? 'rgba(34,197,94,0.16)' : isOnline ? 'rgba(245,158,11,0.14)' : 'rgba(100,116,139,0.16)';
+                            const pillBorder = isLiveNow ? 'rgba(34,197,94,0.45)' : isOnline ? 'rgba(245,158,11,0.42)' : 'rgba(100,116,139,0.3)';
                             return `
                                 <div style="display:flex;flex-direction:column;gap:4px;">
-                                    <div style="display:inline-flex;align-items:center;gap:6px;width:fit-content;padding:2px 9px;border-radius:999px;background:${pillBg};border:1px solid ${pillBorder};font-size:0.74rem;font-weight:700;color:${isLiveNow ? '#4ade80' : isOnline ? '#34d399' : '#94a3b8'};">
+                                    <div style="display:inline-flex;align-items:center;gap:6px;width:fit-content;padding:2px 9px;border-radius:999px;background:${pillBg};border:1px solid ${pillBorder};font-size:0.74rem;font-weight:700;color:${isLiveNow ? '#4ade80' : isOnline ? '#fbbf24' : '#94a3b8'};">
                                         <span style="width:7px;height:7px;border-radius:50%;background:${dotColor};box-shadow:${isLiveNow ? '0 0 8px #22c55e' : 'none'};"></span>
                                         <span>${statusLabel}</span>
                                     </div>
@@ -779,8 +877,24 @@
                     <button type="button" class="btn btn-success" data-lic-mode="extend_days" data-days="90"><i class="fas fa-plus"></i> تجديد 3 شهور (+90 يوم)</button>
                     <button type="button" class="btn btn-primary" data-lic-mode="extend_days" data-days="365"><i class="fas fa-plus"></i> تجديد سنة (+365 يوم)</button>
                     <button type="button" class="btn btn-warning" data-lic-mode="lifetime"><i class="fas fa-infinity"></i> تحويل لدائم (Lifetime)</button>
+                    <button type="button" class="btn btn-ghost" style="border-color:rgba(245,158,11,0.5);color:#fbbf24;grid-column:1 / -1;" data-lic-mode="read_only" data-days="3"><i class="fas fa-lock"></i> تحويل لوضع القراءة فقط (مهلة 3 أيام ثم قفل تلقائي)</button>
                 </div>
             </div>
+            <hr style="border:none;border-top:1px solid var(--border);">
+            <form id="clientQuotasForm" class="modal-form">
+                <div style="font-size:0.85rem;color:#38bdf8;font-weight:700;"><i class="fas fa-sliders"></i> حدود الباقة (0 = غير محدود)</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="field">
+                        <label>أقصى عدد موظفي الديسكتوب</label>
+                        <input type="number" id="quotaMaxDesktop" min="0" value="${Number(client.max_desktop_users || 0)}">
+                    </div>
+                    <div class="field">
+                        <label>أقصى عدد حسابات الأندرويد</label>
+                        <input type="number" id="quotaMaxAndroid" min="0" value="${Number(client.max_android_users || 0)}">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block btn-sm"><i class="fas fa-save"></i> حفظ حدود الباقة</button>
+            </form>
             <hr style="border:none;border-top:1px solid var(--border);">
             <form id="customExpiryForm" class="modal-form">
                 <div class="field">
@@ -806,6 +920,23 @@
                     showToast(err.message, 'error');
                 }
             });
+        });
+
+        $('clientQuotasForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                await callAdminApi('update_license', {
+                    license_id: client.id,
+                    mode: 'update_quotas',
+                    max_desktop_users: Math.max(0, Number($('quotaMaxDesktop')?.value || 0)),
+                    max_android_users: Math.max(0, Number($('quotaMaxAndroid')?.value || 0))
+                });
+                closeModal();
+                showToast('تم حفظ حدود الباقة بنجاح', 'success');
+                await loadOverview();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
         });
 
         $('customExpiryForm').addEventListener('submit', async (e) => {
@@ -1105,6 +1236,8 @@
             license_extend_days: 'تمديد اشتراك',
             license_set_expiry: 'تعديل تاريخ الانتهاء',
             license_lifetime: 'تفعيل ترخيص دائم',
+            license_read_only: 'تفعيل وضع القراءة فقط (3 أيام)',
+            license_update_quotas: 'تحديث حدود الباقة',
             license_suspend: 'إيقاف حساب',
             license_resume: 'إعادة تفعيل حساب',
             license_reset_machine: 'فك ربط جهاز',
@@ -1118,7 +1251,11 @@
             remote_set_notice: 'إرسال رسالة خاصة لعميل',
             remote_clear_notice: 'إزالة رسالة خاصة لعميل',
             remote_force_backup: 'أمر نسخة احتياطية فورية عن بُعد',
+            remote_force_update: 'فرض تحديث إجباري لعميل محدد',
+            remote_clear_force_update: 'إلغاء فرض التحديث للعميل',
+            remote_force_logout: 'إجبار تسجيل خروج فوري للعميل',
             remote_reset_desktop_password: 'تغيير كلمة سر الديسكتوب للعميل',
+            reply_support_ticket: 'الرد على تذكرة دعم فني',
             update_global_config: 'تحديث الإعدادات العامة'
         };
         return map[actionType] || actionType || 'إجراء إداري';
@@ -1474,6 +1611,7 @@
                 $('tabClients').classList.toggle('active', tab === 'clients');
                 $('tabErrors').classList.toggle('active', tab === 'errors');
                 $('tabAudit')?.classList.toggle('active', tab === 'audit');
+                $('tabTickets')?.classList.toggle('active', tab === 'tickets');
                 $('tabGlobalConfig').classList.toggle('active', tab === 'globalConfig');
                 if (tab === 'errors' && !state.errorsLoaded) {
                     loadErrorLogs();
@@ -1481,8 +1619,14 @@
                 if (tab === 'audit') {
                     loadAuditLogs();
                 }
+                if (tab === 'tickets') {
+                    loadSupportTickets(1);
+                }
             });
         });
+
+        $('refreshTicketsBtn')?.addEventListener('click', () => loadSupportTickets(state.ticketsPage || 1));
+        $('ticketsStatusFilter')?.addEventListener('change', () => loadSupportTickets(1));
 
         $('clientSearchInput').addEventListener('input', (e) => {
             state.search = e.target.value || '';
@@ -1609,6 +1753,14 @@
                             <button type="button" id="sendForceBackupBtn" class="btn btn-success btn-block">
                                 <i class="fas fa-bolt"></i> إرسال أمر النسخ الاحتياطي الآن
                             </button>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+                                <button type="button" id="sendForceUpdateBtn" class="btn btn-warning btn-sm">
+                                    <i class="fas fa-arrow-up-from-bracket"></i> ${client.force_update_target ? 'إلغاء فرض التحديث' : 'فرض تحديث لهذا العميل'}
+                                </button>
+                                <button type="button" id="sendForceLogoutBtn" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-right-from-bracket"></i> تسجيل خروج فوري
+                                </button>
+                            </div>
                         </div>
                         <hr style="border-color:var(--border);margin:4px 0;">
                         <div class="field" style="background:rgba(15,23,42,0.7);border:1px solid rgba(245,158,11,0.35);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">
@@ -1658,6 +1810,27 @@
                         await callAdminApi('send_client_command', { license_id: client.id, command_type: 'force_backup' });
                         closeModal();
                         showToast('تم إرسال أمر النسخ الاحتياطي السحابي عن بُعد بنجاح!', 'success');
+                        await loadOverview();
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    }
+                });
+                $('sendForceUpdateBtn')?.addEventListener('click', async () => {
+                    const cmd = client.force_update_target ? 'clear_force_update' : 'force_update';
+                    try {
+                        await callAdminApi('send_client_command', { license_id: client.id, command_type: cmd });
+                        closeModal();
+                        showToast(cmd === 'force_update' ? 'تم فرض التحديث الإجباري لهذا العميل بنجاح!' : 'تم إلغاء فرض التحديث للعميل', 'success');
+                        await loadOverview();
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    }
+                });
+                $('sendForceLogoutBtn')?.addEventListener('click', async () => {
+                    try {
+                        await callAdminApi('send_client_command', { license_id: client.id, command_type: 'force_logout' });
+                        closeModal();
+                        showToast('تم إرسال أمر تسجيل الخروج الفوري لجهاز العميل!', 'success');
                         await loadOverview();
                     } catch (err) {
                         showToast(err.message, 'error');

@@ -32,6 +32,10 @@
         return window.electronAPI.updateSalesInvoice(invoiceData);
     }
 
+    async function deleteSalesInvoice(id) {
+        return window.electronAPI.deleteInvoice(Number(id), 'sales');
+    }
+
     async function getShiftClosePreview() {
         return window.electronAPI.getSalesShiftClosePreview();
     }
@@ -60,6 +64,7 @@
         getItems,
         saveInvoice,
         updateInvoice,
+        deleteSalesInvoice,
         getShiftClosePreview,
         createShiftClosing,
         getShiftClosings,
@@ -68,4 +73,3 @@
         getWarehouses
     };
 })();
-

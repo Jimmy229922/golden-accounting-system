@@ -80,6 +80,11 @@
                     <i class="fas fa-shield-halved"></i>
                     <span>سجل نشاط الإدارة</span>
                 </button>
+                <button type="button" class="tab-btn" data-tab="tickets">
+                    <i class="fas fa-ticket"></i>
+                    <span>تذاكر الدعم الفني</span>
+                    <span id="openTicketsBadge" style="display:none;background:#ef4444;color:#fff;font-size:0.7rem;font-weight:800;padding:1px 7px;border-radius:999px;margin-right:4px;">0</span>
+                </button>
                 <button type="button" class="tab-btn" data-tab="globalConfig">
                     <i class="fas fa-sliders"></i>
                     <span>إعدادات النظام العامة</span>
@@ -221,6 +226,29 @@
                         </table>
                     </div>
                     <div id="auditPaginationBar" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);gap:10px;flex-wrap:wrap;"></div>
+                </div>
+            </div>
+
+            <div id="tabTickets" class="tab-panel">
+                <div class="table-card">
+                    <div class="table-card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                        <h3><i class="fas fa-ticket" style="color:#38bdf8;margin-left:6px;"></i> تذاكر الدعم الفني من العملاء</h3>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <select id="ticketsStatusFilter" style="background:var(--bg-elevated);border:1px solid var(--border-strong);color:#f8fafc;border-radius:8px;padding:6px 10px;font-size:0.82rem;">
+                                <option value="all">كل التذاكر</option>
+                                <option value="open">مفتوحة (بانتظار الرد)</option>
+                                <option value="replied">تم الرد عليها</option>
+                                <option value="closed">مغلقة</option>
+                            </select>
+                            <button type="button" id="refreshTicketsBtn" class="btn btn-ghost btn-sm">
+                                <i class="fas fa-sync-alt"></i> تحديث
+                            </button>
+                        </div>
+                    </div>
+                    <div id="ticketsListContainer" style="padding:14px;display:flex;flex-direction:column;gap:12px;">
+                        <div class="empty-cell">اضغط على التبويب لتحميل تذاكر الدعم الفني...</div>
+                    </div>
+                    <div id="ticketsPaginationBar" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);gap:10px;flex-wrap:wrap;"></div>
                 </div>
             </div>
 

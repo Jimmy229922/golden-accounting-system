@@ -238,6 +238,39 @@ try {
     // Initialize Database
     initDB();
 
+    // Central Read-Only Soft Lock guard for mutation IPC channels
+    const originalIpcHandle = ipcMain.handle.bind(ipcMain);
+    const readOnlyAllowedChannels = new Set([
+        'submit-invite-code',
+        'submit-support-ticket',
+        'save-daily-report-pdf',
+        'save-petty-expenses-pdf',
+        'save-factory-petty-expenses-pdf',
+        'save-customer-statement-pdf',
+        'save-invoice-pdf',
+        'save-report-pdf',
+        'create-backup'
+    ]);
+    const mutationChannelRegex = /^(add|create|update|delete|save|record|remove|clear|close|transfer|adjust|post)-/i;
+    ipcMain.handle = (channel, listener) => {
+        if (mutationChannelRegex.test(String(channel || '')) && !readOnlyAllowedChannels.has(channel) && !String(channel).endsWith('-pdf')) {
+            return originalIpcHandle(channel, (event, ...args) => {
+                try {
+                    const licSvc = require('./licenseService');
+                    if (licSvc && typeof licSvc.isReadOnlyModeActive === 'function' && licSvc.isReadOnlyModeActive(db)) {
+                        return {
+                            success: false,
+                            readOnlyBlocked: true,
+                            error: 'البرنامج حالياً في وضع القراءة فقط — لا يمكن إضافة أو تعديل أو حذف البيانات لحين تجديد الاشتراك.'
+                        };
+                    }
+                } catch (_) {}
+                return listener(event, ...args);
+            });
+        }
+        return originalIpcHandle(channel, listener);
+    };
+
     // Setup IPC Handlers
     setupAuthIPC();
 } catch (error) {

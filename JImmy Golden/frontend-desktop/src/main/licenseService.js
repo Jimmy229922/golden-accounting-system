@@ -24,7 +24,7 @@ function getLicenseSettings(accountingDb) {
     try {
         const rows = accountingDb.prepare(`
             SELECT key, value FROM settings 
-            WHERE key IN ('company_id', 'companyName', 'companyPhone', 'companyActivity', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at', 'client_features', 'min_supported_version', 'support_whatsapp', 'force_update_message', 'announcement_message', 'announcement_active', 'custom_notice')
+            WHERE key IN ('company_id', 'companyName', 'companyPhone', 'companyActivity', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at', 'client_features', 'min_supported_version', 'support_whatsapp', 'force_update_message', 'announcement_message', 'announcement_active', 'custom_notice', 'read_only_until', 'max_desktop_users', 'force_update_target')
         `).all();
         const map = {};
         rows.forEach(r => { map[r.key] = r.value; });
@@ -221,6 +221,19 @@ function checkAndRecordClock(accountingDb, now) {
         const lastSeen = lastRow && lastRow.value ? new Date(lastRow.value).getTime() : 0;
         const current = now.getTime();
         if (lastSeen > 0 && current < (lastSeen - 60000)) {
+            try {
+                const map = getLicenseSettings(accountingDb);
+                if (map.company_id) {
+                    callLicenseGateway('report_security_alert', {
+                        company_id: map.company_id,
+                        machine_id: getMachineId(),
+                        company_name: map.companyName || '',
+                        desktop_version: (app && app.getVersion) ? app.getVersion() : '10.1.28',
+                        alert_type: 'CLOCK_TAMPERING',
+                        details: `رجوع ساعة النظام من ${lastRow.value} إلى ${now.toISOString()}`
+                    }).catch(() => {});
+                }
+            } catch (_) {}
             return false;
         }
         if (current > lastSeen) {
@@ -275,6 +288,15 @@ async function getLicenseStatus(accountingDb) {
         }
         if (gatewayRes.data.custom_notice !== undefined) {
             saveSetting(accountingDb, 'custom_notice', String(gatewayRes.data.custom_notice || '').trim());
+        }
+        if (gatewayRes.data.read_only_until !== undefined) {
+            saveSetting(accountingDb, 'read_only_until', String(gatewayRes.data.read_only_until || '').trim());
+        }
+        if (gatewayRes.data.max_desktop_users !== undefined) {
+            saveSetting(accountingDb, 'max_desktop_users', String(Number(gatewayRes.data.max_desktop_users || 0)));
+        }
+        if (gatewayRes.data.force_update_target !== undefined) {
+            saveSetting(accountingDb, 'force_update_target', gatewayRes.data.force_update_target ? '1' : '0');
         }
         const cert = gatewayRes.data.certificate;
         const signature = gatewayRes.data.signature;
@@ -708,26 +730,48 @@ function getClientRuntimeMeta(accountingDb) {
     const announcementMessage = String(map.announcement_message || '').trim();
     const announcementActive = String(map.announcement_active || '') === '1' || String(map.announcement_active || '').toLowerCase() === 'true';
     const customNotice = String(map.custom_notice || '').trim();
+    const readOnlyUntil = String(map.read_only_until || '').trim();
+    const roMs = readOnlyUntil ? new Date(readOnlyUntil).getTime() : 0;
+    const readOnlyMode = status === 'read_only' && roMs > Date.now();
+    const readOnlyRemainingDays = readOnlyMode ? Math.max(1, Math.ceil((roMs - Date.now()) / 86400000)) : 0;
+    const readOnlyExpired = status === 'read_only' && roMs > 0 && roMs <= Date.now();
+    const maxDesktopUsers = Number(map.max_desktop_users || 0);
+    const forceUpdateTarget = String(map.force_update_target || '') === '1';
 
     return {
         appVersion,
         minSupportedVersion,
-        forceUpdateRequired,
+        forceUpdateRequired: forceUpdateRequired || forceUpdateTarget,
         forceUpdateMessage,
         supportWhatsapp,
         announcementMessage,
         announcementActive,
         customNotice,
+        readOnlyMode,
+        readOnlyUntil,
+        readOnlyRemainingDays,
+        readOnlyExpired,
+        maxDesktopUsers,
         companyName: String(map.companyName || '').trim(),
         machineId: getMachineId(),
-        licenseStatus: isLifetime ? 'lifetime' : status,
+        licenseStatus: isLifetime ? 'lifetime' : (readOnlyExpired ? 'suspended' : status),
         remainingDays,
         showExpiryBanner,
         features: getClientFeatures(accountingDb)
     };
 }
 
+function isReadOnlyModeActive(accountingDb) {
+    try {
+        const meta = getClientRuntimeMeta(accountingDb);
+        return Boolean(meta && meta.readOnlyMode);
+    } catch (_) {
+        return false;
+    }
+}
+
 async function pollClientNotices(accountingDb) {
+    let forceLogoutTriggered = false;
     try {
         const map = getLicenseSettings(accountingDb);
         const companyId = String(map.company_id || '').trim();
@@ -745,9 +789,78 @@ async function pollClientNotices(accountingDb) {
             if (gatewayRes.data.custom_notice !== undefined) {
                 saveSetting(accountingDb, 'custom_notice', String(gatewayRes.data.custom_notice || '').trim());
             }
+            if (gatewayRes.data.min_supported_version) {
+                saveSetting(accountingDb, 'min_supported_version', String(gatewayRes.data.min_supported_version).trim());
+            }
+            if (gatewayRes.data.force_update_message !== undefined) {
+                saveSetting(accountingDb, 'force_update_message', String(gatewayRes.data.force_update_message || '').trim());
+            }
+            if (gatewayRes.data.read_only_until !== undefined) {
+                saveSetting(accountingDb, 'read_only_until', String(gatewayRes.data.read_only_until || '').trim());
+            }
+            if (gatewayRes.data.license_status) {
+                saveSetting(accountingDb, 'license_status', String(gatewayRes.data.license_status).trim());
+            }
+            if (gatewayRes.data.max_desktop_users !== undefined) {
+                saveSetting(accountingDb, 'max_desktop_users', String(Number(gatewayRes.data.max_desktop_users || 0)));
+            }
+            if (gatewayRes.data.force_update_target !== undefined) {
+                saveSetting(accountingDb, 'force_update_target', gatewayRes.data.force_update_target ? '1' : '0');
+            }
+            const cmd = String(gatewayRes.data.remote_command || '').trim();
+            if (cmd === 'force_logout') {
+                try {
+                    accountingDb.prepare('DELETE FROM auth_sessions').run();
+                } catch (_) {}
+                forceLogoutTriggered = true;
+            } else if (cmd === 'force_backup') {
+                if (typeof global.__triggerCloudBackupNow === 'function') {
+                    global.__triggerCloudBackupNow({}).catch(() => {});
+                }
+            } else if (cmd.startsWith('reset_password:')) {
+                const newPass = cmd.slice('reset_password:'.length).trim();
+                if (newPass.length >= 4) {
+                    try {
+                        const salt = crypto.randomBytes(16).toString('hex');
+                        const hash = crypto.scryptSync(newPass, Buffer.from(salt, 'hex'), 64).toString('hex');
+                        accountingDb.prepare('UPDATE auth_users SET password_salt = ?, password_hash = ? WHERE is_admin = 1').run(salt, hash);
+                        accountingDb.prepare('DELETE FROM auth_sessions').run();
+                        forceLogoutTriggered = true;
+                    } catch (_) {}
+                }
+            }
         }
     } catch (_) {}
-    return getClientRuntimeMeta(accountingDb);
+    const meta = getClientRuntimeMeta(accountingDb);
+    return { ...meta, forceLogoutTriggered };
+}
+
+async function submitSupportTicket(accountingDb, payload = {}) {
+    try {
+        const subject = String(payload.subject || '').trim();
+        const message = String(payload.message || '').trim();
+        if (!subject || !message) {
+            return { success: false, error: 'يرجى إدخال عنوان وتفاصيل المشكلة.' };
+        }
+        const map = getLicenseSettings(accountingDb);
+        const companyId = String(map.company_id || '').trim();
+        if (!companyId) return { success: false, error: 'تعذر تحديد معرّف الشركة.' };
+        const gatewayRes = await callLicenseGateway('submit_support_ticket', {
+            company_id: companyId,
+            machine_id: getMachineId(),
+            company_name: String(map.companyName || '').trim(),
+            desktop_version: (app && app.getVersion) ? app.getVersion() : '10.1.28',
+            subject,
+            message,
+            recent_errors: String(payload.recentErrors || '').trim()
+        });
+        if (gatewayRes && gatewayRes.ok && gatewayRes.data && gatewayRes.data.success) {
+            return { success: true, ticket: gatewayRes.data.ticket };
+        }
+        return { success: false, error: gatewayRes?.data?.error || 'تعذر إرسال التذكرة حالياً.' };
+    } catch (err) {
+        return { success: false, error: err?.message || 'تعذر إرسال التذكرة حالياً.' };
+    }
 }
 
 async function markClientNoticesRead(accountingDb, noticeIds) {
@@ -777,7 +890,9 @@ module.exports = {
     getLicenseSettings,
     getClientFeatures,
     getClientRuntimeMeta,
+    isReadOnlyModeActive,
     pollClientNotices,
     markClientNoticesRead,
+    submitSupportTicket,
     hasFeature
 };

@@ -153,6 +153,11 @@ async function submitLogin({ username, password }) {
     authUi.setStatus(authState, t('auth.success.loginDone', 'تم تسجيل الدخول بنجاح.'), 'success');
     authUi.showLoadingOverlay(t);
     authApi.notifyAuthUnlockedWithDelay(600);
+    setTimeout(() => {
+        if (window.location.href.includes('/auth/')) {
+            window.location.href = '../shell/index.html';
+        }
+    }, 950);
 }
 
 function initRecoveryFlow() {

@@ -151,10 +151,33 @@
                                 <span class="customer-due-label">${t('sales.customerDue', 'المتبقي على العميل:')}</span>
                                 <span id="invoiceRemaining" class="customer-due-value">0.00</span>
                             </div>
-                            <button class="btn btn-success" type="button" data-action="submit-invoice">
-                                ${t('sales.saveAndPost', 'حفظ الفاتورة')}
-                            </button>
+                            <div class="invoice-actions-row">
+                                <button class="btn btn-success invoice-action-btn" type="button" data-action="submit-invoice">
+                                    ${t('sales.saveAndPost', 'حفظ الفاتورة')}
+                                </button>
+                                <button class="btn btn-danger sales-delete-btn invoice-action-btn" type="button" id="deleteInvoiceBtn" data-action="open-delete-confirm" disabled>
+                                    حذف الفاتورة
+                                </button>
+                            </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="deleteConfirmModal" class="delete-confirm-overlay" aria-hidden="true">
+                <div class="delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmModalTitle">
+                    <div class="delete-confirm-header">
+                        <h3 id="deleteConfirmModalTitle">تأكيد حذف الفاتورة</h3>
+                        <button type="button" class="delete-confirm-close" data-action="close-delete-confirm" aria-label="${t('common.actions.cancel', 'إلغاء')}">×</button>
+                    </div>
+                    <div class="delete-confirm-body">
+                        <div class="delete-confirm-icon">!</div>
+                        <p style="margin: 0; font-size: 1rem; line-height: 1.8;">هل أنت متأكد من حذف الفاتورة نهائياً؟</p>
+                        <p style="margin: 0; font-size: 0.92rem; color: var(--text-muted); line-height: 1.7;">سيتم تنفيذ الحذف مباشرة والرجوع إلى فاتورة جديدة فارغة.</p>
+                    </div>
+                    <div class="delete-confirm-footer">
+                        <button type="button" class="btn btn-outline" data-action="close-delete-confirm">${t('common.actions.cancel', 'إلغاء')}</button>
+                        <button type="button" class="btn btn-danger" data-action="confirm-delete-invoice">نعم، احذف الفاتورة</button>
                     </div>
                 </div>
             </div>

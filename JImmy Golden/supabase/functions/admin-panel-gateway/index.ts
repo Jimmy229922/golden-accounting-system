@@ -185,15 +185,21 @@ serve(async (req: Request) => {
         const expMs = lic.expires_at ? new Date(lic.expires_at).getTime() : 0;
         const isLifetime = status === "lifetime";
         const isSuspended = status === "suspended";
-        const isExpired = !isLifetime && !isSuspended && expMs > 0 && expMs <= nowMs;
+        const isReadOnly = status === "read_only";
+        const roMs = lic.read_only_until ? new Date(lic.read_only_until).getTime() : 0;
+        const isReadOnlyActive = isReadOnly && roMs > nowMs;
+        const isExpired = !isLifetime && !isSuspended && !isReadOnlyActive && (isReadOnly ? true : (expMs > 0 && expMs <= nowMs));
         const remainingDays = isLifetime
           ? 99999
-          : expMs > 0
-            ? Math.max(0, Math.ceil((expMs - nowMs) / 86400000))
-            : 0;
+          : isReadOnlyActive
+            ? Math.max(1, Math.ceil((roMs - nowMs) / 86400000))
+            : expMs > 0
+              ? Math.max(0, Math.ceil((expMs - nowMs) / 86400000))
+              : 0;
 
         if (isLifetime) stats.lifetime++;
         else if (isSuspended) stats.suspended++;
+        else if (isReadOnlyActive) stats.suspended++;
         else if (isExpired) stats.expired++;
         else if (status === "trial") stats.trial++;
         else stats.active++;
@@ -204,17 +210,31 @@ serve(async (req: Request) => {
         const cid = String(lic.company_id || "");
         return {
           ...lic,
-          computed_status: isSuspended ? "suspended" : isLifetime ? "lifetime" : isExpired ? "expired" : status,
+          computed_status: isSuspended ? "suspended" : isReadOnlyActive ? "read_only" : isLifetime ? "lifetime" : isExpired ? "expired" : status,
           remaining_days: remainingDays,
+          max_desktop_users: Number(lic.max_desktop_users || 0),
+          max_android_users: Number(lic.max_android_users || 0),
+          force_update_target: Boolean(lic.force_update_target),
+          read_only_until: lic.read_only_until || null,
           features: (lic.features && typeof lic.features === "object" && !Array.isArray(lic.features)) ? lic.features : {},
           devices: devicesByCompany[cid] || [],
           android_users: androidUsersByCompany[cid] || []
         };
       });
 
+      let openTicketsCount = 0;
+      try {
+        const { count } = await supabase
+          .from("support_tickets")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "open");
+        openTicketsCount = Number(count || 0);
+      } catch (_) {}
+
       return jsonResponse({
         success: true,
         admin_email: authCheck.user.email,
+        open_tickets_count: openTicketsCount,
         global_config: cfgRes?.data || {
           min_supported_version: "10.0.0",
           support_whatsapp: "",
@@ -328,11 +348,21 @@ serve(async (req: Request) => {
       } else if (mode === "lifetime") {
         updates.license_status = "lifetime";
         updates.expires_at = "2099-12-31T23:59:59.000Z";
+        updates.read_only_until = null;
+      } else if (mode === "read_only") {
+        const roDays = Math.max(1, Math.min(30, Number(body.days || 3)));
+        updates.license_status = "read_only";
+        updates.read_only_until = new Date(now.getTime() + roDays * 86400000).toISOString();
+      } else if (mode === "update_quotas") {
+        updates.max_desktop_users = Math.max(0, Number(body.max_desktop_users || 0));
+        updates.max_android_users = Math.max(0, Number(body.max_android_users || 0));
       } else if (mode === "suspend") {
         updates.license_status = "suspended";
+        updates.read_only_until = null;
       } else if (mode === "resume") {
         const expMs = current.expires_at ? new Date(current.expires_at).getTime() : 0;
         updates.license_status = expMs > now.getTime() ? "active" : "trial";
+        updates.read_only_until = null;
         if (expMs <= now.getTime()) {
           updates.expires_at = new Date(now.getTime() + 15 * 86400000).toISOString();
         }
@@ -377,6 +407,25 @@ serve(async (req: Request) => {
       }
       if (password.length < 6) {
         return jsonResponse({ success: false, error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل." }, 400);
+      }
+
+      const { data: licQuota } = await supabase
+        .from("client_licenses")
+        .select("max_android_users")
+        .eq("company_id", companyId)
+        .maybeSingle();
+      const maxAndroid = Number(licQuota?.max_android_users || 0);
+      if (maxAndroid > 0) {
+        const { data: allUsers } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const currentCount = (allUsers?.users || []).filter(
+          (u: any) => String(u?.app_metadata?.company_id || "") === companyId && String(u?.app_metadata?.role || "") !== "super_admin"
+        ).length;
+        if (currentCount >= maxAndroid) {
+          return jsonResponse({
+            success: false,
+            error: `تم الوصول للحد الأقصى لحسابات الأندرويد المسموح بها لهذا العميل (${maxAndroid} حساب). ارفع الحد من إعدادات الباقة أولاً.`
+          }, 403);
+        }
       }
 
       const code = companyId.replace(/-/g, "").slice(0, 8);
@@ -664,7 +713,7 @@ serve(async (req: Request) => {
       const { data: cfg } = await supabase.from("app_global_config").select("telegram_bot_token, telegram_chat_id").eq("id", 1).maybeSingle();
       const token = String(cfg?.telegram_bot_token || "").trim();
       const chatId = String(cfg?.telegram_chat_id || "").trim();
-      const { data: licenses } = await supabase.from("client_licenses").select("company_name, license_status, expires_at");
+      const { data: licenses } = await supabase.from("client_licenses").select("company_id, company_name, license_status, expires_at");
       const nowMs = Date.now();
       const expiring = (licenses || []).filter((l: any) => {
         if (l.license_status === "lifetime" || l.license_status === "suspended") return false;
@@ -672,13 +721,46 @@ serve(async (req: Request) => {
         const days = Math.ceil((expMs - nowMs) / 86400000);
         return days >= 0 && days <= 7;
       });
-      const text = expiring.length
-        ? `<b>⏰ تنبيه الاشتراكات القريبة من الانتهاء (خلال 7 أيام)</b>\n\n` +
-        expiring.map((l: any) => {
-          const days = Math.max(0, Math.ceil((new Date(l.expires_at).getTime() - nowMs) / 86400000));
-          return `• <b>${l.company_name || "عميل"}</b> — متبقي ${days} يوم`;
-        }).join("\n")
-        : "<b>✅ تقرير الاشتراكات</b>\nلا توجد اشتراكات قريبة من الانتهاء خلال الـ 7 أيام القادمة.";
+      const sevenDaysAgoMs = nowMs - 7 * 86400000;
+      const staleBackups: string[] = [];
+      for (const l of (licenses || [])) {
+        if (l.license_status === "suspended" || !l.company_id) continue;
+        try {
+          const { data: rootItems } = await supabase.storage.from("backups").list(`clients/${l.company_id}`, { limit: 100 });
+          let latestMs = 0;
+          for (const it of (rootItems || [])) {
+            const ts = it?.updated_at || it?.created_at;
+            if (ts) latestMs = Math.max(latestMs, new Date(ts).getTime());
+            if (!it.id && it.name) {
+              const { data: sub } = await supabase.storage.from("backups").list(`clients/${l.company_id}/${it.name}`, { limit: 50 });
+              for (const s of (sub || [])) {
+                const sts = s?.updated_at || s?.created_at;
+                if (sts) latestMs = Math.max(latestMs, new Date(sts).getTime());
+              }
+            }
+          }
+          if (latestMs === 0 || latestMs < sevenDaysAgoMs) {
+            staleBackups.push(String(l.company_name || l.company_id));
+          }
+        } catch (_) {}
+      }
+      const sections: string[] = [];
+      sections.push(
+        expiring.length
+          ? `<b>⏰ الاشتراكات القريبة من الانتهاء (خلال 7 أيام):</b>\n` +
+            expiring.map((l: any) => {
+              const days = Math.max(0, Math.ceil((new Date(l.expires_at).getTime() - nowMs) / 86400000));
+              return `• <b>${l.company_name || "عميل"}</b> — متبقي ${days} يوم`;
+            }).join("\n")
+          : `<b>✅ الاشتراكات:</b> لا توجد اشتراكات قريبة من الانتهاء خلال 7 أيام.`
+      );
+      if (staleBackups.length) {
+        sections.push(
+          `<b>☁️ تنبيه النسخ الاحتياطي (+7 أيام بدون نسخة سحابية):</b>\n` +
+          staleBackups.map((name) => `• ${name}`).join("\n")
+        );
+      }
+      const text = sections.join("\n\n");
       const sendRes = await sendTelegramMessage(token, chatId, text);
       if (!sendRes.ok) {
         return jsonResponse({ success: false, error: sendRes.error }, 400);
@@ -748,6 +830,13 @@ serve(async (req: Request) => {
       } else if (commandType === "force_backup") {
         updates.remote_command = "force_backup";
         updates.remote_command_at = nowIso;
+      } else if (commandType === "force_update") {
+        updates.force_update_target = true;
+      } else if (commandType === "clear_force_update") {
+        updates.force_update_target = false;
+      } else if (commandType === "force_logout") {
+        updates.remote_command = "force_logout";
+        updates.remote_command_at = nowIso;
       } else if (commandType === "reset_desktop_password") {
         const newDesktopPass = String(body.new_password || "").trim();
         if (newDesktopPass.length < 4) {
@@ -777,6 +866,109 @@ serve(async (req: Request) => {
         }
       });
       return jsonResponse({ success: true, custom_notice: updates.custom_notice ?? current?.custom_notice ?? "" });
+    }
+
+    if (action === "get_support_tickets") {
+      const page = Math.max(1, Number(body.page || 1));
+      const perPage = Math.max(5, Math.min(50, Number(body.per_page || 15)));
+      const statusFilter = String(body.status || "all").trim().toLowerCase();
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+
+      let query = supabase
+        .from("support_tickets")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (statusFilter && statusFilter !== "all") {
+        query = query.eq("status", statusFilter);
+      }
+
+      const { data: tickets, count, error } = await query;
+      if (error) return jsonResponse({ success: false, error: error.message }, 500);
+      const total = Number(count || 0);
+      return jsonResponse({
+        success: true,
+        tickets: tickets || [],
+        page,
+        per_page: perPage,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / perPage))
+      });
+    }
+
+    if (action === "reply_support_ticket") {
+      const ticketId = String(body.ticket_id || "").trim();
+      const replyText = String(body.reply || "").trim();
+      const nextStatus = String(body.status || "replied").trim();
+      if (!ticketId) {
+        return jsonResponse({ success: false, error: "معرف التذكرة مطلوب." }, 400);
+      }
+
+      const { data: ticket } = await supabase
+        .from("support_tickets")
+        .select("*")
+        .eq("id", ticketId)
+        .maybeSingle();
+      if (!ticket) return jsonResponse({ success: false, error: "التذكرة غير موجودة." }, 404);
+
+      const nowIso = new Date().toISOString();
+      const updates: Record<string, unknown> = {
+        status: nextStatus,
+        updated_at: nowIso
+      };
+      if (replyText) {
+        updates.admin_reply = replyText;
+        updates.replied_by = authCheck.user.email || "super_admin";
+        updates.replied_at = nowIso;
+      }
+
+      const { error: updErr } = await supabase
+        .from("support_tickets")
+        .update(updates)
+        .eq("id", ticketId);
+      if (updErr) return jsonResponse({ success: false, error: updErr.message }, 500);
+
+      if (replyText && ticket.company_id) {
+        const { data: lic } = await supabase
+          .from("client_licenses")
+          .select("id, custom_notice")
+          .eq("company_id", ticket.company_id)
+          .maybeSingle();
+        if (lic) {
+          let list: Array<Record<string, unknown>> = [];
+          const raw = String(lic.custom_notice || "").trim();
+          if (raw.startsWith("[")) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) list = parsed;
+            } catch (_) {}
+          } else if (raw) {
+            list = [{ id: `legacy_${raw.length}`, text: raw, created_at: null, read_at: null }];
+          }
+          list.unshift({
+            id: `ticket_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            text: `رد الدعم الفني (${ticket.subject}): ${replyText}`,
+            created_at: nowIso,
+            read_at: null
+          });
+          await supabase
+            .from("client_licenses")
+            .update({ custom_notice: JSON.stringify(list), updated_at: nowIso })
+            .eq("id", lic.id);
+        }
+      }
+
+      await logAdminAction({
+        adminEmail: authCheck.user.email || "super_admin",
+        actionType: "reply_support_ticket",
+        targetCompanyId: ticket.company_id,
+        targetCompanyName: ticket.company_name || null,
+        details: { ticket_id: ticketId, status: nextStatus, subject: ticket.subject }
+      });
+
+      return jsonResponse({ success: true });
     }
 
     return jsonResponse({ success: false, error: "إجراء غير معروف." }, 400);

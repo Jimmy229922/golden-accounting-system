@@ -138,7 +138,7 @@ function buildTopNavItems(prefix) {
             fallback: 'التعاملات المالية',
             children: [
                 { key: 'common.nav.finance', fallback: 'المالية', href: withPrefix('finance/index.html'), featureFlag: 'finance_treasury' },
-                { key: '', fallback: 'النثريات', href: withPrefix('petty-expenses/index.html'), featureFlag: 'petty_expenses' },
+                { key: '', fallback: 'نثريات الشركة', href: withPrefix('petty-expenses/index.html'), featureFlag: 'petty_expenses' },
                 { key: '', fallback: 'الشكاير', href: withPrefix('petty-bags/index.html'), featureFlag: 'petty_bags' },
                 { key: '', fallback: 'الفحص', href: withPrefix('petty-inspection/index.html'), featureFlag: 'petty_inspection' },
                 { key: '', fallback: 'الشحن و التخليص', href: withPrefix('petty-shipping-clearance/index.html'), featureFlag: 'petty_shipping_clearance' },

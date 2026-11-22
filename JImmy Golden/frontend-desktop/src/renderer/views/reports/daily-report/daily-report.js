@@ -291,7 +291,7 @@ function renderPage() {
 
                     <div class="finance-box">
                         <div class="finance-box-header expense-header">
-                            <h3><i class="fas fa-receipt"></i> النثريات العامة</h3>
+                            <h3><i class="fas fa-receipt"></i> نثريات الشركة</h3>
                             <span class="finance-box-badge expense-badge" id="pettyExpensesSubtotal">0.00 ج.م</span>
                         </div>
                         <div class="dr-table-responsive">

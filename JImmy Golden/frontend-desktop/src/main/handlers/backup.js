@@ -818,7 +818,7 @@ function register() {
         }
     });
 
-    ipcMain.handle('backup-database-to-cloud', async (event, payload = {}) => {
+    const executeCloudBackupNow = async (payload = {}) => {
         let tempFilePath = null;
 
         try {
@@ -858,6 +858,12 @@ function register() {
         } finally {
             cleanupFileSilently(tempFilePath);
         }
+    };
+
+    global.__triggerCloudBackupNow = executeCloudBackupNow;
+
+    ipcMain.handle('backup-database-to-cloud', async (event, payload = {}) => {
+        return await executeCloudBackupNow(payload);
     });
 
     ipcMain.handle('get-backup-status-summary', async () => {

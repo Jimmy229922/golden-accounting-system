@@ -8,6 +8,7 @@ import com.goldenwolfeg.accountingmobile.data.model.AdminClientDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminErrorLogDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminGlobalConfigDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminStatsDto
+import com.goldenwolfeg.accountingmobile.data.model.AdminSupportTicketDto
 import com.goldenwolfeg.accountingmobile.data.repository.AccountingRepository
 import com.goldenwolfeg.accountingmobile.data.repository.AdminPanelRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,6 +68,15 @@ class AdminPanelViewModel(
 
     private val _auditTotalPages = MutableStateFlow(1)
     val auditTotalPages: StateFlow<Int> = _auditTotalPages.asStateFlow()
+
+    private val _supportTickets = MutableStateFlow<List<AdminSupportTicketDto>>(emptyList())
+    val supportTickets: StateFlow<List<AdminSupportTicketDto>> = _supportTickets.asStateFlow()
+
+    private val _ticketsPage = MutableStateFlow(1)
+    val ticketsPage: StateFlow<Int> = _ticketsPage.asStateFlow()
+
+    private val _ticketsTotalPages = MutableStateFlow(1)
+    val ticketsTotalPages: StateFlow<Int> = _ticketsTotalPages.asStateFlow()
 
     private val _clientBackups = MutableStateFlow<List<AdminBackupFileDto>>(emptyList())
     val clientBackups: StateFlow<List<AdminBackupFileDto>> = _clientBackups.asStateFlow()
@@ -135,6 +145,9 @@ class AdminPanelViewModel(
         }
         if (index == 2 && _auditLogs.value.isEmpty()) {
             loadAuditLogs()
+        }
+        if (index == 3 && _supportTickets.value.isEmpty()) {
+            loadSupportTickets()
         }
     }
 
@@ -231,6 +244,64 @@ class AdminPanelViewModel(
     fun sendResetDesktopPassword(licenseId: String, newPassword: String) {
         runAction("تم إرسال أمر تغيير كلمة سر الديسكتوب بنجاح") {
             adminRepository.sendClientCommand(licenseId, commandType = "reset_desktop_password", newPassword = newPassword)
+        }
+    }
+
+    fun sendForceUpdateCommand(licenseId: String, currentlyForced: Boolean) {
+        val cmd = if (currentlyForced) "clear_force_update" else "force_update"
+        val msg = if (currentlyForced) "تم إلغاء فرض التحديث للعميل" else "تم فرض التحديث الإجباري لهذا العميل بنجاح"
+        runAction(msg) {
+            adminRepository.sendClientCommand(licenseId, commandType = cmd)
+        }
+    }
+
+    fun sendForceLogoutCommand(licenseId: String) {
+        runAction("تم إرسال أمر تسجيل الخروج الفوري لجهاز العميل") {
+            adminRepository.sendClientCommand(licenseId, commandType = "force_logout")
+        }
+    }
+
+    fun setReadOnlyLicense(licenseId: String, days: Int = 3) {
+        runAction("تم تحويل العميل لوضع القراءة فقط ($days أيام)") {
+            adminRepository.updateLicense(licenseId, mode = "read_only", days = days)
+        }
+    }
+
+    fun updateClientQuotas(licenseId: String, maxDesktopUsers: Int, maxAndroidUsers: Int) {
+        runAction("تم حفظ حدود الباقة بنجاح") {
+            adminRepository.updateLicense(
+                licenseId,
+                mode = "update_quotas",
+                maxDesktopUsers = maxDesktopUsers.coerceAtLeast(0),
+                maxAndroidUsers = maxAndroidUsers.coerceAtLeast(0)
+            )
+        }
+    }
+
+    fun loadSupportTickets(page: Int = _ticketsPage.value) {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            adminRepository.getSupportTickets(page = page.coerceAtLeast(1), perPage = 15)
+                .onSuccess { res ->
+                    _supportTickets.value = res.tickets
+                    _ticketsPage.value = res.page
+                    _ticketsTotalPages.value = res.totalPages.coerceAtLeast(1)
+                }
+                .onFailure { err -> _message.value = err.message ?: "فشل تحميل تذاكر الدعم" }
+            _isActionLoading.value = false
+        }
+    }
+
+    fun replySupportTicket(ticketId: String, reply: String, status: String = "replied") {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            adminRepository.replySupportTicket(ticketId, reply, status)
+                .onSuccess {
+                    _message.value = if (status == "closed") "تم إغلاق التذكرة" else "تم إرسال الرد للعميل في جرس الإشعارات!"
+                    loadSupportTickets(_ticketsPage.value)
+                }
+                .onFailure { err -> _message.value = err.message ?: "فشل الرد على التذكرة" }
+            _isActionLoading.value = false
         }
     }
 

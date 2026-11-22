@@ -71,6 +71,9 @@ function initializeElements() {
             onChangePrintPrinter: changePrintPrinter,
             onLoadPrevInvoice: () => navigateInvoice(-1),
             onLoadNextInvoice: () => navigateInvoice(1),
+            onOpenDeleteConfirm: openDeleteConfirmModal,
+            onCloseDeleteConfirm: closeDeleteConfirmModal,
+            onConfirmDeleteInvoice: confirmDeleteInvoice,
             onRemoveRow: removeRow,
             onOpenShiftCloseModal: () => openShiftCloseModal(),
             onCloseShiftCloseModal: () => closeShiftCloseModal(),
@@ -717,7 +720,9 @@ function setEditLocked(locked) {
             control.dataset.action === 'submit-invoice' ||
             control.dataset.action === 'print-invoice' ||
             control.dataset.action === 'load-prev-invoice' ||
-            control.dataset.action === 'load-next-invoice'
+            control.dataset.action === 'load-next-invoice' ||
+            control.dataset.action === 'open-delete-confirm' ||
+            control.id === 'deleteInvoiceBtn'
         ) return;
         control.disabled = lockActive;
 
@@ -749,6 +754,7 @@ function setEditLocked(locked) {
             submitBtn.textContent = t('sales.saveAndPost', 'حفظ الفاتورة');
         }
     }
+    updateDeleteButtonState();
 
     if (statusChip) {
         if (lockActive) {
@@ -791,6 +797,7 @@ async function handleCustomerChange() {
     if (isEditLocked()) return;
 
     if (!salesState.dom.customerSelect) return;
+    updateDeleteButtonState();
 
     if (salesState.dom.customerSelect.value) {
         await displayCustomerBalance();
@@ -1159,6 +1166,7 @@ async function submitInvoice() {
 async function loadCustomers() {
     const customers = await salesApi.getCustomers();
     if (!salesState.dom.customerSelect) return;
+    updateDeleteButtonState();
 
     salesState.dom.customerSelect.innerHTML = `<option value="">${t('sales.selectCustomer', 'اختر العميل')}</option>`;
 
@@ -2159,8 +2167,70 @@ async function saveInvoice() {
     }
 }
 
+function updateDeleteButtonState() {
+    const deleteBtn = document.getElementById('deleteInvoiceBtn');
+    if (!deleteBtn) return;
+    const hasCustomer = Boolean(salesState.dom.customerSelect?.value);
+    deleteBtn.disabled = !hasCustomer;
+}
+
+function openDeleteConfirmModal() {
+    const modal = salesState.dom.deleteConfirmModal || document.getElementById('deleteConfirmModal');
+    if (!modal) return;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+}
+
+function closeDeleteConfirmModal() {
+    const modal = salesState.dom.deleteConfirmModal || document.getElementById('deleteConfirmModal');
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+}
+
+async function confirmDeleteInvoice() {
+    closeDeleteConfirmModal();
+    if (salesState.isSubmitting) return;
+    salesState.isSubmitting = true;
+
+    const deleteBtn = document.getElementById('deleteInvoiceBtn');
+    if (deleteBtn) {
+        deleteBtn.disabled = true;
+        deleteBtn.style.opacity = '0.6';
+        deleteBtn.style.cursor = 'not-allowed';
+    }
+
+    try {
+        if (!salesState.editingInvoiceId) {
+            await resetForm();
+            if (window.showToast) window.showToast('تم حذف بيانات الفاتورة الحالية.', 'success');
+            return;
+        }
+
+        const result = await salesApi.deleteSalesInvoice(salesState.editingInvoiceId);
+        if (result && result.success) {
+            if (window.showToast) window.showToast('تم حذف الفاتورة بنجاح', 'success');
+            await resetForm();
+        } else if (window.showToast) {
+            window.showToast('حدث خطأ أثناء حذف الفاتورة: ' + ((result && result.error) || 'خطأ غير معروف'), 'error');
+        }
+    } catch (error) {
+        if (window.showToast) window.showToast('حدث خطأ أثناء حذف الفاتورة: ' + error.message, 'error');
+    } finally {
+        salesState.isSubmitting = false;
+        if (deleteBtn) {
+            deleteBtn.style.opacity = '';
+            deleteBtn.style.cursor = '';
+        }
+        updateDeleteButtonState();
+    }
+}
+
 async function resetForm() {
     salesState.dom.customerSelect.value = '';
+    updateDeleteButtonState();
     if (salesState.customerAutocomplete) {
         salesState.customerAutocomplete.refresh();
         salesState.customerAutocomplete.closeList();

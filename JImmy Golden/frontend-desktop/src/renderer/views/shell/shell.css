@@ -323,6 +323,33 @@ body {
     color: #38bdf8;
 }
 
+.nav-notify-tag.smart_stock {
+    background: rgba(249, 115, 22, 0.16);
+    color: #c2410c;
+}
+
+[data-theme='dark'] .nav-notify-tag.smart_stock {
+    color: #fb923c;
+}
+
+.nav-notify-tag.smart_sales {
+    background: rgba(239, 68, 68, 0.16);
+    color: #b91c1c;
+}
+
+[data-theme='dark'] .nav-notify-tag.smart_sales {
+    color: #f87171;
+}
+
+.nav-notify-tag.smart_purchase {
+    background: rgba(168, 85, 247, 0.16);
+    color: #7e22ce;
+}
+
+[data-theme='dark'] .nav-notify-tag.smart_purchase {
+    color: #c084fc;
+}
+
 .nav-notify-time {
     font-size: 0.72rem;
     color: #64748b;

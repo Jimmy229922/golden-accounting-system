@@ -607,7 +607,7 @@ window.showExpensesDetails = function() {
 
                 <div style="background: var(--secondary-bg, rgba(15,23,42,0.6)); border: 1px solid var(--border-color, rgba(255,255,255,0.05)); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-coins" style="margin-inline-end: 8px; color: #f59e0b;"></i> إجمالي النثريات:</span>
+                        <span style="color: var(--text-muted, #cbd5e1)"><i class="fas fa-coins" style="margin-inline-end: 8px; color: #f59e0b;"></i> إجمالي نثريات الشركة:</span>
                         <strong style="color: var(--text-color, #fff)">${m(b.pettyGeneral)}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
