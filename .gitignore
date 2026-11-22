@@ -1,13 +1,28 @@
 # Dependencies
 node_modules/
 
-# Production
+# Production & Build Outputs
 dist/
 out/
 build/
-!frontend-desktop/build/
-frontend-desktop/build/*
-!frontend-desktop/build/installer.nsh
+!JImmy Golden/frontend-desktop/build/
+JImmy Golden/frontend-desktop/build/*
+!JImmy Golden/frontend-desktop/build/installer.nsh
+
+# Android / Gradle (GoldenAccountingMobile)
+.gradle/
+.kotlin/
+*.iml
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.keystore
+*.jks
 
 # System Files
 .DS_Store
@@ -20,19 +35,16 @@ yarn-error.log*
 run-desktop.log
 backend-run.log
 
-# Environment variables
+# Environment Variables & Secrets
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.production
+.env.*
 SUPABASE_LOCAL_CREDENTIALS.md
 device_sync_identity.json
 **/device_sync_identity.json
 create_production_admin_user.js
 **/create_production_admin_user.js
 scripts/sync-sandbox/
+JImmy Golden/scripts/sync-sandbox/
 *.blockmap
 latest.yml
 
@@ -42,30 +54,32 @@ latest.yml
 *.swp
 *.swo
 
-# Database
+# Databases
 *.db
 *.sqlite
 *.sqlite3
 
-# Local debug artifacts
+# Local Debug & Runtime Data
 tmp-*.js
 .repack/
-
-# Runtime data directories
 data/
 data_auth_smoke/
 backend/data/
+JImmy Golden/backend/data/
 
-# Temporary / test folders
+# Temporary / Test Folders
 tmp/
 PIC/
 
-# Installer binaries & archives
+# Installer Binaries & Archives
 APP_JS/installer/
 APP_JS/seed/
+JImmy Golden/APP_JS/installer/
+JImmy Golden/APP_JS/seed/
 APP_JS.zip
 
-# Backup files
+# Backup Files
 *.bak
 
-.agents
+# Agent Rules
+.agents/
