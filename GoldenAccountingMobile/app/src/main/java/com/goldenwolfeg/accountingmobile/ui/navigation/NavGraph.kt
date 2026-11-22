@@ -140,6 +140,11 @@ fun GoldenAccountingNavGraph(
                 },
                 onNavigateToSync = {
                     navController.navigate(Screen.SyncStatus.route)
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             )
         }
@@ -216,6 +221,19 @@ fun GoldenAccountingNavGraph(
                 viewModel = syncViewModel,
                 onBackClick = {
                     navController.popBackStack()
+                },
+                onNavigateToDashboard = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    }
+                },
+                onNavigateToParties = {
+                    navController.navigate(Screen.PartiesList.route)
+                },
+                onLogout = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             )
         }

@@ -23,19 +23,30 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -442,6 +453,23 @@ fun SummaryStatCard(
     )
 }
 
+fun formatArabicDocType(rawType: String): String {
+    val clean = rawType.trim().lowercase()
+    return when {
+        clean.contains("sales_invoice") || clean.contains("sales invoice") || clean.contains("مبيعات") -> "فاتورة مبيعات"
+        clean.contains("purchase_invoice") || clean.contains("purchase invoice") || clean.contains("مشتريات") -> "فاتورة مشتريات"
+        clean.contains("receipt") || clean.contains("cash_in") || clean.contains("قبض") || clean.contains("تحصيل") -> "سند قبض / تحصيل"
+        clean.contains("payment") || clean.contains("cash_out") || clean.contains("صرف") || clean.contains("دفعة") -> "سند صرف / دفع"
+        clean.contains("credit_note") || clean.contains("إشعار دائن") -> "إشعار دائن"
+        clean.contains("debit_note") || clean.contains("إشعار مدين") -> "إشعار مدين"
+        clean.contains("opening") || clean.contains("افتتاحي") -> "رصيد افتتاحي"
+        clean.contains("return") || clean.contains("مردودات") -> "مردودات"
+        clean.contains("journal") || clean.contains("تسوية") -> "قيد تسوية دفتري"
+        rawType.isNotBlank() -> rawType
+        else -> "حركة مالية"
+    }
+}
+
 @Composable
 fun LedgerEntryCard(
     entry: PartyLedgerEntry,
@@ -450,17 +478,19 @@ fun LedgerEntryCard(
 ) {
     val isPositiveEffect = entry.effectAmount > BigDecimal.ZERO
     val isZeroEffect = entry.effectAmount.compareTo(BigDecimal.ZERO) == 0
+    val arabicDocType = formatArabicDocType(entry.docType)
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(15.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -468,37 +498,84 @@ fun LedgerEntryCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Receipt,
-                        contentDescription = null,
-                        tint = GoldMetallic,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(NavyDark.copy(alpha = 0.08f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Receipt,
+                            contentDescription = null,
+                            tint = GoldMetallic,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = if (entry.docNumber.isNotBlank()) "$arabicDocType (#${entry.docNumber})" else arabicDocType,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                        Text(
+                            text = "تاريخ الحركة: ${entry.transDate}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        )
+                    }
+                }
+
+                Surface(
+                    color = when {
+                        isPositiveEffect -> BalanceReceivable.copy(alpha = 0.12f)
+                        isZeroEffect -> BalanceBalanced.copy(alpha = 0.12f)
+                        else -> BalancePayable.copy(alpha = 0.12f)
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    val statusText = when {
+                        isPositiveEffect -> "+ زيادة"
+                        isZeroEffect -> "متزن"
+                        else -> "- سداد / تخفيض"
+                    }
                     Text(
-                        text = "${entry.docType} (#${entry.docNumber})",
-                        style = MaterialTheme.typography.titleSmall.copy(
+                        text = statusText,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = when {
+                                isPositiveEffect -> BalanceReceivable
+                                isZeroEffect -> BalanceBalanced
+                                else -> BalancePayable
+                            },
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            fontSize = 11.sp
                         )
                     )
                 }
-                Text(
-                    text = entry.transDate,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
             }
 
             if (!entry.notes.isNull_or_empty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = entry.notes ?: "",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "ملاحظات: ${entry.notes}",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
                     )
-                )
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -516,29 +593,49 @@ fun LedgerEntryCard(
             ) {
                 Column {
                     Text(
-                        text = "المبلغ الإجمالي",
-                        style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        text = "قيمة المعاملة",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = formatCurrency(entry.totalAmount, currencySymbol),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                 }
+
                 Column {
                     Text(
-                        text = "المسدد",
-                        style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        text = "المبلغ المسدد",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = formatCurrency(entry.paidAmount, currencySymbol),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                 }
+
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "الأثر على الرصيد",
-                        style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        text = "الأثر الصافي",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     val effectText = when {
                         isPositiveEffect -> "+${formatCurrency(entry.effectAmount, currencySymbol)}"
                         isZeroEffect -> "0.00 $currencySymbol"
@@ -546,8 +643,8 @@ fun LedgerEntryCard(
                     }
                     Text(
                         text = effectText,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Black,
                             color = when {
                                 isPositiveEffect -> BalanceReceivable
                                 isZeroEffect -> BalanceBalanced
@@ -558,32 +655,35 @@ fun LedgerEntryCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = NavyDark.copy(alpha = 0.04f),
-                shape = RoundedCornerShape(6.dp)
+                color = NavyDark,
+                shape = RoundedCornerShape(10.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "الرصيد التراكمي بعد الحركة:",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
+                        text = "الرصيد التراكمي المتبقي بعد الحركة:",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontWeight = FontWeight.Medium
+                        )
                     )
                     Text(
                         text = formatCurrency(entry.runningBalance, currencySymbol),
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.ExtraBold,
+                            fontWeight = FontWeight.Black,
                             color = when {
                                 entry.runningBalance > BigDecimal.ZERO -> BalanceReceivable
                                 entry.runningBalance < BigDecimal.ZERO -> BalancePayable
-                                else -> BalanceBalanced
+                                else -> Color.White
                             }
                         )
                     )
@@ -663,7 +763,10 @@ fun AccountingTopBar(
 }
 
 @Composable
-fun GoldenHeaderBanner() {
+fun GoldenHeaderBanner(
+    isOnline: Boolean? = null,
+    onLogoutClick: (() -> Unit)? = null
+) {
     Surface(
         color = NavyDark,
         shadowElevation = 3.dp,
@@ -682,7 +785,8 @@ fun GoldenHeaderBanner() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
                     Box(
                         modifier = Modifier
@@ -708,38 +812,75 @@ fun GoldenHeaderBanner() {
                     Column {
                         val isSandbox = com.goldenwolfeg.accountingmobile.BuildConfig.FLAVOR.equals("sandbox", ignoreCase = true)
                         Text(
-                            text = "Golden Accounting Mobile",
+                            text = "Golden Accounting",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 letterSpacing = 0.3.sp
-                            )
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = if (isSandbox) "نظام المتابعة المحاسبية (Sandbox)" else "نظام المتابعة المحاسبية الموحد",
+                            text = if (isSandbox) "النظام المحاسبي (Sandbox)" else "نظام المتابعة المحاسبية الموحد",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = GoldBright,
                                 fontSize = 11.sp
-                            )
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                Surface(
-                    color = GoldMetallic.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(20.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldMetallic.copy(alpha = 0.4f))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "Read-Only",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = GoldBright,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
-                        )
-                    )
+                    if (isOnline != null) {
+                        val badgeColor = if (isOnline) BalanceReceivable else BalancePayable
+                        Surface(
+                            color = badgeColor.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(20.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(badgeColor)
+                                )
+                                Text(
+                                    text = if (isOnline) "متصل" else "أوفلاين",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    if (onLogoutClick != null) {
+                        IconButton(
+                            onClick = onLogoutClick,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "تسجيل الخروج",
+                                tint = Color(0xFFFCA5A5),
+                                modifier = Modifier.size(21.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -751,4 +892,81 @@ fun GoldenHeaderBanner() {
             )
         }
     }
+}
+
+@Composable
+fun GoldenBottomNavBar(
+    currentRoute: String,
+    onNavigate: (String) -> Unit
+) {
+    NavigationBar(
+        containerColor = NavyDark,
+        contentColor = Color.White,
+        tonalElevation = 6.dp
+    ) {
+        val items = listOf(
+            Triple("dashboard", "الرئيسية", Icons.Default.Dashboard),
+            Triple("parties_list", "الحسابات", Icons.Default.Group),
+            Triple("sync_status", "الاتصال", Icons.Default.CloudDone)
+        )
+        items.forEach { (route, label, icon) ->
+            val selected = currentRoute == route
+            NavigationBarItem(
+                selected = selected,
+                onClick = { if (!selected) onNavigate(route) },
+                icon = { Icon(imageVector = icon, contentDescription = label) },
+                label = {
+                    Text(
+                        text = label,
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = GoldBright,
+                    selectedTextColor = GoldBright,
+                    indicatorColor = GoldMetallic.copy(alpha = 0.16f),
+                    unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                    unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun LogoutConfirmDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = NavyPrimary,
+        titleContentColor = Color.White,
+        textContentColor = Color.White,
+        title = {
+            Text(text = "تأكيد تسجيل الخروج", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        },
+        text = {
+            Text(
+                text = "هل تريد تسجيل الخروج من حسابك ومسح الجلسة المحفوظة على هذا الجهاز؟",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 13.sp
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = BalancePayable, contentColor = Color.White),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("تسجيل الخروج", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء", color = Color.White.copy(alpha = 0.85f))
+            }
+        }
+    )
 }

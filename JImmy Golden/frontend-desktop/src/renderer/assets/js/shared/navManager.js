@@ -112,27 +112,27 @@ function resolveViewsPrefix(pathname = window.location.pathname) {
 function buildTopNavItems(prefix) {
     const withPrefix = (target) => `${prefix}${target}`;
     return [
-        { key: 'common.nav.dashboard', fallback: 'Dashboard', href: withPrefix('dashboard/index.html') },
+        { key: 'common.nav.dashboard', fallback: 'Dashboard', href: withPrefix('dashboard/index.html'), featureFlag: 'page_dashboard', defaultEnabled: true },
         {
             key: 'common.nav.masterData',
             fallback: 'Master Data',
             children: [
-                { key: 'common.nav.units', fallback: 'Units', href: withPrefix('items/units.html') },
-                { key: 'common.nav.items', fallback: 'Items', href: withPrefix('items/items.html') },
-                { key: 'common.nav.customersSuppliers', fallback: 'Customers & Suppliers', href: withPrefix('customers/index.html') },
-                { key: 'common.nav.userManagement', fallback: 'User Management', href: withPrefix('auth-users/index.html') }
+                { key: 'common.nav.units', fallback: 'Units', href: withPrefix('items/units.html'), featureFlag: 'master_units' },
+                { key: 'common.nav.items', fallback: 'Items', href: withPrefix('items/items.html'), featureFlag: 'master_items' },
+                { key: 'common.nav.customersSuppliers', fallback: 'Customers & Suppliers', href: withPrefix('customers/index.html'), featureFlag: 'master_customers' },
+                { key: 'common.nav.userManagement', fallback: 'User Management', href: withPrefix('auth-users/index.html'), featureFlag: 'master_users' }
             ]
         },
         {
             key: 'common.nav.sales',
             fallback: 'Sales',
             children: [
-                { key: 'common.nav.salesInvoice', fallback: 'Sales Invoice', href: withPrefix('sales/index.html') },
+                { key: 'common.nav.salesInvoice', fallback: 'Sales Invoice', href: withPrefix('sales/index.html'), featureFlag: 'page_sales', defaultEnabled: true },
                 { key: '', fallback: 'إقفال وردية', href: withPrefix('sales/index.html?openShiftClose=1'), featureFlag: 'sales_shift_close' }
             ]
         },
-        { key: 'common.nav.purchases', fallback: 'Purchases', href: withPrefix('purchases/index.html') },
-        { key: 'common.nav.inventory', fallback: 'Inventory', href: withPrefix('inventory/index.html') },
+        { key: 'common.nav.purchases', fallback: 'Purchases', href: withPrefix('purchases/index.html'), featureFlag: 'page_purchases', defaultEnabled: true },
+        { key: 'common.nav.inventory', fallback: 'Inventory', href: withPrefix('inventory/index.html'), featureFlag: 'page_inventory', defaultEnabled: true },
         {
             key: '',
             fallback: 'التعاملات المالية',
@@ -150,18 +150,18 @@ function buildTopNavItems(prefix) {
                 { key: '', fallback: 'المبيعات المحلية', href: withPrefix('local-sales/index.html'), featureFlag: 'local_sales' }
             ]
         },
-        { key: 'common.nav.receipt', fallback: 'Receipt', href: withPrefix('payments/receipt.html') },
-        { key: 'common.nav.payment', fallback: 'Payment', href: withPrefix('payments/payment.html') },
+        { key: 'common.nav.receipt', fallback: 'Receipt', href: withPrefix('payments/receipt.html'), featureFlag: 'page_receipt', defaultEnabled: true },
+        { key: 'common.nav.payment', fallback: 'Payment', href: withPrefix('payments/payment.html'), featureFlag: 'page_payment', defaultEnabled: true },
         {
             key: 'common.nav.reports',
             fallback: 'Reports',
             children: [
-                { key: 'common.nav.generalReports', fallback: 'General Reports', href: withPrefix('reports/index.html') },
-                { key: 'common.nav.dailyReport', fallback: 'التقرير اليومي الشامل', href: withPrefix('reports/daily-report/index.html') },
-                { key: 'common.nav.customerReports', fallback: 'Customer Reports', href: withPrefix('customer-reports/index.html') },
-                { key: 'common.nav.debtorCreditor', fallback: 'Debtor & Creditor', href: withPrefix('reports/debtor-creditor/index.html') },
-                { key: 'common.nav.workersManagement', fallback: 'Workers Management', href: withPrefix('workers-management/index.html') },
-                { key: '', fallback: 'نثريات المصنع', href: withPrefix('factory-petty-expenses/index.html') }
+                { key: 'common.nav.generalReports', fallback: 'General Reports', href: withPrefix('reports/index.html'), featureFlag: 'reports_general' },
+                { key: 'common.nav.dailyReport', fallback: 'التقرير اليومي الشامل', href: withPrefix('reports/daily-report/index.html'), featureFlag: 'reports_daily' },
+                { key: 'common.nav.customerReports', fallback: 'Customer Reports', href: withPrefix('customer-reports/index.html'), featureFlag: 'reports_customers' },
+                { key: 'common.nav.debtorCreditor', fallback: 'Debtor & Creditor', href: withPrefix('reports/debtor-creditor/index.html'), featureFlag: 'reports_debit_credit' },
+                { key: 'common.nav.workersManagement', fallback: 'Workers Management', href: withPrefix('workers-management/index.html'), featureFlag: 'reports_workers' },
+                { key: '', fallback: 'نثريات المصنع', href: withPrefix('factory-petty-expenses/index.html'), featureFlag: 'reports_factory_petty' }
             ]
         },
         {
@@ -173,7 +173,7 @@ function buildTopNavItems(prefix) {
                 { key: '', fallback: 'المبيعات', href: withPrefix('external-work/sales.html') }
             ]
         },
-        { key: 'common.nav.settings', fallback: 'Settings', href: withPrefix('settings/index.html') }
+        { key: 'common.nav.settings', fallback: 'Settings', href: withPrefix('settings/index.html'), featureFlag: 'page_settings', defaultEnabled: true }
     ];
 }
 

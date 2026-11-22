@@ -2,6 +2,8 @@ package com.goldenwolfeg.accountingmobile.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.goldenwolfeg.accountingmobile.data.model.AdminAuditLogDto
+import com.goldenwolfeg.accountingmobile.data.model.AdminBackupFileDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminClientDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminErrorLogDto
 import com.goldenwolfeg.accountingmobile.data.model.AdminGlobalConfigDto
@@ -50,6 +52,27 @@ class AdminPanelViewModel(
 
     private val _errorLogs = MutableStateFlow<List<AdminErrorLogDto>>(emptyList())
     val errorLogs: StateFlow<List<AdminErrorLogDto>> = _errorLogs.asStateFlow()
+
+    private val _errorsPage = MutableStateFlow(1)
+    val errorsPage: StateFlow<Int> = _errorsPage.asStateFlow()
+
+    private val _errorsTotalPages = MutableStateFlow(1)
+    val errorsTotalPages: StateFlow<Int> = _errorsTotalPages.asStateFlow()
+
+    private val _auditLogs = MutableStateFlow<List<AdminAuditLogDto>>(emptyList())
+    val auditLogs: StateFlow<List<AdminAuditLogDto>> = _auditLogs.asStateFlow()
+
+    private val _auditPage = MutableStateFlow(1)
+    val auditPage: StateFlow<Int> = _auditPage.asStateFlow()
+
+    private val _auditTotalPages = MutableStateFlow(1)
+    val auditTotalPages: StateFlow<Int> = _auditTotalPages.asStateFlow()
+
+    private val _clientBackups = MutableStateFlow<List<AdminBackupFileDto>>(emptyList())
+    val clientBackups: StateFlow<List<AdminBackupFileDto>> = _clientBackups.asStateFlow()
+
+    private val _detectedChatId = MutableStateFlow<String?>(null)
+    val detectedChatId: StateFlow<String?> = _detectedChatId.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -110,6 +133,99 @@ class AdminPanelViewModel(
         if (index == 1 && _errorLogs.value.isEmpty()) {
             loadErrorLogs()
         }
+        if (index == 2 && _auditLogs.value.isEmpty()) {
+            loadAuditLogs()
+        }
+    }
+
+    fun loadAuditLogs(page: Int = _auditPage.value) {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            val safePage = page.coerceAtLeast(1)
+            adminRepository.getAuditLogs(page = safePage, perPage = 15)
+                .onSuccess { res ->
+                    _auditLogs.value = res.logs
+                    _auditPage.value = res.page
+                    _auditTotalPages.value = res.totalPages.coerceAtLeast(1)
+                }
+                .onFailure { err -> _message.value = err.message ?: "فشل تحميل سجل الإدارة" }
+            _isActionLoading.value = false
+        }
+    }
+
+    fun loadClientBackups(companyId: String) {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            _clientBackups.value = emptyList()
+            adminRepository.listClientBackups(companyId)
+                .onSuccess { files -> _clientBackups.value = files }
+                .onFailure { err -> _message.value = err.message ?: "فشل تحميل النسخ السحابية" }
+            _isActionLoading.value = false
+        }
+    }
+
+    fun downloadClientBackup(companyId: String, companyName: String, path: String, onUrlReady: (String) -> Unit) {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            adminRepository.downloadClientBackup(companyId, companyName, path)
+                .onSuccess { url -> onUrlReady(url) }
+                .onFailure { err -> _message.value = err.message ?: "فشل تجهيز رابط التحميل" }
+            _isActionLoading.value = false
+        }
+    }
+
+    fun detectTelegramChatId(botToken: String) {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            adminRepository.detectTelegramChatId(botToken)
+                .onSuccess { chatId ->
+                    _detectedChatId.value = chatId
+                    _message.value = "تم جلب Chat ID بنجاح ($chatId) — اضغط حفظ الإعدادات"
+                }
+                .onFailure { err -> _message.value = err.message ?: "لم يتم العثور على Chat ID" }
+            _isActionLoading.value = false
+        }
+    }
+
+    fun testTelegramAlert(botToken: String, chatId: String) {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            adminRepository.testTelegramAlert(botToken, chatId)
+                .onSuccess { _message.value = "تم إرسال رسالة الاختبار إلى تليجرام بنجاح!" }
+                .onFailure { err -> _message.value = err.message ?: "فشل إرسال تنبيه تليجرام" }
+            _isActionLoading.value = false
+        }
+    }
+
+    fun sendExpiringSummary() {
+        viewModelScope.launch {
+            _isActionLoading.value = true
+            adminRepository.sendExpiringSummary()
+                .onSuccess { _message.value = "تم إرسال تقرير الاشتراكات القريبة إلى تليجرام" }
+                .onFailure { err -> _message.value = err.message ?: "فشل إرسال التقرير" }
+            _isActionLoading.value = false
+        }
+    }
+
+    fun sendClientNotice(licenseId: String, notice: String) {
+        val clean = notice.trim()
+        val type = if (clean.isEmpty()) "clear_notice" else "set_notice"
+        val msg = if (clean.isEmpty()) "تم مسح الرسالة الخاصة للعميل" else "تم إرسال الرسالة الخاصة للعميل بنجاح"
+        runAction(msg) {
+            adminRepository.sendClientCommand(licenseId, commandType = type, customNotice = clean)
+        }
+    }
+
+    fun sendForceBackupCommand(licenseId: String) {
+        runAction("تم إرسال أمر النسخ الاحتياطي السحابي عن بُعد") {
+            adminRepository.sendClientCommand(licenseId, commandType = "force_backup")
+        }
+    }
+
+    fun sendResetDesktopPassword(licenseId: String, newPassword: String) {
+        runAction("تم إرسال أمر تغيير كلمة سر الديسكتوب بنجاح") {
+            adminRepository.sendClientCommand(licenseId, commandType = "reset_desktop_password", newPassword = newPassword)
+        }
     }
 
     fun refreshOverview() {
@@ -129,11 +245,16 @@ class AdminPanelViewModel(
         }
     }
 
-    fun loadErrorLogs() {
+    fun loadErrorLogs(page: Int = _errorsPage.value) {
         viewModelScope.launch {
             _isActionLoading.value = true
-            adminRepository.getErrorLogs()
-                .onSuccess { logs -> _errorLogs.value = logs }
+            val safePage = page.coerceAtLeast(1)
+            adminRepository.getErrorLogs(page = safePage, perPage = 15)
+                .onSuccess { res ->
+                    _errorLogs.value = res.logs
+                    _errorsPage.value = res.page
+                    _errorsTotalPages.value = res.totalPages.coerceAtLeast(1)
+                }
                 .onFailure { err -> _message.value = err.message ?: "فشل تحميل سجل الأخطاء" }
             _isActionLoading.value = false
         }
@@ -178,6 +299,12 @@ class AdminPanelViewModel(
         }
     }
 
+    fun bindMachine(licenseId: String, machineId: String) {
+        runAction("تم إعادة ربط الجهاز بنجاح") {
+            adminRepository.updateLicense(licenseId, mode = "bind_machine", machineId = machineId)
+        }
+    }
+
     fun updateNotes(licenseId: String, notes: String) {
         runAction("تم حفظ الملاحظات بنجاح") {
             adminRepository.updateLicense(licenseId, mode = "update_notes", notes = notes)
@@ -212,9 +339,27 @@ class AdminPanelViewModel(
         }
     }
 
-    fun updateGlobalConfig(minVersion: String, whatsapp: String, forceMessage: String) {
+    fun updateGlobalConfig(
+        minVersion: String,
+        whatsapp: String,
+        forceMessage: String,
+        telegramBotToken: String = "",
+        telegramChatId: String = "",
+        telegramAlertsEnabled: Boolean = false,
+        announcementMessage: String = "",
+        announcementActive: Boolean = false
+    ) {
         runAction("تم حفظ الإعدادات العامة بنجاح") {
-            adminRepository.updateGlobalConfig(minVersion, whatsapp, forceMessage)
+            adminRepository.updateGlobalConfig(
+                minVersion,
+                whatsapp,
+                forceMessage,
+                telegramBotToken,
+                telegramChatId,
+                telegramAlertsEnabled,
+                announcementMessage,
+                announcementActive
+            )
         }
     }
 

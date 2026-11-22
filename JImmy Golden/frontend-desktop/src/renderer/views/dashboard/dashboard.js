@@ -8,6 +8,7 @@ let periodLabelEl;
 let appVersionEl;
 let lastStats = null;
 let cachedLastSyncAt = localStorage.getItem('golden_last_cloud_sync_at') || null;
+let isMobileCloudSyncEnabled = false;
 let chartPeriod = '7';
 let ar = {};
 let currentFilters = { startDate: '', endDate: '' };
@@ -20,9 +21,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         ar = await window.i18n.loadArabicDictionary();
     }
 
+    if (window.electronAPI && typeof window.electronAPI.getClientFeatures === 'function') {
+        try {
+            const featureRes = await window.electronAPI.getClientFeatures();
+            const featuresObj = (featureRes && featureRes.features && typeof featureRes.features === 'object')
+                ? featureRes.features
+                : (featureRes && typeof featureRes === 'object' ? featureRes : {});
+            isMobileCloudSyncEnabled = Boolean(featuresObj.mobile_cloud_sync);
+        } catch (_) {
+            isMobileCloudSyncEnabled = false;
+        }
+    }
+
     dashboardRender.renderPage({ t, getNavHTML });
     bindEvents();
-    if (window.electronAPI && typeof window.electronAPI.onCloudSyncStatus === 'function') {
+    if (isMobileCloudSyncEnabled && window.electronAPI && typeof window.electronAPI.onCloudSyncStatus === 'function') {
         window.electronAPI.onCloudSyncStatus((status) => {
             if (status) {
                 if (status.success && status.lastSyncAt) {
@@ -144,11 +157,15 @@ function bindEvents() {
 
     const syncStatusBadgeEl = document.getElementById('syncStatusBadge');
     if (syncStatusBadgeEl) {
-        syncStatusBadgeEl.addEventListener('click', () => {
-            if (typeof window.showSyncLogModal === 'function') {
-                window.showSyncLogModal();
-            }
-        });
+        if (!isMobileCloudSyncEnabled) {
+            syncStatusBadgeEl.remove();
+        } else {
+            syncStatusBadgeEl.addEventListener('click', () => {
+                if (typeof window.showSyncLogModal === 'function') {
+                    window.showSyncLogModal();
+                }
+            });
+        }
     }
 
     updatePeriodLabel();
@@ -394,8 +411,8 @@ async function loadDashboardStats(filters = currentFilters, triggerSync = false)
         }
 
         updatePeriodLabel(filters);
-        const syncBadge = document.getElementById('syncStatusBadge');
-        if (triggerSync && syncBadge) {
+        const syncBadge = isMobileCloudSyncEnabled ? document.getElementById('syncStatusBadge') : null;
+        if (isMobileCloudSyncEnabled && triggerSync && syncBadge) {
             syncBadge.className = 'sync-status is-syncing';
             syncBadge.innerHTML = `
                 <i class="fas fa-sync-alt fa-spin sync-icon"></i>
@@ -404,7 +421,7 @@ async function loadDashboardStats(filters = currentFilters, triggerSync = false)
                     <span class="sync-status-time">جاري تحديث البيانات مع السحابة</span>
                 </div>
             `;
-        } else if (!triggerSync) {
+        } else if (isMobileCloudSyncEnabled && !triggerSync) {
             updateSyncStatusUI();
             if (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function') {
                 window.electronAPI.triggerManualSync({ statusOnly: true }).then((status) => {
@@ -419,7 +436,7 @@ async function loadDashboardStats(filters = currentFilters, triggerSync = false)
 
         let stats;
         let syncResult;
-        if (triggerSync) {
+        if (isMobileCloudSyncEnabled && triggerSync) {
             [stats, syncResult] = await Promise.all([
                 window.electronAPI.getDashboardStats(filters),
                 (window.electronAPI && typeof window.electronAPI.triggerManualSync === 'function')
@@ -933,6 +950,7 @@ window.showOnboardingWizardModal = function() {
 };
 
 window.showSyncLogModal = async function() {
+    if (!isMobileCloudSyncEnabled) return;
     let modal = document.getElementById('syncLogModal');
     if (modal) modal.remove();
 

@@ -18,7 +18,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
@@ -27,14 +29,22 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import com.goldenwolfeg.accountingmobile.data.remote.session.SessionManager
+import com.goldenwolfeg.accountingmobile.ui.util.BiometricHelper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +54,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.goldenwolfeg.accountingmobile.ui.components.AccountingTopBar
+import com.goldenwolfeg.accountingmobile.ui.components.GoldenBottomNavBar
+import com.goldenwolfeg.accountingmobile.ui.components.LogoutConfirmDialog
+import com.goldenwolfeg.accountingmobile.ui.theme.BalancePayable
 import com.goldenwolfeg.accountingmobile.ui.theme.BalanceReceivable
 import com.goldenwolfeg.accountingmobile.ui.theme.GoldBright
 import com.goldenwolfeg.accountingmobile.ui.theme.GoldMetallic
@@ -54,14 +67,20 @@ import com.goldenwolfeg.accountingmobile.ui.viewmodel.SyncViewModel
 @Composable
 fun SyncStatusScreen(
     viewModel: SyncViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onNavigateToDashboard: () -> Unit = {},
+    onNavigateToParties: () -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
     val syncStatus by viewModel.syncStatus.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val refreshMessage by viewModel.refreshMessage.collectAsState()
     val syncProgressStep by viewModel.syncProgressStep.collectAsState()
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val isOnline = syncStatus?.isOnline == true
+    val statusAccentColor = if (isOnline) BalanceReceivable else BalancePayable
 
     LaunchedEffect(refreshMessage) {
         refreshMessage?.let { msg ->
@@ -75,7 +94,27 @@ fun SyncStatusScreen(
             AccountingTopBar(
                 title = "حالة الاتصال والمزامنة",
                 subtitle = "الربط مع Golden Accounting System",
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                actions = {
+                    IconButton(onClick = { showLogoutDialog = true }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "تسجيل الخروج",
+                            tint = Color(0xFFFCA5A5)
+                        )
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            GoldenBottomNavBar(
+                currentRoute = "sync_status",
+                onNavigate = { route ->
+                    when (route) {
+                        "dashboard" -> onNavigateToDashboard()
+                        "parties_list" -> onNavigateToParties()
+                    }
+                }
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -87,7 +126,6 @@ fun SyncStatusScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Main Connection Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -109,13 +147,13 @@ fun SyncStatusScreen(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFD97706).copy(alpha = 0.15f)),
+                                    .background(statusAccentColor.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.CloudDone,
+                                    imageVector = if (isOnline) Icons.Default.CloudDone else Icons.Default.CloudOff,
                                     contentDescription = null,
-                                    tint = Color(0xFFD97706),
+                                    tint = statusAccentColor,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -315,8 +353,88 @@ fun SyncStatusScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val sessionManager = remember { SessionManager(context) }
+            val biometricSupported = remember { BiometricHelper.isBiometricAvailable(context) }
+            var biometricEnabled by remember { mutableStateOf(sessionManager.isBiometricLockEnabled()) }
+
+            if (biometricSupported) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "قفل التطبيق بالبصمة",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "طلب البصمة تلقائياً عند فتح التطبيق لحماية حسابك",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+                        Switch(
+                            checked = biometricEnabled,
+                            onCheckedChange = { checked ->
+                                biometricEnabled = checked
+                                sessionManager.setBiometricLockEnabled(checked)
+                                Toast.makeText(
+                                    context,
+                                    if (checked) "تم تفعيل القفل بالبصمة" else "تم إيقاف القفل بالبصمة",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            colors = SwitchDefaults.colors(checkedTrackColor = BalanceReceivable)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
+            Button(
+                onClick = { showLogoutDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BalancePayable,
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("تسجيل الخروج من الحساب", fontWeight = FontWeight.Bold)
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    if (showLogoutDialog) {
+        LogoutConfirmDialog(
+            onDismiss = { showLogoutDialog = false },
+            onConfirm = {
+                showLogoutDialog = false
+                viewModel.logout(onLogout)
+            }
+        )
     }
 }
 

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -137,6 +138,13 @@ class DashboardViewModel(private val repository: AccountingRepository) : ViewMod
 
     fun clearRefreshMessage() {
         _refreshMessage.value = null
+    }
+
+    fun logout(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            repository.logout().first()
+            onComplete()
+        }
     }
 }
 
@@ -387,5 +395,12 @@ class SyncViewModel(private val repository: AccountingRepository) : ViewModel() 
 
     fun clearRefreshMessage() {
         _refreshMessage.value = null
+    }
+
+    fun logout(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            repository.logout().first()
+            onComplete()
+        }
     }
 }

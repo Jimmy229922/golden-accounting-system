@@ -1,4 +1,4 @@
-﻿let authUsersForm, authUsernameInput, authPasswordInput, authConfirmPasswordInput, authActivateNowInput;
+let authUsersForm, authUsernameInput, authPasswordInput, authConfirmPasswordInput, authActivateNowInput;
 let authUsersStatusEl, authUsersTableWrap, authUsersNotice;
 let authUsersTotalStat, authUsersActiveStat, authUsersInactiveStat, authUsersTableMeta;
 let ar = {};
@@ -8,7 +8,7 @@ const authUsersUtils = window.authUsersPageUtils;
 
 const AUTH_SESSION_KEY = 'auth_session_token';
 
-const escapeHtml = authUsersUtils.escapeHtml;
+var escapeHtml = authUsersUtils.escapeHtml;
 const getAuthSessionToken = () => authUsersUtils.getAuthSessionToken(AUTH_SESSION_KEY);
 
 document.addEventListener('DOMContentLoaded', async () => {

@@ -542,6 +542,179 @@ function renderTableBody(containerId, list, rowRenderer, colSpan) {
     el.innerHTML = list.map(rowRenderer).join('');
 }
 
+function buildDailyReportPrintHtml(startDate, endDate) {
+    const summaryEl = document.querySelector('.dr-summary');
+    const sectionsEl = document.querySelector('.dr-sections-grid');
+    const printedAt = new Date().toLocaleString('ar-EG', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+
+    const summaryHtml = summaryEl ? summaryEl.outerHTML : '';
+    const sectionsHtml = sectionsEl ? sectionsEl.outerHTML : '';
+
+    return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>التقرير المالي اليومي الشامل</title>
+<style>
+@page { size: A4 portrait; margin: 12mm; }
+* { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    direction: rtl;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.pdf-header {
+    background: linear-gradient(135deg, #0b132b 0%, #1c2541 100%);
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    border-bottom: 3px solid #d4af37;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.pdf-header h1 {
+    margin: 0 0 4px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #ffffff;
+}
+.pdf-header .sub {
+    margin: 0;
+    font-size: 11px;
+    color: #f3e5ab;
+}
+.pdf-header .meta {
+    text-align: left;
+    font-size: 10.5px;
+    color: #cbd5e1;
+    line-height: 1.6;
+}
+.dr-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.dr-summary-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 3px solid #0284c7;
+}
+.dr-summary-card.income-card { border-top-color: #059669; }
+.dr-summary-card.expense-card { border-top-color: #dc2626; }
+.dr-summary-card.net-card { border-top-color: #0284c7; }
+.dr-card-icon { display: none; }
+.dr-card-title { font-size: 11px; color: #475569; font-weight: 700; margin-bottom: 4px; }
+.dr-card-value { font-size: 16px; font-weight: 800; color: #0f172a; }
+.dr-sections-grid { display: block; }
+.finance-column { margin-bottom: 16px; }
+.finance-col-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    padding: 6px 10px;
+    border-radius: 8px;
+    margin: 0 0 10px;
+    background: #f1f5f9;
+    border-right: 4px solid #0284c7;
+}
+.finance-col-title.income-title { border-right-color: #059669; color: #065f46; background: #ecfdf5; }
+.finance-col-title.expense-title { border-right-color: #dc2626; color: #991b1b; background: #fef2f2; }
+.finance-box {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+.finance-box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+.finance-box-title {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+}
+.finance-box-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #0f172a;
+}
+.finance-box-badge.income-badge { background: #dcfce7; color: #166534; }
+.finance-box-badge.expense-badge { background: #fee2e2; color: #991b1b; }
+.dr-table-responsive { overflow: visible; max-height: none; }
+.dr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+.dr-table th {
+    background: #f1f5f9;
+    color: #0f172a;
+    font-weight: 700;
+    padding: 7px 10px;
+    text-align: right;
+    border-bottom: 1.5px solid #cbd5e1;
+}
+.dr-table td {
+    padding: 6px 10px;
+    color: #1e293b;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: right;
+}
+.dr-table tbody tr:nth-child(even) td { background: #f8fafc; }
+.dr-table tbody tr:last-child td { border-bottom: none; }
+.empty-row td { text-align: center; color: #64748b; padding: 10px; }
+i.fas, i.fab, i.far { display: none; }
+</style>
+</head>
+<body>
+    <div class="pdf-header">
+        <div>
+            <h1>التقرير المالي اليومي الشامل</h1>
+            <p class="sub">Golden Accounting System</p>
+        </div>
+        <div class="meta">
+            <div>الفترة: من ${startDate} إلى ${endDate}</div>
+            <div>تاريخ التصدير: ${printedAt}</div>
+        </div>
+    </div>
+    ${summaryHtml}
+    ${sectionsHtml}
+</body>
+</html>`;
+}
+
 async function exportPdf() {
     const startDate = document.getElementById('startDate')?.value || getTodayString();
     const endDate = document.getElementById('endDate')?.value || startDate;
@@ -549,7 +722,8 @@ async function exportPdf() {
 
     try {
         const electronApi = window.electronAPI || window.api;
-        const result = await electronApi.saveDailyFinanceReportPdf({ defaultName });
+        const html = buildDailyReportPrintHtml(startDate, endDate);
+        const result = await electronApi.saveDailyFinanceReportPdf({ defaultName, html });
         if (result && result.success) {
             showDailyReportToast('تم حفظ ملف PDF بنجاح', 'success');
         } else if (result && !result.canceled) {

@@ -558,7 +558,7 @@ async function autoRegisterClientDeviceWithCloud(companyId, companyName, deviceI
 async function reportClientErrorToCloud(payload = {}) {
     if (!app.isPackaged || typeof fetch !== 'function') return null;
     try {
-        const response = await fetch('https://ryoqhtsdhfbydmejmaby.supabase.co/rest/v1/rpc/report_client_error', {
+        const response = await fetch('https://ryoqhtsdhfbydmejmaby.supabase.co/functions/v1/license-gateway', {
             method: 'POST',
             headers: {
                 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5b3FodHNkaGZieWRtZWptYWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk2MzMsImV4cCI6MjEwNzMwNTYzM30.y0tjIyjZZlII6ge9xkFpzqhF5sZjSngpp4XOoVrrTs4',
@@ -566,14 +566,15 @@ async function reportClientErrorToCloud(payload = {}) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                p_company_id: payload.companyId || null,
-                p_device_id: payload.deviceId || null,
-                p_company_name: payload.companyName || null,
-                p_desktop_version: payload.desktopVersion || '10.1.0',
-                p_severity: payload.severity || 'error',
-                p_module: payload.module || 'sync',
-                p_error_message: String(payload.errorMessage || 'Unknown error'),
-                p_error_details: payload.errorDetails || {}
+                action: 'report_error',
+                company_id: payload.companyId || null,
+                device_id: payload.deviceId || null,
+                company_name: payload.companyName || null,
+                desktop_version: payload.desktopVersion || '10.1.0',
+                severity: payload.severity || 'error',
+                module: payload.module || 'sync',
+                error_message: String(payload.errorMessage || 'Unknown error'),
+                error_details: payload.errorDetails || {}
             }),
             signal: AbortSignal.timeout(6000)
         });
@@ -684,6 +685,26 @@ ipcMain.handle('submit-enrollment-token', async (_event, token) => {
 });
 
 function startBackgroundSyncEngine() {
+    const mobileCloudSyncEnabled = licenseService.hasFeature(db, 'mobile_cloud_sync', false);
+    if (!mobileCloudSyncEnabled) {
+        syncEngineInstance = null;
+        ipcMain.removeHandler('trigger-manual-sync');
+        ipcMain.handle('trigger-manual-sync', async () => ({
+            success: false,
+            disabled: true,
+            featureDisabled: true,
+            reason: 'المزامنة السحابية للموبايل غير مفعلة لهذا الحساب'
+        }));
+        ipcMain.removeHandler('send-sync-diagnostic-report');
+        ipcMain.handle('send-sync-diagnostic-report', async () => ({
+            success: false,
+            disabled: true,
+            featureDisabled: true,
+            reason: 'المزامنة السحابية للموبايل غير مفعلة لهذا الحساب'
+        }));
+        return;
+    }
+
     ipcMain.removeHandler('trigger-manual-sync');
     ipcMain.handle('trigger-manual-sync', async (_event, options) => {
         if (options && options.getDiagnostics) {

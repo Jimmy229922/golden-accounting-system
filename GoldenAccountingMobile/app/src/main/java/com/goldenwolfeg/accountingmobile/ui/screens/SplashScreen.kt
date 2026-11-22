@@ -13,12 +13,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -26,11 +31,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
+import com.goldenwolfeg.accountingmobile.data.remote.session.SessionManager
 import com.goldenwolfeg.accountingmobile.data.repository.AccountingRepository
+import com.goldenwolfeg.accountingmobile.ui.util.BiometricHelper
 import com.goldenwolfeg.accountingmobile.ui.theme.GoldBright
 import com.goldenwolfeg.accountingmobile.ui.theme.GoldGradientEnd
 import com.goldenwolfeg.accountingmobile.ui.theme.GoldGradientStart
@@ -45,8 +54,35 @@ fun SplashScreen(
     onNavigateToDashboard: () -> Unit,
     onNavigateToAdminPanel: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
     val scale = remember { Animatable(0.7f) }
     val alpha = remember { Animatable(0f) }
+    var waitingForBiometric by remember { mutableStateOf(false) }
+    var pendingAdminRoute by remember { mutableStateOf(false) }
+    var biometricError by remember { mutableStateOf<String?>(null) }
+
+    fun triggerBiometricCheck(isAdmin: Boolean) {
+        val activity = context as? FragmentActivity
+        if (activity == null || !BiometricHelper.isBiometricAvailable(context)) {
+            if (isAdmin) onNavigateToAdminPanel() else onNavigateToDashboard()
+            return
+        }
+        waitingForBiometric = true
+        biometricError = null
+        BiometricHelper.showBiometricPrompt(
+            activity = activity,
+            title = "التحقق بالبصمة",
+            subtitle = "افتح تطبيق Golden Accounting بأمان",
+            onSuccess = {
+                waitingForBiometric = false
+                if (isAdmin) onNavigateToAdminPanel() else onNavigateToDashboard()
+            },
+            onError = { err ->
+                biometricError = err
+            }
+        )
+    }
 
     LaunchedEffect(key1 = true) {
         scale.animateTo(
@@ -60,10 +96,17 @@ fun SplashScreen(
         val isSessionValid = repository.isSessionValid()
         val isAdmin = if (isSessionValid) repository.isSuperAdminSession() else false
         delay(400)
-        when {
-            isSessionValid && isAdmin -> onNavigateToAdminPanel()
-            isSessionValid -> onNavigateToDashboard()
-            else -> onNavigateToLogin()
+        if (isSessionValid) {
+            pendingAdminRoute = isAdmin
+            if (sessionManager.isBiometricLockEnabled() && BiometricHelper.isBiometricAvailable(context)) {
+                triggerBiometricCheck(isAdmin)
+            } else if (isAdmin) {
+                onNavigateToAdminPanel()
+            } else {
+                onNavigateToDashboard()
+            }
+        } else {
+            onNavigateToLogin()
         }
     }
 
@@ -141,11 +184,32 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            CircularProgressIndicator(
-                color = GoldBright,
-                strokeWidth = 3.dp,
-                modifier = Modifier.size(28.dp)
-            )
+            if (waitingForBiometric) {
+                biometricError?.let { err ->
+                    Text(
+                        text = err,
+                        color = Color(0xFFFCA5A5),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                Button(
+                    onClick = { triggerBiometricCheck(pendingAdminRoute) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GoldBright,
+                        contentColor = NavyDark
+                    )
+                ) {
+                    Text("فتح التطبيق بالبصمة", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                CircularProgressIndicator(
+                    color = GoldBright,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
     }
 }

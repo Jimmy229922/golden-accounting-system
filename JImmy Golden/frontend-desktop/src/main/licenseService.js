@@ -24,7 +24,7 @@ function getLicenseSettings(accountingDb) {
     try {
         const rows = accountingDb.prepare(`
             SELECT key, value FROM settings 
-            WHERE key IN ('company_id', 'companyName', 'companyPhone', 'companyActivity', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at', 'client_features', 'min_supported_version', 'support_whatsapp', 'force_update_message')
+            WHERE key IN ('company_id', 'companyName', 'companyPhone', 'companyActivity', 'invite_code', 'invite_expiry', 'renew_count', 'license_status', 'trial_starts_at', 'bound_machine_id', 'license_certificate', 'license_signature', 'license_last_verified_at', 'client_features', 'min_supported_version', 'support_whatsapp', 'force_update_message', 'announcement_message', 'announcement_active', 'custom_notice')
         `).all();
         const map = {};
         rows.forEach(r => { map[r.key] = r.value; });
@@ -266,6 +266,15 @@ async function getLicenseStatus(accountingDb) {
         }
         if (gatewayRes.data.force_update_message !== undefined) {
             saveSetting(accountingDb, 'force_update_message', String(gatewayRes.data.force_update_message || '').trim());
+        }
+        if (gatewayRes.data.announcement_message !== undefined) {
+            saveSetting(accountingDb, 'announcement_message', String(gatewayRes.data.announcement_message || '').trim());
+        }
+        if (gatewayRes.data.announcement_active !== undefined) {
+            saveSetting(accountingDb, 'announcement_active', gatewayRes.data.announcement_active ? '1' : '0');
+        }
+        if (gatewayRes.data.custom_notice !== undefined) {
+            saveSetting(accountingDb, 'custom_notice', String(gatewayRes.data.custom_notice || '').trim());
         }
         const cert = gatewayRes.data.certificate;
         const signature = gatewayRes.data.signature;
@@ -696,6 +705,9 @@ function getClientRuntimeMeta(accountingDb) {
             ? Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 86400000))
             : 0);
     const showExpiryBanner = !isLifetime && status !== 'suspended' && remainingDays > 0 && remainingDays <= 5;
+    const announcementMessage = String(map.announcement_message || '').trim();
+    const announcementActive = String(map.announcement_active || '') === '1' || String(map.announcement_active || '').toLowerCase() === 'true';
+    const customNotice = String(map.custom_notice || '').trim();
 
     return {
         appVersion,
@@ -703,6 +715,9 @@ function getClientRuntimeMeta(accountingDb) {
         forceUpdateRequired,
         forceUpdateMessage,
         supportWhatsapp,
+        announcementMessage,
+        announcementActive,
+        customNotice,
         companyName: String(map.companyName || '').trim(),
         machineId: getMachineId(),
         licenseStatus: isLifetime ? 'lifetime' : status,

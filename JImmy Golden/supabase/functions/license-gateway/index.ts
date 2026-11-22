@@ -163,6 +163,30 @@ serve(async (req: Request) => {
         }
 
         activeRec = newLic;
+        try {
+          const { data: tgCfg } = await supabase
+            .from("app_global_config")
+            .select("telegram_bot_token, telegram_chat_id, telegram_alerts_enabled")
+            .eq("id", 1)
+            .maybeSingle();
+          if (tgCfg?.telegram_alerts_enabled && tgCfg?.telegram_bot_token && tgCfg?.telegram_chat_id) {
+            const alertText =
+              `<b>🆕 تسجيل عميل جديد في النظام</b>\n` +
+              `• الشركة: <b>${String(newLic.company_name || "مؤسسة جديدة")}</b>\n` +
+              `• الجهاز: <code>${rawMachineId}</code>\n` +
+              `• الإصدار: v${desktopVersion}\n` +
+              `• الحالة: فترة تجريبية`;
+            fetch(`https://api.telegram.org/bot${tgCfg.telegram_bot_token}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: tgCfg.telegram_chat_id,
+                text: alertText,
+                parse_mode: "HTML"
+              })
+            }).catch(() => {});
+          }
+        } catch (_) {}
       } else {
         const isLifetime = activeRec.license_status === "lifetime";
 
@@ -197,7 +221,7 @@ serve(async (req: Request) => {
           updates.company_activity = incomingActivity;
         }
 
-        if (!activeRec.bound_machine_id && !isLifetime) {
+        if (!activeRec.bound_machine_id) {
           updates.bound_machine_id = rawMachineId;
         }
 
@@ -237,9 +261,17 @@ serve(async (req: Request) => {
 
       const { data: globalCfg } = await supabase
         .from("app_global_config")
-        .select("min_supported_version, support_whatsapp, force_update_message")
+        .select("min_supported_version, support_whatsapp, force_update_message, announcement_message, announcement_active")
         .eq("id", 1)
         .maybeSingle();
+
+      const pendingRemoteCommand = activeRec.remote_command || null;
+      if (pendingRemoteCommand) {
+        await supabase
+          .from("client_licenses")
+          .update({ remote_command: null, updated_at: now.toISOString() })
+          .eq("id", activeRec.id);
+      }
 
       return new Response(JSON.stringify({
         success: true,
@@ -251,8 +283,82 @@ serve(async (req: Request) => {
         min_supported_version: String(globalCfg?.min_supported_version || "10.0.0"),
         support_whatsapp: String(globalCfg?.support_whatsapp || ""),
         force_update_message: String(globalCfg?.force_update_message || ""),
+        announcement_message: String(globalCfg?.announcement_message || ""),
+        announcement_active: Boolean(globalCfg?.announcement_active),
+        custom_notice: String(activeRec.custom_notice || ""),
+        remote_command: pendingRemoteCommand,
         server_time: now.toISOString()
       }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (action === "report_error") {
+      const companyId = String(body.company_id || "").trim() || null;
+      const deviceId = String(body.device_id || "").trim() || null;
+      const companyName = String(body.company_name || "عميل").trim();
+      const desktopVersion = String(body.desktop_version || "10.1.0").trim();
+      const severity = String(body.severity || "error").trim();
+      const mod = String(body.module || "sync").trim();
+      const errorMessage = String(body.error_message || "Unknown error").trim();
+      const errorDetails = body.error_details && typeof body.error_details === "object" ? body.error_details : {};
+
+      await supabase.from("client_error_logs").insert({
+        company_id: companyId,
+        device_id: deviceId,
+        company_name: companyName,
+        desktop_version: desktopVersion,
+        severity,
+        module: mod,
+        error_message: errorMessage,
+        error_details: errorDetails
+      });
+
+      try {
+        const { data: tgCfg } = await supabase
+          .from("app_global_config")
+          .select("telegram_bot_token, telegram_chat_id, telegram_alerts_enabled")
+          .eq("id", 1)
+          .maybeSingle();
+        if (tgCfg?.telegram_alerts_enabled && tgCfg?.telegram_bot_token && tgCfg?.telegram_chat_id) {
+          const lower = errorMessage.toLowerCase();
+          const diagTitle = lower.includes("timestamp expired") || lower.includes("clock out of sync")
+            ? "ساعة جهاز العميل غير مضبوطة"
+            : lower.includes("is not unique") || lower.includes("apply_delta_sync_batch")
+              ? "تعارض في دالة المزامنة السحابية"
+              : lower.includes("unauthorized_device") || lower.includes("invalid signature")
+                ? "عدم تطابق هوية أو توقيع الجهاز"
+                : lower.includes("failed to fetch") || lower.includes("enotfound") || lower.includes("etimedout") || lower.includes("network")
+                  ? "انقطاع الإنترنت أو تعذر الوصول للخادم"
+                  : "خطأ تقني أثناء التشغيل";
+          const diagSolution = lower.includes("timestamp expired") || lower.includes("clock out of sync")
+            ? "اطلب من العميل تفعيل الضبط التلقائي للوقت في ويندوز."
+            : lower.includes("unauthorized_device")
+              ? "استخدم زر (فك جهاز) من لوحة الإدارة."
+              : "راجع تبويب سجل أخطاء العملاء في لوحة الإدارة.";
+
+          const text =
+            `<b>🚨 تنبيه خطأ لدى عميل</b>\n` +
+            `• الشركة: <b>${companyName}</b> (v${desktopVersion})\n` +
+            `• القسم: ${mod}\n` +
+            `• المشكلة: <b>${diagTitle}</b>\n` +
+            `• الحل المقترح: ${diagSolution}\n` +
+            `• التفاصيل: <code>${errorMessage.slice(0, 220)}</code>`;
+
+          fetch(`https://api.telegram.org/bot${tgCfg.telegram_bot_token}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: tgCfg.telegram_chat_id,
+              text,
+              parse_mode: "HTML"
+            })
+          }).catch(() => {});
+        }
+      } catch (_) {}
+
+      return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });

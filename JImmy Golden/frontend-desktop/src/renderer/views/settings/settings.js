@@ -20,6 +20,29 @@ const SETTINGS_TRACKING_FIELDS = [
 ];
 const CHANGELOG_HISTORY = [
     {
+        version: '10.1.27',
+        title: 'ما الجديد في التحديثات (سجل الإصدارات)',
+        intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار 10.1.27 بنجاح. يمكنك التمرير بالأسفل لاستعراض كافة التحديثات والإضافات في الإصدار الحالي وجميع الإصدارات السابقة:',
+        items: [
+            {
+                title: 'تطوير تصدير PDF للتقرير المالي اليومي الشامل بالكامل',
+                desc: 'إعادة بناء محرك تصدير PDF للتقرير المالي اليومي الشامل بتصميم A4 أبيض احترافي منظم وموحّد بالكامل في الوضعين المظلم والفاتح، مع منع تقطيع الجداول وتحسين تباين الأرقام والألوان للطباعة والمشاركة.'
+            },
+            {
+                title: 'إصلاح وتجديد تصميم صفحة إدارة المستخدمين',
+                desc: 'إصلاح مشكلة الشاشة البيضاء عند فتح إدارة المستخدمين وإعادة تصميم الصفحة بالكامل بشكل احترافي متناسق في الوضعين المظلم والفاتح.'
+            },
+            {
+                title: 'تنظيم الشريط العلوي ونقل الدعم الفني إلى الإعدادات',
+                desc: 'نقل زر الدعم الفني إلى قسم الأدوات والمظهر داخل صفحة الإعدادات لتبسيط الشريط العلوي، وتحويل القوائم المنسدلة التي تحتوي على خيار واحد (مثل المبيعات) إلى رابط مباشر سريع.'
+            },
+            {
+                title: 'دعم شريط الإعلانات والتنبيهات المباشرة والتحكم الشامل بالميزات',
+                desc: 'دعم عرض رسائل التنبيه الخاصة وشريط الإعلانات العام داخل البرنامج مع دعم الأوامر السحابية (النسخ الاحتياطي الفوري وإعادة تعيين كلمة المرور)، وتوسيع صلاحيات تخصيص الصفحات والمزامنة السحابية للهاتف.'
+            }
+        ]
+    },
+    {
         version: '10.1.25',
         title: 'ما الجديد في التحديثات (سجل الإصدارات)',
         intro: 'مرحباً بك! تم تحديث البرنامج وتثبيت الإصدار 10.1.25 بنجاح. يمكنك التمرير بالأسفل لاستعراض كافة التحديثات والإضافات في الإصدار الحالي وجميع الإصدارات السابقة:',
@@ -374,6 +397,15 @@ function renderPage() {
                         <p class="action-card-desc">${t('settings.appearanceDesc', 'تغيير وضع العرض بين المظلم والفاتح من هنا.')}</p>
                         <button id="themeToggleBtn" class="btn-action theme-btn" data-theme-toggle><i class="fas fa-moon"></i> ${t('settings.toggleTheme', 'تبديل المظهر')}</button>
                     </div>
+                    <!-- Support Card -->
+                    <div class="action-card support-card">
+                        <div class="action-card-header">
+                            <div class="action-card-icon" style="background:rgba(34,197,94,0.16);color:#22c55e;"><i class="fab fa-whatsapp"></i></div>
+                            <h3>الدعم الفني والتواصل</h3>
+                        </div>
+                        <p class="action-card-desc">تواصل مباشرة مع فريق الدعم الفني عبر واتساب للاستفسارات أو تجديد الاشتراك.</p>
+                        <button type="button" id="settingsSupportBtn" class="btn-action" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;"><i class="fab fa-whatsapp"></i> فتح الدعم الفني</button>
+                    </div>
                     <!-- Backup Card -->
                     <div class="action-card backup-card">
                         <div class="action-card-header">
@@ -698,6 +730,21 @@ function initializeElements() {
 
     if (themeToggleBtn && typeof window.bindThemeToggleButtons === 'function') {
         window.bindThemeToggleButtons();
+    }
+
+    const settingsSupportBtn = document.getElementById('settingsSupportBtn');
+    if (settingsSupportBtn) {
+        settingsSupportBtn.addEventListener('click', () => {
+            try {
+                if (window.top && typeof window.top.__openSupportModal === 'function') {
+                    window.top.__openSupportModal();
+                    return;
+                }
+            } catch (_) {}
+            if (window.electronAPI && typeof window.electronAPI.openExternalUrl === 'function') {
+                window.electronAPI.openExternalUrl('https://wa.me/201096304673');
+            }
+        });
     }
 
     setSaveButtonState('idle');

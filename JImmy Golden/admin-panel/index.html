@@ -76,6 +76,10 @@
                     <i class="fas fa-bug"></i>
                     <span>سجل أخطاء العملاء</span>
                 </button>
+                <button type="button" class="tab-btn" data-tab="audit">
+                    <i class="fas fa-shield-halved"></i>
+                    <span>سجل نشاط الإدارة</span>
+                </button>
                 <button type="button" class="tab-btn" data-tab="globalConfig">
                     <i class="fas fa-sliders"></i>
                     <span>إعدادات النظام العامة</span>
@@ -189,31 +193,133 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="errorsPaginationBar" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);gap:10px;flex-wrap:wrap;"></div>
                 </div>
             </div>
-            <div id="tabGlobalConfig" class="tab-panel">
-                <div class="table-card" style="max-width:680px;padding:24px;">
-                    <h3 style="margin-bottom:6px;"><i class="fas fa-sliders"></i> إعدادات التحكم العامة لجميع العملاء</h3>
-                    <p style="color:var(--text-secondary);font-size:0.86rem;margin-bottom:20px;">أي تعديل هنا يُطبق تلقائياً على جميع العملاء بمجرد فتح البرنامج.</p>
-                    <form id="globalConfigForm" class="modal-form">
-                        <div class="field">
-                            <label for="cfgMinVersion">أقل إصدار مسموح بتشغيله (إجبار التحديث — <code>min_supported_version</code>)</label>
-                            <input type="text" id="cfgMinVersion" placeholder="مثال: 10.0.0 أو 10.1.24" dir="ltr" required>
-                            <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:5px;">أي عميل يعمل على إصدار أقدم من هذا الرقم سيُجبر على التحديث قبل المتابعة.</div>
-                        </div>
-                        <div class="field">
-                            <label for="cfgForceUpdateMsg">رسالة التحديث الإجباري التي تظهر للعميل</label>
-                            <textarea id="cfgForceUpdateMsg" rows="2" placeholder="يرجى تحديث البرنامج إلى أحدث إصدار للمتابعة..."></textarea>
-                        </div>
-                        <div class="field">
-                            <label for="cfgSupportWhatsapp">رقم واتساب الدعم الفني (بالصيغة الدولية بدون + أو مسافات)</label>
-                            <input type="text" id="cfgSupportWhatsapp" placeholder="مثال: 201012345678" dir="ltr">
-                            <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:5px;">يظهر في زر الدعم الفني وفي شريط تذكير الاشتراك (قبل الانتهاء بـ 5 أيام).</div>
-                        </div>
-                        <button type="submit" id="saveGlobalConfigBtn" class="btn btn-primary btn-block">
-                            <i class="fas fa-save"></i> حفظ الإعدادات العامة
+            <div id="tabAudit" class="tab-panel">
+                <div class="table-card">
+                    <div class="table-header-row">
+                        <h3><i class="fas fa-shield-halved"></i> سجل تدقيق حركات الإدارة (آخر 100 إجراء)</h3>
+                        <button type="button" class="btn btn-ghost btn-sm" id="refreshAuditBtn">
+                            <i class="fas fa-sync-alt"></i> تحديث السجل
                         </button>
-                    </form>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>التاريخ والوقت</th>
+                                    <th>المسؤول</th>
+                                    <th>الإجراء</th>
+                                    <th>العميل / الشركة</th>
+                                    <th>التفاصيل</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditTableBody">
+                                <tr><td colspan="5" class="empty-cell">اضغط على التبويب لتحميل سجل نشاط الإدارة...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="auditPaginationBar" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);gap:10px;flex-wrap:wrap;"></div>
+                </div>
+            </div>
+
+            <div id="tabGlobalConfig" class="tab-panel">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px;align-items:start;">
+                    <div class="table-card" style="padding:24px;">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+                            <div class="kpi-icon blue" style="width:42px;height:42px;font-size:1.1rem;"><i class="fas fa-sliders"></i></div>
+                            <div>
+                                <h3 style="margin:0;font-size:1.05rem;">إعدادات التحكم العامة لجميع العملاء</h3>
+                                <p style="color:var(--text-secondary);font-size:0.82rem;margin:4px 0 0;">أي تعديل هنا يُطبق تلقائياً على جميع العملاء بمجرد فتح البرنامج.</p>
+                            </div>
+                        </div>
+                        <form id="globalConfigForm" class="modal-form" style="gap:16px;">
+                            <div class="field">
+                                <label for="cfgMinVersion"><i class="fas fa-code-branch" style="color:#38bdf8;margin-left:5px;"></i> أقل إصدار مسموح بتشغيله (إجبار التحديث — <code>min_supported_version</code>)</label>
+                                <input type="text" id="cfgMinVersion" placeholder="مثال: 10.0.0 أو 10.1.24" dir="ltr" required>
+                                <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:5px;">أي عميل يعمل على إصدار أقدم من هذا الرقم سيُجبر على التحديث قبل المتابعة.</div>
+                            </div>
+                            <div class="field">
+                                <label for="cfgForceUpdateMsg"><i class="fas fa-bullhorn" style="color:#fbbf24;margin-left:5px;"></i> رسالة التحديث الإجباري التي تظهر للعميل</label>
+                                <textarea id="cfgForceUpdateMsg" rows="3" placeholder="يرجى تحديث البرنامج إلى أحدث إصدار للمتابعة..."></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="cfgSupportWhatsapp"><i class="fab fa-whatsapp" style="color:#4ade80;margin-left:5px;"></i> رقم واتساب الدعم الفني (بالصيغة الدولية بدون + أو مسافات)</label>
+                                <input type="text" id="cfgSupportWhatsapp" placeholder="مثال: 201012345678" dir="ltr">
+                                <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:5px;">يظهر في زر الدعم الفني وفي شريط تذكير الاشتراك (قبل الانتهاء بـ 5 أيام).</div>
+                            </div>
+                            <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;display:flex;flex-direction:column;gap:12px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;">
+                                    <strong style="color:#38bdf8;font-size:0.92rem;"><i class="fab fa-telegram" style="margin-left:6px;"></i> تنبيهات تليجرام الفورية للأدمن</strong>
+                                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.82rem;color:#e2e8f0;">
+                                        <input type="checkbox" id="cfgTelegramEnabled"> تفعيل التنبيهات
+                                    </label>
+                                </div>
+                                <div class="field">
+                                    <label for="cfgTelegramBotToken">Telegram Bot Token</label>
+                                    <input type="password" id="cfgTelegramBotToken" placeholder="أدخل توكن البوت من BotFather" dir="ltr">
+                                </div>
+                                <div class="field">
+                                    <label for="cfgTelegramChatId">Telegram Chat ID (معرّف حسابك الشخصي)</label>
+                                    <div style="display:flex;gap:8px;">
+                                        <input type="text" id="cfgTelegramChatId" placeholder="اضغط جلب تلقائي بعد إرسال /start للبوت" dir="ltr" style="flex:1;">
+                                        <button type="button" id="detectTelegramChatBtn" class="btn btn-ghost btn-sm" style="white-space:nowrap;">
+                                            <i class="fas fa-wand-magic-sparkles"></i> جلب تلقائي
+                                        </button>
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button type="button" id="testTelegramBtn" class="btn btn-success btn-sm" style="flex:1;">
+                                        <i class="fas fa-paper-plane"></i> اختبار إرسال تنبيه
+                                    </button>
+                                    <button type="button" id="sendExpiringSummaryBtn" class="btn btn-ghost btn-sm" style="flex:1;">
+                                        <i class="fas fa-clock"></i> إرسال تقرير الاشتراكات القريبة
+                                    </button>
+                                </div>
+                            </div>
+                            <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;display:flex;flex-direction:column;gap:10px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;">
+                                    <strong style="color:#fbbf24;font-size:0.92rem;"><i class="fas fa-bullhorn" style="margin-left:6px;"></i> شريط إعلان عام لجميع العملاء</strong>
+                                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.82rem;color:#e2e8f0;">
+                                        <input type="checkbox" id="cfgAnnouncementActive"> إظهار الإعلان
+                                    </label>
+                                </div>
+                                <div class="field">
+                                    <textarea id="cfgAnnouncementMsg" rows="2" placeholder="اكتب إعلان أو تنبيه يظهر في شريط علوي داخل برنامج الديسكتوب لجميع العملاء..."></textarea>
+                                </div>
+                            </div>
+                            <button type="submit" id="saveGlobalConfigBtn" class="btn btn-primary btn-block" style="height:44px;font-size:0.95rem;">
+                                <i class="fas fa-save"></i> حفظ الإعدادات العامة
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="table-card" style="padding:24px;display:flex;flex-direction:column;gap:16px;">
+                        <div style="display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                            <div class="kpi-icon gold" style="width:38px;height:38px;font-size:1rem;"><i class="fas fa-eye"></i></div>
+                            <div>
+                                <h3 style="margin:0;font-size:1rem;">معاينة حية لما سيراه العميل</h3>
+                                <p style="color:var(--text-secondary);font-size:0.8rem;margin:3px 0 0;">تتحدث المعاينة تلقائياً أثناء التعديل قبل الحفظ.</p>
+                            </div>
+                        </div>
+
+                        <div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.3);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;">
+                                <span style="font-weight:800;color:#f8fafc;font-size:0.95rem;"><i class="fas fa-rocket" style="color:#38bdf8;margin-left:6px;"></i> تحديث إجباري مطلوب</span>
+                                <span id="previewMinVersionBadge" class="badge badge-trial" style="direction:ltr;">v10.0.0+</span>
+                            </div>
+                            <div id="previewForceUpdateMsg" style="font-size:0.86rem;color:#cbd5e1;line-height:1.6;background:rgba(30,41,59,0.65);border-radius:10px;padding:12px;">
+                                يرجى تحديث البرنامج إلى أحدث إصدار للمتابعة وضمان استقرار بياناتك.
+                            </div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:6px;border-top:1px solid rgba(148,163,184,0.15);">
+                                <span style="font-size:0.78rem;color:#94a3b8;">زر الدعم الفني للعميل:</span>
+                                <span id="previewWhatsappBadge" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#4ade80;font-size:0.82rem;font-weight:700;direction:ltr;">
+                                    <i class="fab fa-whatsapp"></i> <span id="previewWhatsappText">—</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>

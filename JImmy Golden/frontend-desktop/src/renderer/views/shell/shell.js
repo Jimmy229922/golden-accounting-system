@@ -205,11 +205,30 @@ async function loadShellVisibleItems() {
     }
     shellState.clientFeatures = clientFeatures;
     document.documentElement.classList.toggle('flex-layout-enabled', Boolean(clientFeatures?.flex_full_layout));
+    const isFeatureAllowed = (entry) => {
+        if (!entry || !entry.featureFlag) return true;
+        if (clientFeatures && Object.prototype.hasOwnProperty.call(clientFeatures, entry.featureFlag)) {
+            return Boolean(clientFeatures[entry.featureFlag]);
+        }
+        return Boolean(entry.defaultEnabled);
+    };
     const featureFilteredItems = SHELL_ITEMS.reduce((acc, item) => {
-        if (item.featureFlag && !clientFeatures[item.featureFlag]) return acc;
+        if (!isFeatureAllowed(item)) return acc;
         if (Array.isArray(item.children)) {
-            const allowedChildren = item.children.filter((child) => !child.featureFlag || Boolean(clientFeatures[child.featureFlag]));
-            if (allowedChildren.length > 0) acc.push({ ...item, children: allowedChildren });
+            const allowedChildren = item.children.filter((child) => !child.divider && isFeatureAllowed(child));
+            if (allowedChildren.length === 1) {
+                const onlyChild = allowedChildren[0];
+                acc.push({
+                    key: item.key || onlyChild.key,
+                    fallback: item.fallback || onlyChild.fallback,
+                    href: onlyChild.href
+                });
+                return acc;
+            }
+            if (allowedChildren.length > 1) {
+                const withDividers = item.children.filter((child) => child.divider || isFeatureAllowed(child));
+                acc.push({ ...item, children: withDividers });
+            }
             return acc;
         }
         acc.push(item);
@@ -290,11 +309,6 @@ function renderTopNav() {
                 <li class="nav-search-item">
                     <button class="nav-search-btn" type="button" title="${t('globalSearch.searchBtn', 'بحث')}">
                         <span class="nav-search-icon" aria-hidden="true">🔍</span> ${t('globalSearch.searchBtn', 'بحث')}
-                    </button>
-                </li>
-                <li class="nav-support-item">
-                    <button class="nav-support-btn" type="button" title="الدعم الفني وتجديد الاشتراك" style="background:rgba(34,197,94,0.16);border:1px solid rgba(34,197,94,0.45);color:#86efac;border-radius:8px;padding:6px 11px;font-size:0.84rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-                        <span aria-hidden="true">💬</span> الدعم الفني
                     </button>
                 </li>
             </ul>
@@ -471,6 +485,7 @@ async function confirmCurrentFrameNavigation(targetHref) {
 }
 
 window.__shellNavigate = (rawTarget) => navigateTo(rawTarget, { pushHistory: true });
+window.__openSupportModal = openSupportModal;
 window.__syncThemeFromChild = (theme) => {
     const safeTheme = theme === 'dark' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', safeTheme);
@@ -767,6 +782,25 @@ function renderForceUpdateOverlay(meta) {
     });
 }
 
+function renderAdminNoticeBanner(id, title, message, accentBg, accentBorder, accentColor) {
+    if (!message || document.getElementById(id)) return;
+    const navHost = document.getElementById('shellNavHost');
+    if (!navHost) return;
+    const bar = document.createElement('div');
+    bar.id = id;
+    bar.setAttribute('dir', 'rtl');
+    bar.style.cssText = `background:${accentBg};border-bottom:1px solid ${accentBorder};color:#f8fafc;padding:9px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:0.88rem;font-weight:600;z-index:50;`;
+    bar.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+            <span style="background:${accentBorder};color:${accentColor};padding:2px 9px;border-radius:999px;font-size:0.76rem;font-weight:800;white-space:nowrap;">${title}</span>
+            <span style="color:#f8fafc;line-height:1.45;word-break:break-word;">${String(message).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+        </div>
+        <button type="button" style="background:transparent;border:none;color:#cbd5e1;font-size:1.1rem;cursor:pointer;padding:2px 6px;" title="إغلاق">×</button>
+    `;
+    bar.querySelector('button')?.addEventListener('click', () => bar.remove());
+    navHost.insertAdjacentElement('afterend', bar);
+}
+
 async function initializeClientRuntimeMetaUI() {
     const api = window.electronAPI;
     if (!api || typeof api.getClientRuntimeMeta !== 'function') return;
@@ -777,6 +811,26 @@ async function initializeClientRuntimeMetaUI() {
         if (res.meta.forceUpdateRequired) {
             renderForceUpdateOverlay(res.meta);
             return;
+        }
+        if (res.meta.customNotice) {
+            renderAdminNoticeBanner(
+                'clientCustomNoticeBanner',
+                'رسالة خاصة من الإدارة',
+                res.meta.customNotice,
+                'linear-gradient(90deg, rgba(180,83,9,0.92), rgba(146,64,14,0.92))',
+                'rgba(251,191,36,0.45)',
+                '#fef3c7'
+            );
+        }
+        if (res.meta.announcementActive && res.meta.announcementMessage) {
+            renderAdminNoticeBanner(
+                'globalAnnouncementBanner',
+                'إعلان عام',
+                res.meta.announcementMessage,
+                'linear-gradient(90deg, rgba(3,105,161,0.92), rgba(29,78,216,0.92))',
+                'rgba(56,189,248,0.45)',
+                '#e0f2fe'
+            );
         }
         if (res.meta.showExpiryBanner) {
             renderExpiryReminderBanner(res.meta);

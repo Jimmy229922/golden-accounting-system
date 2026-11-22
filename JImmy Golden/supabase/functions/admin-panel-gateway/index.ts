@@ -4,10 +4,51 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MASTER_KEY_RAW = Deno.env.get("LEGACY_ACTIVATION_KEY") || "AX-2026-MK-7F4B9C3E-PLN7-TS9X-SECURE-8831";
+const BACKUP_BUCKET = Deno.env.get("SUPABASE_BACKUP_BUCKET") || "client-backups";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
+
+async function logAdminAction(params: {
+  adminEmail: string;
+  actionType: string;
+  targetCompanyId?: string | null;
+  targetCompanyName?: string | null;
+  details?: Record<string, unknown>;
+}) {
+  try {
+    await supabase.from("admin_audit_logs").insert({
+      admin_email: params.adminEmail,
+      action_type: params.actionType,
+      target_company_id: params.targetCompanyId || null,
+      target_company_name: params.targetCompanyName || null,
+      details: params.details || {}
+    });
+  } catch (_) { }
+}
+
+async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
+  const cleanToken = String(botToken || "").trim();
+  const cleanChat = String(chatId || "").trim();
+  if (!cleanToken || !cleanChat) {
+    return { ok: false, error: "يرجى إدخال Bot Token و Chat ID أولاً." };
+  }
+  const resp = await fetch(`https://api.telegram.org/bot${cleanToken}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: cleanChat,
+      text,
+      parse_mode: "HTML"
+    })
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data?.ok) {
+    return { ok: false, error: data?.description || `Telegram HTTP ${resp.status}` };
+  }
+  return { ok: true };
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -206,6 +247,14 @@ serve(async (req: Request) => {
           .eq("id", companyId);
       }
 
+      await logAdminAction({
+        adminEmail: authCheck.user.email || "super_admin",
+        actionType: "update_company_name",
+        targetCompanyId: companyId || licenseId,
+        targetCompanyName: companyName,
+        details: { license_id: licenseId, new_name: companyName }
+      });
+
       return jsonResponse({ success: true });
     }
 
@@ -216,12 +265,28 @@ serve(async (req: Request) => {
         return jsonResponse({ success: false, error: "بيانات الميزات غير صالحة." }, 400);
       }
 
+      const { data: licInfo } = await supabase
+        .from("client_licenses")
+        .select("company_id, company_name")
+        .eq("id", licenseId)
+        .maybeSingle();
+
       const { error } = await supabase
         .from("client_licenses")
         .update({ features, updated_at: new Date().toISOString() })
         .eq("id", licenseId);
 
       if (error) return jsonResponse({ success: false, error: error.message }, 500);
+      const enabledKeys = Object.entries(features as Record<string, unknown>)
+        .filter(([, v]) => Boolean(v))
+        .map(([k]) => k);
+      await logAdminAction({
+        adminEmail: authCheck.user.email || "super_admin",
+        actionType: "update_features",
+        targetCompanyId: licInfo?.company_id || licenseId,
+        targetCompanyName: licInfo?.company_name || null,
+        details: { enabled_count: enabledKeys.length, enabled_keys: enabledKeys }
+      });
       return jsonResponse({ success: true });
     }
 
@@ -273,6 +338,12 @@ serve(async (req: Request) => {
         }
       } else if (mode === "reset_machine") {
         updates.bound_machine_id = null;
+      } else if (mode === "bind_machine") {
+        const targetMachineId = String(body.machine_id || current.last_seen_machine_id || current.machine_id || "").trim();
+        if (!targetMachineId) {
+          return jsonResponse({ success: false, error: "لا يوجد رقم جهاز سابق لإعادة الربط به." }, 400);
+        }
+        updates.bound_machine_id = targetMachineId;
       } else if (mode === "update_notes") {
         updates.notes = String(body.notes || "").trim();
       } else {
@@ -285,6 +356,13 @@ serve(async (req: Request) => {
         .eq("id", licenseId);
 
       if (updErr) return jsonResponse({ success: false, error: updErr.message }, 500);
+      await logAdminAction({
+        adminEmail: authCheck.user.email || "super_admin",
+        actionType: `license_${mode}`,
+        targetCompanyId: current.company_id || licenseId,
+        targetCompanyName: current.company_name || null,
+        details: { mode, days: body.days || null, machine_id: updates.bound_machine_id ?? null }
+      });
       return jsonResponse({ success: true });
     }
 
@@ -381,18 +459,43 @@ serve(async (req: Request) => {
       const minVersion = String(body.min_supported_version || "10.0.0").trim() || "10.0.0";
       const supportWhatsapp = String(body.support_whatsapp || "").trim().replace(/[^0-9+]/g, "");
       const forceMsg = String(body.force_update_message || "يرجى تحديث البرنامج إلى أحدث إصدار للمتابعة وضمان استقرار بياناتك.").trim();
+      const upsertRow: Record<string, unknown> = {
+        id: 1,
+        min_supported_version: minVersion,
+        support_whatsapp: supportWhatsapp,
+        force_update_message: forceMsg,
+        updated_at: new Date().toISOString()
+      };
+      if (typeof body.telegram_bot_token === "string") {
+        upsertRow.telegram_bot_token = body.telegram_bot_token.trim();
+      }
+      if (typeof body.telegram_chat_id === "string") {
+        upsertRow.telegram_chat_id = body.telegram_chat_id.trim();
+      }
+      if (typeof body.telegram_alerts_enabled === "boolean") {
+        upsertRow.telegram_alerts_enabled = body.telegram_alerts_enabled;
+      }
+      if (typeof body.announcement_message === "string") {
+        upsertRow.announcement_message = body.announcement_message.trim();
+      }
+      if (typeof body.announcement_active === "boolean") {
+        upsertRow.announcement_active = body.announcement_active;
+      }
 
       const { error } = await supabase
         .from("app_global_config")
-        .upsert({
-          id: 1,
-          min_supported_version: minVersion,
-          support_whatsapp: supportWhatsapp,
-          force_update_message: forceMsg,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "id" });
+        .upsert(upsertRow, { onConflict: "id" });
 
       if (error) return jsonResponse({ success: false, error: error.message }, 500);
+      await logAdminAction({
+        adminEmail: authCheck.user.email || "super_admin",
+        actionType: "update_global_config",
+        details: {
+          min_supported_version: minVersion,
+          support_whatsapp: supportWhatsapp,
+          telegram_alerts_enabled: upsertRow.telegram_alerts_enabled ?? null
+        }
+      });
       return jsonResponse({ success: true });
     }
 
@@ -408,14 +511,228 @@ serve(async (req: Request) => {
     }
 
     if (action === "get_error_logs") {
-      const { data, error } = await supabase
+      const page = Math.max(1, Number(body.page) || 1);
+      const perPage = Math.max(5, Math.min(50, Number(body.per_page) || 15));
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+
+      const { data, count, error } = await supabase
         .from("client_error_logs")
-        .select("*")
+        .select("*", { count: "exact" })
         .order("created_at", { ascending: false })
-        .limit(100);
+        .range(from, to);
 
       if (error) return jsonResponse({ success: false, error: error.message }, 500);
-      return jsonResponse({ success: true, logs: data || [] });
+      const total = Number(count || 0);
+      const totalPages = Math.max(1, Math.ceil(total / perPage));
+      return jsonResponse({ success: true, logs: data || [], page, per_page: perPage, total, total_pages: totalPages });
+    }
+
+    if (action === "get_audit_logs") {
+      const page = Math.max(1, Number(body.page) || 1);
+      const perPage = Math.max(5, Math.min(50, Number(body.per_page) || 15));
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+
+      const { data, count, error } = await supabase
+        .from("admin_audit_logs")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (error) return jsonResponse({ success: false, error: error.message }, 500);
+      const total = Number(count || 0);
+      const totalPages = Math.max(1, Math.ceil(total / perPage));
+      return jsonResponse({ success: true, logs: data || [], page, per_page: perPage, total, total_pages: totalPages });
+    }
+
+    if (action === "list_client_backups") {
+      const companyId = String(body.company_id || "").trim();
+      if (!companyId) {
+        return jsonResponse({ success: false, error: "معرّف الشركة مطلوب." }, 400);
+      }
+      const rootFolder = `clients/${companyId}`;
+      const collected: Array<{ name: string; path: string; size: number; created_at: string | null }> = [];
+
+      const scanFolder = async (prefix: string, depth: number) => {
+        if (depth > 4 || collected.length >= 100) return;
+        const { data, error } = await supabase.storage
+          .from(BACKUP_BUCKET)
+          .list(prefix, {
+            limit: 100,
+            sortBy: { column: "created_at", order: "desc" }
+          });
+        if (error || !Array.isArray(data)) return;
+
+        for (const item of data) {
+          if (!item || !item.name || item.name.startsWith(".")) continue;
+          const itemPath = `${prefix}/${item.name}`;
+          const isFolder = !item.id && !item.metadata;
+          if (isFolder) {
+            await scanFolder(itemPath, depth + 1);
+          } else {
+            collected.push({
+              name: item.name,
+              path: itemPath,
+              size: Number(item.metadata?.size || 0),
+              created_at: item.created_at || item.updated_at || null
+            });
+          }
+        }
+      };
+
+      await scanFolder(rootFolder, 0);
+      collected.sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta;
+      });
+
+      return jsonResponse({ success: true, files: collected, folder: rootFolder });
+    }
+
+    if (action === "download_client_backup") {
+      const companyId = String(body.company_id || "").trim();
+      const companyName = String(body.company_name || "").trim();
+      const targetPath = String(body.path || "").trim();
+      const allowedPrefix = `clients/${companyId}/`;
+      if (!companyId || !targetPath || !targetPath.startsWith(allowedPrefix) || targetPath.includes("..")) {
+        return jsonResponse({ success: false, error: "مسار النسخة الاحتياطية غير صالح." }, 403);
+      }
+      const { data, error } = await supabase.storage
+        .from(BACKUP_BUCKET)
+        .createSignedUrl(targetPath, 300);
+
+      if (error || !data?.signedUrl) {
+        return jsonResponse({ success: false, error: error?.message || "تعذر إنشاء رابط التحميل." }, 500);
+      }
+      await logAdminAction({
+        adminEmail: authCheck.user.email || "super_admin",
+        actionType: "download_client_backup",
+        targetCompanyId: companyId,
+        targetCompanyName: companyName || null,
+        details: { path: targetPath }
+      });
+      return jsonResponse({ success: true, signed_url: data.signedUrl });
+    }
+
+    if (action === "detect_telegram_chat_id") {
+      let token = String(body.telegram_bot_token || "").trim();
+      if (!token) {
+        const { data: cfg } = await supabase.from("app_global_config").select("telegram_bot_token").eq("id", 1).maybeSingle();
+        token = String(cfg?.telegram_bot_token || "").trim();
+      }
+      if (!token) {
+        return jsonResponse({ success: false, error: "أدخل Telegram Bot Token أولاً." }, 400);
+      }
+      const resp = await fetch(`https://api.telegram.org/bot${token}/getUpdates`);
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.ok) {
+        return jsonResponse({ success: false, error: data?.description || "فشل الاتصال ببوت تليجرام." }, 400);
+      }
+      const results = Array.isArray(data.result) ? data.result : [];
+      const lastChat = [...results].reverse().find((u: any) => u?.message?.chat?.id)?.message?.chat;
+      if (!lastChat?.id) {
+        return jsonResponse({
+          success: false,
+          error: "لم يتم العثور على رسالة. افتح البوت على تليجرام واضغط Start (/start) ثم أعد المحاولة."
+        }, 404);
+      }
+      return jsonResponse({
+        success: true,
+        chat_id: String(lastChat.id),
+        username: lastChat.username || lastChat.first_name || ""
+      });
+    }
+
+    if (action === "test_telegram_alert") {
+      const { data: cfg } = await supabase.from("app_global_config").select("telegram_bot_token, telegram_chat_id").eq("id", 1).maybeSingle();
+      const token = String(body.telegram_bot_token || cfg?.telegram_bot_token || "").trim();
+      const chatId = String(body.telegram_chat_id || cfg?.telegram_chat_id || "").trim();
+      const sendRes = await sendTelegramMessage(
+        token,
+        chatId,
+        "<b>✅ اختبار تنبيهات نظام Golden Accounting</b>\nتم ربط لوحة التحكم ببوت تليجرام بنجاح!\nستصلك من هنا تنبيهات العملاء الجدد والأخطاء الحرجة والاشتراكات."
+      );
+      if (!sendRes.ok) {
+        return jsonResponse({ success: false, error: sendRes.error }, 400);
+      }
+      return jsonResponse({ success: true });
+    }
+
+    if (action === "send_expiring_summary") {
+      const { data: cfg } = await supabase.from("app_global_config").select("telegram_bot_token, telegram_chat_id").eq("id", 1).maybeSingle();
+      const token = String(cfg?.telegram_bot_token || "").trim();
+      const chatId = String(cfg?.telegram_chat_id || "").trim();
+      const { data: licenses } = await supabase.from("client_licenses").select("company_name, license_status, expires_at");
+      const nowMs = Date.now();
+      const expiring = (licenses || []).filter((l: any) => {
+        if (l.license_status === "lifetime" || l.license_status === "suspended") return false;
+        const expMs = l.expires_at ? new Date(l.expires_at).getTime() : 0;
+        const days = Math.ceil((expMs - nowMs) / 86400000);
+        return days >= 0 && days <= 7;
+      });
+      const text = expiring.length
+        ? `<b>⏰ تنبيه الاشتراكات القريبة من الانتهاء (خلال 7 أيام)</b>\n\n` +
+        expiring.map((l: any) => {
+          const days = Math.max(0, Math.ceil((new Date(l.expires_at).getTime() - nowMs) / 86400000));
+          return `• <b>${l.company_name || "عميل"}</b> — متبقي ${days} يوم`;
+        }).join("\n")
+        : "<b>✅ تقرير الاشتراكات</b>\nلا توجد اشتراكات قريبة من الانتهاء خلال الـ 7 أيام القادمة.";
+      const sendRes = await sendTelegramMessage(token, chatId, text);
+      if (!sendRes.ok) {
+        return jsonResponse({ success: false, error: sendRes.error }, 400);
+      }
+      return jsonResponse({ success: true, count: expiring.length });
+    }
+
+    if (action === "send_client_command") {
+      const licenseId = String(body.license_id || "").trim();
+      const commandType = String(body.command_type || "").trim();
+      if (!licenseId || !commandType) {
+        return jsonResponse({ success: false, error: "بيانات الأمر ناقصة." }, 400);
+      }
+
+      const { data: current } = await supabase
+        .from("client_licenses")
+        .select("company_id, company_name")
+        .eq("id", licenseId)
+        .maybeSingle();
+
+      const nowIso = new Date().toISOString();
+      const updates: Record<string, unknown> = { updated_at: nowIso };
+      if (commandType === "set_notice") {
+        updates.custom_notice = String(body.custom_notice || "").trim();
+      } else if (commandType === "clear_notice") {
+        updates.custom_notice = "";
+      } else if (commandType === "force_backup") {
+        updates.remote_command = "force_backup";
+        updates.remote_command_at = nowIso;
+      } else if (commandType === "reset_desktop_password") {
+        const newDesktopPass = String(body.new_password || "").trim();
+        if (newDesktopPass.length < 4) {
+          return jsonResponse({ success: false, error: "كلمة المرور يجب أن تكون 4 أحرف على الأقل." }, 400);
+        }
+        updates.remote_command = `reset_password:${newDesktopPass}`;
+        updates.remote_command_at = nowIso;
+      } else {
+        return jsonResponse({ success: false, error: "نوع الأمر غير معروف." }, 400);
+      }
+
+      const { error } = await supabase
+        .from("client_licenses")
+        .update(updates)
+        .eq("id", licenseId);
+
+      if (error) return jsonResponse({ success: false, error: error.message }, 500);
+      await logAdminAction({
+        adminEmail: authCheck.user.email || "super_admin",
+        actionType: `remote_${commandType}`,
+        targetCompanyId: current?.company_id || licenseId,
+        targetCompanyName: current?.company_name || null,
+        details: { command_type: commandType, custom_notice: updates.custom_notice ?? null }
+      });
+      return jsonResponse({ success: true });
     }
 
     return jsonResponse({ success: false, error: "إجراء غير معروف." }, 400);
