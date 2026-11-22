@@ -20,7 +20,8 @@ let isAppStarting = true;
 
 const PORTABLE_ROOT_FOLDER = 'APP_JS';
 const PORTABLE_MARKER_FILE = 'app_root_path.txt';
-const PORTABLE_SHORTCUT_NAME = 'تشغيل نظام الحسابات.lnk';
+const PORTABLE_SHORTCUT_NAME = 'المحاسب الذهبي.lnk';
+const LEGACY_PORTABLE_SHORTCUT_NAME = 'تشغيل نظام الحسابات.lnk';
 const LEGACY_PORTABLE_ROOT_FOLDER = 'APP_JS';
 const LEGACY_PORTABLE_PROGRAM_FOLDER = '\u0628\u0631\u0646\u0627\u0645\u062c \u0627\u0644\u062d\u0633\u0627\u0628\u0627\u062a';
 
@@ -92,12 +93,13 @@ function ensurePortableRootStructure(portableRoot) {
         return;
     }
 
+    removePortableFileIfExists(path.join(portableRoot, LEGACY_PORTABLE_SHORTCUT_NAME));
     const shortcutPath = path.join(portableRoot, PORTABLE_SHORTCUT_NAME);
     shell.writeShortcutLink(shortcutPath, 'create', {
         target: process.execPath,
         icon: process.execPath,
         iconIndex: 0,
-        description: 'تشغيل نظام الحسابات'
+        description: 'المحاسب الذهبي'
     });
 }
 

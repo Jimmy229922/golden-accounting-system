@@ -1058,15 +1058,44 @@ function extractPurchaseDetailMeta(rawQuantity, fallbackQty, rawWeights) {
                 return { success: false, canceled: true };
             }
 
-            await prepareShellFrameForPdfCapture(sourceWebContents);
-
-            const pdfBuffer = await sourceWebContents.printToPDF({
-                printBackground: true,
-                pageSize: 'A4',
-                landscape: false,
-                marginsType: 0,
-                preferCSSPageSize: true
-            });
+            let pdfBuffer;
+            if (payload && typeof payload.html === 'string' && payload.html.trim().length > 0) {
+                const printWin = new BrowserWindow({
+                    show: false,
+                    width: 794,
+                    height: 1123,
+                    backgroundColor: '#ffffff',
+                    webPreferences: {
+                        sandbox: true,
+                        nodeIntegration: false,
+                        contextIsolation: true
+                    }
+                });
+                try {
+                    const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(payload.html)}`;
+                    await printWin.loadURL(dataUrl);
+                    pdfBuffer = await printWin.webContents.printToPDF({
+                        printBackground: true,
+                        pageSize: 'A4',
+                        landscape: false,
+                        marginsType: 0,
+                        preferCSSPageSize: true
+                    });
+                } finally {
+                    if (!printWin.isDestroyed()) {
+                        printWin.destroy();
+                    }
+                }
+            } else {
+                await prepareShellFrameForPdfCapture(sourceWebContents);
+                pdfBuffer = await sourceWebContents.printToPDF({
+                    printBackground: true,
+                    pageSize: 'A4',
+                    landscape: false,
+                    marginsType: 0,
+                    preferCSSPageSize: true
+                });
+            }
 
             const title = path.basename(filePath, path.extname(filePath));
             const { PDFDocument, StandardFonts, rgb } = getPdfLib();

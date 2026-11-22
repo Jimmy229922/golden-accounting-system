@@ -1035,43 +1035,73 @@ function register() {
         } catch (_) {}
 
         try {
-            const overdueSales = db.prepare(`
-                SELECT s.id, s.invoice_number, s.invoice_date, s.remaining_amount, COALESCE(p.name, 'عميل') AS party_name
-                FROM sales_invoices s
-                LEFT JOIN parties p ON p.id = s.customer_id
-                WHERE COALESCE(s.remaining_amount, 0) > 0.01
-                  AND date(s.invoice_date) <= date('now', '-7 days')
-                ORDER BY date(s.invoice_date) ASC
-                LIMIT 8
+            const customerDues = db.prepare(`
+                SELECT p.id, p.name, p.balance,
+                       (SELECT MAX(date(t.transaction_date)) FROM treasury_transactions t WHERE t.customer_id = p.id AND t.type = 'income') AS last_receipt_date
+                FROM parties p
+                WHERE COALESCE(p.balance, 0) > 0.01
+                  AND NOT EXISTS (
+                      SELECT 1 FROM treasury_transactions t
+                      WHERE t.customer_id = p.id
+                        AND t.type = 'income'
+                        AND date(t.transaction_date) > date('now', '-7 days')
+                  )
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM sales_invoices s
+                          WHERE s.customer_id = p.id
+                            AND date(s.invoice_date) <= date('now', '-7 days')
+                      )
+                      OR NOT EXISTS (SELECT 1 FROM sales_invoices s WHERE s.customer_id = p.id)
+                  )
+                ORDER BY p.balance DESC
+                LIMIT 10
             `).all();
-            overdueSales.forEach((inv) => {
+            customerDues.forEach((p) => {
+                const amt = Number(p.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const suffix = p.last_receipt_date ? ` (آخر تحصيل: ${p.last_receipt_date})` : ' (بدون تحصيل منذ أكثر من أسبوع)';
                 alerts.push({
-                    id: `smart_sales_${inv.id}`,
+                    id: `smart_sales_party_${p.id}_${Math.round(Number(p.balance || 0))}`,
                     kind: 'smart_sales',
-                    tag: 'فاتورة آجلة متأخرة',
-                    text: `فاتورة مبيعات #${inv.invoice_number || inv.id} (${inv.party_name}) بتاريخ ${inv.invoice_date} — متبقي: ${Number(inv.remaining_amount || 0).toFixed(2)}`,
-                    createdAt: inv.invoice_date
+                    tag: 'متبقي على عميل (+7 أيام)',
+                    text: `العميل «${p.name}» — إجمالي المتبقي عليه: ${amt} ج.م${suffix}`,
+                    createdAt: null
                 });
             });
         } catch (_) {}
 
         try {
-            const overduePurchases = db.prepare(`
-                SELECT pi.id, pi.invoice_number, pi.invoice_date, pi.remaining_amount, COALESCE(p.name, 'مورد') AS party_name
-                FROM purchase_invoices pi
-                LEFT JOIN parties p ON p.id = pi.supplier_id
-                WHERE COALESCE(pi.remaining_amount, 0) > 0.01
-                  AND date(pi.invoice_date) <= date('now', '-7 days')
-                ORDER BY date(pi.invoice_date) ASC
-                LIMIT 8
+            const supplierDues = db.prepare(`
+                SELECT p.id, p.name, ABS(p.balance) AS due_amount,
+                       (SELECT MAX(date(t.transaction_date)) FROM treasury_transactions t WHERE t.customer_id = p.id AND t.type = 'expense') AS last_payment_date
+                FROM parties p
+                WHERE COALESCE(p.balance, 0) < -0.01
+                  AND NOT EXISTS (
+                      SELECT 1 FROM treasury_transactions t
+                      WHERE t.customer_id = p.id
+                        AND t.type = 'expense'
+                        AND date(t.transaction_date) > date('now', '-7 days')
+                  )
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM purchase_invoices pi
+                          WHERE pi.supplier_id = p.id
+                            AND date(pi.invoice_date) <= date('now', '-7 days')
+                      )
+                      OR NOT EXISTS (SELECT 1 FROM purchase_invoices pi WHERE pi.supplier_id = p.id)
+                  )
+                ORDER BY ABS(p.balance) DESC
+                LIMIT 10
             `).all();
-            overduePurchases.forEach((inv) => {
+            supplierDues.forEach((p) => {
+                const amt = Number(p.due_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const suffix = p.last_payment_date ? ` (آخر سداد: ${p.last_payment_date})` : ' (بدون سداد منذ أكثر من أسبوع)';
                 alerts.push({
-                    id: `smart_purchase_${inv.id}`,
+                    id: `smart_purchase_party_${p.id}_${Math.round(Number(p.due_amount || 0))}`,
                     kind: 'smart_purchase',
-                    tag: 'مستحقات موردين',
-                    text: `فاتورة مشتريات #${inv.invoice_number || inv.id} (${inv.party_name}) بتاريخ ${inv.invoice_date} — متبقي سداد: ${Number(inv.remaining_amount || 0).toFixed(2)}`,
-                    createdAt: inv.invoice_date
+                    tag: 'مستحقات مورد (+7 أيام)',
+                    text: `المورد «${p.name}» — إجمالي المتبقي له: ${amt} ج.م${suffix}`,
+                    createdAt: null
                 });
             });
         } catch (_) {}

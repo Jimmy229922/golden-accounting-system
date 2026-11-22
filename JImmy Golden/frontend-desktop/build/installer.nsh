@@ -52,9 +52,12 @@ PathResolved:
   Delete "$DESKTOP\Accounting System.lnk"
   Delete "$SMPROGRAMS\Accounting System.lnk"
   Delete "$DESKTOP\تشغيل نظام الحسابات.lnk"
-  CreateShortCut "$1\تشغيل نظام الحسابات.lnk" "$INSTDIR\Accounting System.exe" "" "$INSTDIR\Accounting System.exe" 0
-  CreateShortCut "$DESKTOP\تشغيل نظام الحسابات.lnk" "$INSTDIR\Accounting System.exe" "" "$INSTDIR\Accounting System.exe" 0
-  CreateShortCut "$SMPROGRAMS\تشغيل نظام الحسابات.lnk" "$INSTDIR\Accounting System.exe" "" "$INSTDIR\Accounting System.exe" 0
+  Delete "$SMPROGRAMS\تشغيل نظام الحسابات.lnk"
+  Delete "$1\تشغيل نظام الحسابات.lnk"
+  Delete "$DESKTOP\المحاسب الذهبي.lnk"
+  CreateShortCut "$1\المحاسب الذهبي.lnk" "$INSTDIR\Accounting System.exe" "" "$INSTDIR\Accounting System.exe" 0
+  CreateShortCut "$DESKTOP\المحاسب الذهبي.lnk" "$INSTDIR\Accounting System.exe" "" "$INSTDIR\Accounting System.exe" 0
+  CreateShortCut "$SMPROGRAMS\المحاسب الذهبي.lnk" "$INSTDIR\Accounting System.exe" "" "$INSTDIR\Accounting System.exe" 0
   ${If} $newStartMenuLink != ""
     CreateShortCut "$newStartMenuLink" "$INSTDIR\Accounting System.exe" "" "$INSTDIR\Accounting System.exe" 0
   ${EndIf}

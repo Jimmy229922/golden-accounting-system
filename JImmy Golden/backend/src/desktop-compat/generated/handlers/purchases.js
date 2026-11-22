@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron');
 const { db } = require('../db');
 const { requirePermission } = require('./auth');
+const { hasFeature } = require('../licenseService');
 
 function toPositiveNumber(value) {
     const n = Number(value);
@@ -158,7 +159,9 @@ function calculateInvoiceFinancials({ subtotalAmount, discountType, discountValu
     const totalAmountRaw = hasFinalAmount
         ? roundMoney(Math.max(parsedFinalAmount, 0))
         : roundMoney(Math.max(subtotal - discountAmount, 0));
-    const totalAmount = applyIntegerFiftyRounding(totalAmountRaw);
+    const totalAmount = hasFeature(db, 'purchase_round_fifty')
+        ? applyIntegerFiftyRounding(totalAmountRaw)
+        : roundMoney(totalAmountRaw);
     if (hasFinalAmount) {
         discountAmount = roundMoney(Math.max(subtotal - totalAmount, 0));
     }

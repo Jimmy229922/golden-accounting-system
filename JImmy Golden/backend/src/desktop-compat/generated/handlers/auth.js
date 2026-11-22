@@ -616,6 +616,20 @@ function register() {
             return { success: false, error: 'اسم المستخدم موجود بالفعل.' };
         }
 
+        try {
+            const meta = licenseService.getClientRuntimeMeta(db);
+            const maxDesktopUsers = Number(meta?.maxDesktopUsers || 0);
+            if (maxDesktopUsers > 0) {
+                const countRow = db.prepare('SELECT COUNT(*) AS cnt FROM auth_users').get();
+                if (Number(countRow?.cnt || 0) >= maxDesktopUsers) {
+                    return {
+                        success: false,
+                        error: `تم الوصول للحد الأقصى لعدد المستخدمين المسموح به في باقتك (${maxDesktopUsers} مستخدم). يرجى التواصل مع الدعم الفني لرفع الباقة.`
+                    };
+                }
+            }
+        } catch (_) {}
+
         const salt = crypto.randomBytes(16).toString('hex');
         const passwordHash = hashPassword(password, salt);
         const now = new Date().toISOString();
@@ -955,6 +969,158 @@ function register() {
 
     ipcMain.handle('submit-invite-code', async (event, code) => {
         return await licenseService.activateLicenseWithCode(db, code);
+    });
+
+    ipcMain.handle('get-client-features', () => {
+        try {
+            return { success: true, features: licenseService.getClientFeatures(db) };
+        } catch (error) {
+            return { success: false, features: {}, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-client-runtime-meta', () => {
+        try {
+            return { success: true, meta: licenseService.getClientRuntimeMeta(db) };
+        } catch (error) {
+            return { success: false, meta: null, error: error.message };
+        }
+    });
+
+    ipcMain.handle('poll-client-notices', async () => {
+        try {
+            const meta = await licenseService.pollClientNotices(db);
+            return { success: true, meta };
+        } catch (error) {
+            return { success: false, meta: null, error: error.message };
+        }
+    });
+
+    ipcMain.handle('mark-client-notices-read', async (_event, noticeIds) => {
+        try {
+            return await licenseService.markClientNoticesRead(db, noticeIds);
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('submit-support-ticket', async (_event, payload = {}) => {
+        try {
+            return await licenseService.submitSupportTicket(db, payload);
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-smart-alerts', () => {
+        const alerts = [];
+        try {
+            const lowStock = db.prepare(`
+                SELECT id, name, stock_quantity, reorder_level
+                FROM items
+                WHERE COALESCE(is_deleted, 0) = 0
+                  AND stock_quantity <= CASE WHEN COALESCE(reorder_level, 0) > 0 THEN reorder_level ELSE 5 END
+                ORDER BY stock_quantity ASC
+                LIMIT 8
+            `).all();
+            lowStock.forEach((it) => {
+                alerts.push({
+                    id: `smart_stock_${it.id}_${Math.floor(Number(it.stock_quantity || 0))}`,
+                    kind: 'smart_stock',
+                    tag: 'نواقص المخزن',
+                    text: `الصنف «${it.name}» وصل للحد الأدنى — الرصيد الحالي: ${Number(it.stock_quantity || 0)}`,
+                    createdAt: null
+                });
+            });
+        } catch (_) {}
+
+        try {
+            const customerDues = db.prepare(`
+                SELECT p.id, p.name, p.balance,
+                       (SELECT MAX(date(t.transaction_date)) FROM treasury_transactions t WHERE t.customer_id = p.id AND t.type = 'income') AS last_receipt_date
+                FROM parties p
+                WHERE COALESCE(p.balance, 0) > 0.01
+                  AND NOT EXISTS (
+                      SELECT 1 FROM treasury_transactions t
+                      WHERE t.customer_id = p.id
+                        AND t.type = 'income'
+                        AND date(t.transaction_date) > date('now', '-7 days')
+                  )
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM sales_invoices s
+                          WHERE s.customer_id = p.id
+                            AND date(s.invoice_date) <= date('now', '-7 days')
+                      )
+                      OR NOT EXISTS (SELECT 1 FROM sales_invoices s WHERE s.customer_id = p.id)
+                  )
+                ORDER BY p.balance DESC
+                LIMIT 10
+            `).all();
+            customerDues.forEach((p) => {
+                const amt = Number(p.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const suffix = p.last_receipt_date ? ` (آخر تحصيل: ${p.last_receipt_date})` : ' (بدون تحصيل منذ أكثر من أسبوع)';
+                alerts.push({
+                    id: `smart_sales_party_${p.id}_${Math.round(Number(p.balance || 0))}`,
+                    kind: 'smart_sales',
+                    tag: 'متبقي على عميل (+7 أيام)',
+                    text: `العميل «${p.name}» — إجمالي المتبقي عليه: ${amt} ج.م${suffix}`,
+                    createdAt: null
+                });
+            });
+        } catch (_) {}
+
+        try {
+            const supplierDues = db.prepare(`
+                SELECT p.id, p.name, ABS(p.balance) AS due_amount,
+                       (SELECT MAX(date(t.transaction_date)) FROM treasury_transactions t WHERE t.customer_id = p.id AND t.type = 'expense') AS last_payment_date
+                FROM parties p
+                WHERE COALESCE(p.balance, 0) < -0.01
+                  AND NOT EXISTS (
+                      SELECT 1 FROM treasury_transactions t
+                      WHERE t.customer_id = p.id
+                        AND t.type = 'expense'
+                        AND date(t.transaction_date) > date('now', '-7 days')
+                  )
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM purchase_invoices pi
+                          WHERE pi.supplier_id = p.id
+                            AND date(pi.invoice_date) <= date('now', '-7 days')
+                      )
+                      OR NOT EXISTS (SELECT 1 FROM purchase_invoices pi WHERE pi.supplier_id = p.id)
+                  )
+                ORDER BY ABS(p.balance) DESC
+                LIMIT 10
+            `).all();
+            supplierDues.forEach((p) => {
+                const amt = Number(p.due_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const suffix = p.last_payment_date ? ` (آخر سداد: ${p.last_payment_date})` : ' (بدون سداد منذ أكثر من أسبوع)';
+                alerts.push({
+                    id: `smart_purchase_party_${p.id}_${Math.round(Number(p.due_amount || 0))}`,
+                    kind: 'smart_purchase',
+                    tag: 'مستحقات مورد (+7 أيام)',
+                    text: `المورد «${p.name}» — إجمالي المتبقي له: ${amt} ج.م${suffix}`,
+                    createdAt: null
+                });
+            });
+        } catch (_) {}
+
+        return { success: true, alerts };
+    });
+
+    ipcMain.handle('open-external-url', async (_event, rawUrl) => {
+        try {
+            const url = String(rawUrl || '').trim();
+            if (!/^https:\/\/(wa\.me|api\.whatsapp\.com|github\.com)\//i.test(url)) {
+                return { success: false, error: 'الرابط غير مسموح به.' };
+            }
+            const { shell } = require('electron');
+            await shell.openExternal(url);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('get-recovery-challenge', () => {

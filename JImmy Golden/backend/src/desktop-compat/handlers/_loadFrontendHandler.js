@@ -20,7 +20,20 @@ const backendWindowManagerModule = {
 
 const backendLicenseServiceModule = {
     getLicenseStatus: () => Promise.resolve({ valid: true, status: 'lifetime', remainingDays: 99999 }),
-    activateLicenseWithCode: () => Promise.resolve({ success: true })
+    activateLicenseWithCode: () => Promise.resolve({ success: true }),
+    getClientFeatures: () => ({}),
+    getClientRuntimeMeta: () => ({ readOnlyMode: false, maxDesktopUsers: 0 }),
+    isReadOnlyModeActive: () => false,
+    pollClientNotices: () => Promise.resolve({ readOnlyMode: false }),
+    markClientNoticesRead: () => Promise.resolve({ success: true }),
+    submitSupportTicket: () => Promise.resolve({ success: true }),
+    hasFeature: () => true
+};
+
+const backendStoragePathsModule = {
+    getCustomStoragePaths: () => ({ databaseDir: '', backupDir: '' }),
+    saveCustomStoragePaths: () => ({ databaseDir: '', backupDir: '' }),
+    getStorageConfigPath: () => ''
 };
 
 function loadFrontendHandler(handlerName) {
@@ -51,6 +64,10 @@ function loadFrontendHandler(handlerName) {
 
         if ((request === '../licenseService' || request === '../licenseService.js') && isGeneratedCompatModule(parent)) {
             return backendLicenseServiceModule;
+        }
+
+        if ((request === '../storagePaths' || request === '../storagePaths.js') && isGeneratedCompatModule(parent)) {
+            return backendStoragePathsModule;
         }
 
         return originalLoad.call(this, request, parent, isMain);

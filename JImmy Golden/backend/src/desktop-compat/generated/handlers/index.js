@@ -48,6 +48,8 @@ function setupFullIPC() {
     const exportRevenues = require('./exportRevenues');
     const localSales = require('./localSales');
     const workersManagement = require('./workersManagement');
+    const externalWork = require('./externalWork');
+    const externalWorkSales = require('./externalWorkSales');
 
     units.register();
     warehouses.register();
@@ -68,6 +70,8 @@ function setupFullIPC() {
     exportRevenues.register();
     localSales.register();
     workersManagement.register();
+    externalWork.register();
+    externalWorkSales.register();
 }
 
 function setupIPC() {
