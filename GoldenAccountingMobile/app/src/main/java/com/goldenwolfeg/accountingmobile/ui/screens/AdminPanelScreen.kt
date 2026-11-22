@@ -539,20 +539,23 @@ fun AdminPanelScreen(
         )
     }
 
-    remoteCommandClient?.let { client ->
+    remoteCommandClient?.let { selectedClient ->
+        val liveClient = clients.find { it.id == selectedClient.id } ?: selectedClient
         ClientRemoteCommandDialog(
-            client = client,
+            client = liveClient,
             onDismiss = { remoteCommandClient = null },
             onSendNotice = { txt ->
-                viewModel.sendClientNotice(client.id, txt)
-                remoteCommandClient = null
+                viewModel.sendClientNotice(liveClient.id, txt)
+            },
+            onDeleteNotice = { noticeId ->
+                viewModel.deleteClientNotice(liveClient.id, noticeId)
             },
             onForceBackup = {
-                viewModel.sendForceBackupCommand(client.id)
+                viewModel.sendForceBackupCommand(liveClient.id)
                 remoteCommandClient = null
             },
             onResetDesktopPassword = { newPass ->
-                viewModel.sendResetDesktopPassword(client.id, newPass)
+                viewModel.sendResetDesktopPassword(liveClient.id, newPass)
                 remoteCommandClient = null
             }
         )
@@ -861,11 +864,51 @@ private fun ClientCard(
                 )
             }
 
-            Text(
-                text = "آخر ظهور: ${DateTimeFormatter.formatIsoToLocalArabic(client.lastHeartbeatAt)}",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 11.sp
-            )
+            val presence = remember(client.lastHeartbeatAt) { computePresenceInfo(client.lastHeartbeatAt) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(presence.color.copy(alpha = 0.16f))
+                            .border(1.dp, presence.color.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(presence.color)
+                        )
+                        Text(
+                            text = presence.statusLabel,
+                            color = presence.color,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = presence.relativeTime,
+                        color = Color.White.copy(alpha = 0.88f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Text(
+                    text = DateTimeFormatter.formatIsoToLocalArabic(client.lastHeartbeatAt),
+                    color = Color.White.copy(alpha = 0.52f),
+                    fontSize = 10.sp
+                )
+            }
 
             HorizontalDivider(color = NavySecondary)
 
@@ -1414,13 +1457,16 @@ private fun GlobalConfigTabContent(
 
         HorizontalDivider(color = NavySecondary)
 
+        var newAnnText by remember { mutableStateOf("") }
+        val globalNotices = remember(annMsg) { parseAdminNotices(annMsg) }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "شريط إعلان عام لجميع العملاء",
+                text = "نظام الإشعارات والإعلانات العامة",
                 color = GoldBright,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp
@@ -1433,11 +1479,99 @@ private fun GlobalConfigTabContent(
         }
 
         AdminTextField(
-            value = annMsg,
-            onValueChange = { annMsg = it },
-            label = "نص الإعلان العام للعملاء",
+            value = newAnnText,
+            onValueChange = { newAnnText = it },
+            label = "اكتب إعلاناً عاماً جديداً لجميع العملاء",
             singleLine = false
         )
+
+        Button(
+            onClick = {
+                val txt = newAnnText.trim()
+                if (txt.isNotEmpty()) {
+                    val nowIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }.format(java.util.Date())
+                    val nextList = listOf(
+                        AdminNoticeEntry(
+                            id = "g_${System.currentTimeMillis()}",
+                            text = txt,
+                            createdAt = nowIso
+                        )
+                    ) + globalNotices
+                    val serialized = serializeAdminNotices(nextList)
+                    annMsg = serialized
+                    annActive = true
+                    newAnnText = ""
+                    onSave(version, whatsapp, message, botToken, chatId, tgEnabled, serialized, true)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Text("إرسال إعلان عام للجميع", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        }
+
+        if (globalNotices.isEmpty()) {
+            Text(
+                text = "لا توجد إعلانات عامة مرسلة حالياً.",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 11.sp
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                globalNotices.forEach { item ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = NavySurface),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, NavySecondary, RoundedCornerShape(10.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(item.text, color = Color.White, fontSize = 12.sp)
+                                val readLabel = if (item.readByNames.isNotEmpty()) {
+                                    "✓ قرأه ${item.readByNames.size} عميل (${item.readByNames.joinToString("، ")})"
+                                } else {
+                                    "لم يقرأه أحد بعد"
+                                }
+                                Text(
+                                    text = readLabel,
+                                    color = if (item.readByNames.isNotEmpty()) Color(0xFF4ADE80) else GoldBright,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val nextList = globalNotices.filterNot { it.id == item.id }
+                                    val serialized = serializeAdminNotices(nextList)
+                                    annMsg = serialized
+                                    onSave(version, whatsapp, message, botToken, chatId, tgEnabled, serialized, annActive)
+                                },
+                                modifier = Modifier.size(30.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "حذف الإعلان",
+                                    tint = BalancePayable,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Button(
             onClick = { onSave(version, whatsapp, message, botToken, chatId, tgEnabled, annMsg, annActive) },
@@ -1870,11 +2004,13 @@ private fun ClientRemoteCommandDialog(
     client: AdminClientDto,
     onDismiss: () -> Unit,
     onSendNotice: (String) -> Unit,
+    onDeleteNotice: (String) -> Unit,
     onForceBackup: () -> Unit,
     onResetDesktopPassword: (String) -> Unit
 ) {
-    var noticeText by remember(client.id) { mutableStateOf(client.customNotice ?: "") }
+    var noticeText by remember(client.id) { mutableStateOf("") }
     var desktopNewPass by remember { mutableStateOf("") }
+    val notices = remember(client.customNotice) { parseAdminNotices(client.customNotice) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1891,19 +2027,79 @@ private fun ClientRemoteCommandDialog(
                 AdminTextField(
                     value = noticeText,
                     onValueChange = { noticeText = it },
-                    label = "رسالة خاصة تظهر للعميل داخل برنامجه",
+                    label = "إرسال إشعار خاص جديد للعميل",
                     singleLine = false
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { onSendNotice(noticeText) },
+                        onClick = {
+                            if (noticeText.trim().isNotEmpty()) {
+                                onSendNotice(noticeText.trim())
+                                noticeText = ""
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
                     ) {
-                        Text("إرسال الرسالة", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("إرسال إشعار", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(onClick = { onSendNotice("") }) {
-                        Text("مسح", color = Color.White, fontSize = 11.sp)
+                        Text("مسح الكل", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+
+                if (notices.isNotEmpty()) {
+                    Text(
+                        text = "الإشعارات المرسلة (${notices.size}):",
+                        color = GoldBright,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        notices.forEach { n ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = NavySurface),
+                                shape = RoundedCornerShape(9.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, NavySecondary, RoundedCornerShape(9.dp))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Text(n.text, color = Color.White, fontSize = 11.sp)
+                                        val readStatus = if (!n.readAt.isNullOrBlank()) {
+                                            "✓ تمت القراءة (${computePresenceInfo(n.readAt).relativeTime})"
+                                        } else {
+                                            "⏳ لم يُقرأ بعد"
+                                        }
+                                        Text(
+                                            text = readStatus,
+                                            color = if (!n.readAt.isNullOrBlank()) Color(0xFF4ADE80) else GoldBright,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { onDeleteNotice(n.id) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "حذف الإشعار",
+                                            tint = BalancePayable,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -2012,4 +2208,149 @@ private fun AdminTextField(
             unfocusedContainerColor = NavySurface
         )
     )
+}
+
+private data class PresenceInfo(
+    val statusLabel: String,
+    val relativeTime: String,
+    val color: Color
+)
+
+private fun parseIsoToEpochMs(isoDate: String?): Long {
+    val raw = isoDate?.trim().orEmpty()
+    if (raw.isEmpty()) return 0L
+    return try {
+        val cleaned = raw
+            .replace(Regex("\\.\\d+"), "")
+            .replace(Regex("([+-]\\d{2}):(\\d{2})$"), "$1$2")
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss'Z'" to true,
+            "yyyy-MM-dd'T'HH:mm:ssZ" to false,
+            "yyyy-MM-dd HH:mm:ss" to true
+        )
+        for ((pattern, forceUtc) in patterns) {
+            try {
+                val sdf = java.text.SimpleDateFormat(pattern, java.util.Locale.US)
+                if (forceUtc) sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                val parsed = sdf.parse(cleaned)
+                if (parsed != null) return parsed.time
+            } catch (_: Exception) {
+            }
+        }
+        0L
+    } catch (_: Exception) {
+        0L
+    }
+}
+
+private fun computePresenceInfo(isoDate: String?): PresenceInfo {
+    val hbMs = parseIsoToEpochMs(isoDate)
+    if (hbMs <= 0L) {
+        return PresenceInfo(
+            statusLabel = "لم يتصل",
+            relativeTime = "لم يتصل بعد",
+            color = Color(0xFF94A3B8)
+        )
+    }
+    val diffMs = (System.currentTimeMillis() - hbMs).coerceAtLeast(0L)
+    val diffMin = diffMs / (60 * 1000L)
+    val diffHours = diffMs / (60 * 60 * 1000L)
+    val diffDays = diffMs / (24 * 60 * 60 * 1000L)
+
+    val relative = when {
+        diffMin < 1L -> "الآن"
+        diffMin < 60L -> "منذ $diffMin دقيقة"
+        diffHours < 24L -> "منذ $diffHours ساعة"
+        else -> "منذ $diffDays يوم"
+    }
+
+    return when {
+        diffMin < 5L -> PresenceInfo(
+            statusLabel = "متصل الآن",
+            relativeTime = relative,
+            color = Color(0xFF22C55E)
+        )
+        diffHours < 24L -> PresenceInfo(
+            statusLabel = "نشط اليوم",
+            relativeTime = relative,
+            color = Color(0xFF10B981)
+        )
+        else -> PresenceInfo(
+            statusLabel = "غير متصل",
+            relativeTime = relative,
+            color = Color(0xFF94A3B8)
+        )
+    }
+}
+
+private data class AdminNoticeEntry(
+    val id: String,
+    val text: String,
+    val createdAt: String? = null,
+    val readAt: String? = null,
+    val readByNames: List<String> = emptyList(),
+    val readByRawJson: String? = null
+)
+
+private fun parseAdminNotices(raw: String?): List<AdminNoticeEntry> {
+    val str = raw?.trim().orEmpty()
+    if (str.isEmpty()) return emptyList()
+    if (str.startsWith("[")) {
+        return try {
+            val arr = org.json.JSONArray(str)
+            val result = mutableListOf<AdminNoticeEntry>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val txt = obj.optString("text", "").trim()
+                if (txt.isEmpty()) continue
+                val readByArr = obj.optJSONArray("read_by")
+                val names = mutableListOf<String>()
+                if (readByArr != null) {
+                    for (j in 0 until readByArr.length()) {
+                        val r = readByArr.optJSONObject(j)
+                        val nm = r?.optString("company_name")?.takeIf { it.isNotBlank() }
+                            ?: r?.optString("company_id")?.takeIf { it.isNotBlank() }
+                        if (nm != null) names.add(nm)
+                    }
+                }
+                result.add(
+                    AdminNoticeEntry(
+                        id = obj.optString("id", "n_$i"),
+                        text = txt,
+                        createdAt = obj.optString("created_at", "").takeIf { it.isNotBlank() && it != "null" },
+                        readAt = obj.optString("read_at", "").takeIf { it.isNotBlank() && it != "null" },
+                        readByNames = names,
+                        readByRawJson = readByArr?.toString()
+                    )
+                )
+            }
+            result
+        } catch (_: Exception) {
+            listOf(AdminNoticeEntry(id = "legacy_${str.length}", text = str))
+        }
+    }
+    return listOf(AdminNoticeEntry(id = "legacy_${str.length}", text = str))
+}
+
+private fun serializeAdminNotices(list: List<AdminNoticeEntry>): String {
+    if (list.isEmpty()) return ""
+    val arr = org.json.JSONArray()
+    list.forEach { item ->
+        val obj = org.json.JSONObject()
+        obj.put("id", item.id)
+        obj.put("text", item.text)
+        if (!item.createdAt.isNullOrBlank()) obj.put("created_at", item.createdAt)
+        if (!item.readAt.isNullOrBlank()) obj.put("read_at", item.readAt)
+        if (!item.readByRawJson.isNullOrBlank()) {
+            try {
+                obj.put("read_by", org.json.JSONArray(item.readByRawJson))
+            } catch (_: Exception) {
+                obj.put("read_by", org.json.JSONArray())
+            }
+        } else {
+            obj.put("read_by", org.json.JSONArray())
+        }
+        arr.put(obj)
+    }
+    return arr.toString()
 }

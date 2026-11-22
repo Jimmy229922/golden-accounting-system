@@ -727,6 +727,48 @@ function getClientRuntimeMeta(accountingDb) {
     };
 }
 
+async function pollClientNotices(accountingDb) {
+    try {
+        const map = getLicenseSettings(accountingDb);
+        const companyId = String(map.company_id || '').trim();
+        const gatewayRes = await callLicenseGateway('poll_notices', {
+            company_id: companyId,
+            machine_id: getMachineId()
+        });
+        if (gatewayRes && gatewayRes.ok && gatewayRes.data && gatewayRes.data.success) {
+            if (gatewayRes.data.announcement_message !== undefined) {
+                saveSetting(accountingDb, 'announcement_message', String(gatewayRes.data.announcement_message || '').trim());
+            }
+            if (gatewayRes.data.announcement_active !== undefined) {
+                saveSetting(accountingDb, 'announcement_active', gatewayRes.data.announcement_active ? '1' : '0');
+            }
+            if (gatewayRes.data.custom_notice !== undefined) {
+                saveSetting(accountingDb, 'custom_notice', String(gatewayRes.data.custom_notice || '').trim());
+            }
+        }
+    } catch (_) {}
+    return getClientRuntimeMeta(accountingDb);
+}
+
+async function markClientNoticesRead(accountingDb, noticeIds) {
+    try {
+        const ids = Array.isArray(noticeIds) ? noticeIds.map((x) => String(x || '').trim()).filter(Boolean) : [];
+        if (!ids.length) return { success: true, updated: 0 };
+        const map = getLicenseSettings(accountingDb);
+        const companyId = String(map.company_id || '').trim();
+        if (!companyId) return { success: false };
+        const gatewayRes = await callLicenseGateway('mark_notices_read', {
+            company_id: companyId,
+            machine_id: getMachineId(),
+            company_name: String(map.companyName || '').trim(),
+            notice_ids: ids
+        });
+        return (gatewayRes && gatewayRes.ok && gatewayRes.data) ? gatewayRes.data : { success: false };
+    } catch (_) {
+        return { success: false };
+    }
+}
+
 module.exports = {
     initLicenseForDatabase,
     getLicenseStatus,
@@ -735,5 +777,7 @@ module.exports = {
     getLicenseSettings,
     getClientFeatures,
     getClientRuntimeMeta,
+    pollClientNotices,
+    markClientNoticesRead,
     hasFeature
 };

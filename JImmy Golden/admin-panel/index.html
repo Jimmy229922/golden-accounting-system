@@ -280,14 +280,18 @@
                             </div>
                             <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;display:flex;flex-direction:column;gap:10px;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                                    <strong style="color:#fbbf24;font-size:0.92rem;"><i class="fas fa-bullhorn" style="margin-left:6px;"></i> شريط إعلان عام لجميع العملاء</strong>
+                                    <strong style="color:#fbbf24;font-size:0.92rem;"><i class="fas fa-bell" style="margin-left:6px;"></i> نظام الإشعارات والإعلانات العامة لجميع العملاء</strong>
                                     <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.82rem;color:#e2e8f0;">
-                                        <input type="checkbox" id="cfgAnnouncementActive"> إظهار الإعلان
+                                        <input type="checkbox" id="cfgAnnouncementActive"> تفعيل الإعلانات العامة
                                     </label>
                                 </div>
-                                <div class="field">
-                                    <textarea id="cfgAnnouncementMsg" rows="2" placeholder="اكتب إعلان أو تنبيه يظهر في شريط علوي داخل برنامج الديسكتوب لجميع العملاء..."></textarea>
+                                <div style="display:flex;gap:8px;align-items:flex-start;">
+                                    <textarea id="newGlobalAnnouncementInput" rows="2" placeholder="اكتب إشعاراً عاماً جديداً ليصل في جرس الإشعارات لجميع العملاء لحظياً..." style="flex:1;"></textarea>
+                                    <button type="button" id="addGlobalAnnouncementBtn" class="btn btn-primary btn-sm" style="white-space:nowrap;height:42px;">
+                                        <i class="fas fa-paper-plane"></i> إرسال إعلان
+                                    </button>
                                 </div>
+                                <div id="globalAnnouncementsList" style="display:flex;flex-direction:column;gap:8px;max-height:240px;overflow-y:auto;"></div>
                             </div>
                             <button type="submit" id="saveGlobalConfigBtn" class="btn btn-primary btn-block" style="height:44px;font-size:0.95rem;">
                                 <i class="fas fa-save"></i> حفظ الإعدادات العامة

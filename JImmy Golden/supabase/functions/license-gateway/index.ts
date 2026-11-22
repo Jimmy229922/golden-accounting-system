@@ -87,7 +87,7 @@ serve(async (req: Request) => {
     const rawMachineId = String(body.machine_id || "").trim();
     const desktopVersion = String(body.desktop_version || "10.1.1").trim();
 
-    if (!companyId || !rawMachineId) {
+    if (!companyId || (!rawMachineId && action !== "poll_notices" && action !== "mark_notices_read")) {
       return new Response(JSON.stringify({ success: false, error: "MISSING_REQUIRED_FIELDS", message: "معرف الشركة ورقم الماكينة مطلوبان" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -512,6 +512,157 @@ serve(async (req: Request) => {
         issued_at: authPayload.issued_at,
         server_time: now.toISOString()
       }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (action === "poll_notices") {
+      const companyId = String(body.company_id || "").trim();
+      const nowIso = new Date().toISOString();
+      let customNotice = "";
+      if (companyId) {
+        const { data: rec } = await supabase
+          .from("client_licenses")
+          .select("id, custom_notice")
+          .eq("company_id", companyId)
+          .maybeSingle();
+        if (rec) {
+          customNotice = String(rec.custom_notice || "");
+          await supabase
+            .from("client_licenses")
+            .update({ last_heartbeat_at: nowIso })
+            .eq("id", rec.id);
+        }
+      }
+      const { data: globalCfg } = await supabase
+        .from("app_global_config")
+        .select("announcement_message, announcement_active")
+        .eq("id", 1)
+        .maybeSingle();
+
+      return new Response(JSON.stringify({
+        success: true,
+        custom_notice: customNotice,
+        announcement_message: String(globalCfg?.announcement_message || ""),
+        announcement_active: Boolean(globalCfg?.announcement_active),
+        server_time: nowIso
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (action === "mark_notices_read") {
+      const companyId = String(body.company_id || "").trim();
+      const noticeIds: string[] = Array.isArray(body.notice_ids)
+        ? body.notice_ids.map((x: unknown) => String(x || "").trim()).filter(Boolean)
+        : [];
+      if (!companyId || !noticeIds.length) {
+        return new Response(JSON.stringify({ success: true, updated: 0 }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      const idSet = new Set(noticeIds);
+      const nowIso = new Date().toISOString();
+      const parseList = (raw: unknown): Array<Record<string, any>> => {
+        const s = String(raw || "").trim();
+        if (!s) return [];
+        if (s.startsWith("[")) {
+          try {
+            const arr = JSON.parse(s);
+            if (Array.isArray(arr)) return arr;
+          } catch (_) {}
+        }
+        return [{ id: `legacy_${s.length}`, text: s, created_at: null, read_at: null }];
+      };
+
+      let clientCompanyName = String(body.company_name || "").trim();
+      const newlyReadPrivateTexts: string[] = [];
+
+      const { data: rec } = await supabase
+        .from("client_licenses")
+        .select("id, company_name, custom_notice")
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (rec) {
+        clientCompanyName = String(rec.company_name || clientCompanyName || companyId).trim();
+        const privList = parseList(rec.custom_notice);
+        let privChanged = false;
+        for (const item of privList) {
+          if (item && idSet.has(String(item.id || "")) && !item.read_at) {
+            item.read_at = nowIso;
+            privChanged = true;
+            newlyReadPrivateTexts.push(String(item.text || "").slice(0, 120));
+          }
+        }
+        if (privChanged) {
+          await supabase
+            .from("client_licenses")
+            .update({ custom_notice: JSON.stringify(privList), updated_at: nowIso })
+            .eq("id", rec.id);
+        }
+      }
+
+      const { data: globalCfg } = await supabase
+        .from("app_global_config")
+        .select("announcement_message, telegram_alerts_enabled, telegram_bot_token, telegram_chat_id")
+        .eq("id", 1)
+        .maybeSingle();
+
+      const newlyReadGlobalTexts: string[] = [];
+      if (globalCfg && globalCfg.announcement_message) {
+        const annList = parseList(globalCfg.announcement_message);
+        let annChanged = false;
+        for (const item of annList) {
+          if (item && idSet.has(String(item.id || ""))) {
+            const readBy: Array<Record<string, any>> = Array.isArray(item.read_by) ? item.read_by : [];
+            if (!readBy.some((r) => String(r?.company_id || "") === companyId)) {
+              readBy.push({
+                company_id: companyId,
+                company_name: clientCompanyName || companyId,
+                read_at: nowIso
+              });
+              item.read_by = readBy;
+              annChanged = true;
+              newlyReadGlobalTexts.push(String(item.text || "").slice(0, 120));
+            }
+          }
+        }
+        if (annChanged) {
+          await supabase
+            .from("app_global_config")
+            .update({ announcement_message: JSON.stringify(annList) })
+            .eq("id", 1);
+        }
+      }
+
+      if (
+        (newlyReadPrivateTexts.length > 0 || newlyReadGlobalTexts.length > 0) &&
+        globalCfg?.telegram_alerts_enabled &&
+        globalCfg?.telegram_bot_token &&
+        globalCfg?.telegram_chat_id
+      ) {
+        try {
+          const lines: string[] = [`👁️ تم قراءة الإشعار بواسطة العميل:\n🏢 ${clientCompanyName}`];
+          if (newlyReadPrivateTexts.length > 0) {
+            lines.push(`🔔 إشعار خاص:\n• ${newlyReadPrivateTexts.join("\n• ")}`);
+          }
+          if (newlyReadGlobalTexts.length > 0) {
+            lines.push(`📢 إعلان عام:\n• ${newlyReadGlobalTexts.join("\n• ")}`);
+          }
+          await fetch(`https://api.telegram.org/bot${globalCfg.telegram_bot_token}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: globalCfg.telegram_chat_id, text: lines.join("\n") })
+          });
+        } catch (_) {}
+      }
+
+      return new Response(JSON.stringify({ success: true, updated: newlyReadPrivateTexts.length }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });

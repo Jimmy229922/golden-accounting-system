@@ -209,10 +209,16 @@ class AdminPanelViewModel(
 
     fun sendClientNotice(licenseId: String, notice: String) {
         val clean = notice.trim()
-        val type = if (clean.isEmpty()) "clear_notice" else "set_notice"
-        val msg = if (clean.isEmpty()) "تم مسح الرسالة الخاصة للعميل" else "تم إرسال الرسالة الخاصة للعميل بنجاح"
+        val type = if (clean.isEmpty()) "clear_notice" else "add_notice"
+        val msg = if (clean.isEmpty()) "تم مسح جميع إشعارات العميل" else "تم إرسال الإشعار الخاص للعميل بنجاح"
         runAction(msg) {
             adminRepository.sendClientCommand(licenseId, commandType = type, customNotice = clean)
+        }
+    }
+
+    fun deleteClientNotice(licenseId: String, noticeId: String) {
+        runAction("تم حذف الإشعار بنجاح") {
+            adminRepository.sendClientCommand(licenseId, commandType = "delete_notice", noticeId = noticeId)
         }
     }
 

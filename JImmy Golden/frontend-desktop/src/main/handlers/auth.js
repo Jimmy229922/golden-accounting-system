@@ -973,6 +973,23 @@ function register() {
         }
     });
 
+    ipcMain.handle('poll-client-notices', async () => {
+        try {
+            const meta = await licenseService.pollClientNotices(db);
+            return { success: true, meta };
+        } catch (error) {
+            return { success: false, meta: null, error: error.message };
+        }
+    });
+
+    ipcMain.handle('mark-client-notices-read', async (_event, noticeIds) => {
+        try {
+            return await licenseService.markClientNoticesRead(db, noticeIds);
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('open-external-url', async (_event, rawUrl) => {
         try {
             const url = String(rawUrl || '').trim();

@@ -303,7 +303,23 @@ function renderTopNav() {
 
     host.innerHTML = `
         <nav class="top-nav shell-top-nav">
-            <div class="nav-brand">${t('common.nav.brand', 'برنامج المحاسبة المتكامل')}</div>
+            <div class="nav-notify-wrap" id="shellNotifyWrap">
+                <button type="button" class="nav-notify-btn" id="shellNotifyBtn" title="الإشعارات" aria-label="الإشعارات">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span class="nav-notify-badge" id="shellNotifyBadge">0</span>
+                </button>
+                <div class="nav-notify-popover" id="shellNotifyPopover" role="dialog" aria-label="الإشعارات">
+                    <div class="nav-notify-header">
+                        <span class="nav-notify-title">🔔 الإشعارات <span class="nav-notify-count-pill" id="shellNotifyCountPill">0</span></span>
+                    </div>
+                    <div class="nav-notify-list" id="shellNotifyList">
+                        <div class="nav-notify-empty">لا توجد إشعارات حالياً</div>
+                    </div>
+                </div>
+            </div>
             <ul class="nav-links">
                 ${linksHtml}
                 <li class="nav-search-item">
@@ -314,6 +330,8 @@ function renderTopNav() {
             </ul>
         </nav>
     `;
+    bindShellNotificationBellEvents();
+    renderShellNotificationsPopover();
 }
 
 function openSearchInCurrentFrame() {
@@ -762,11 +780,20 @@ function renderForceUpdateOverlay(meta) {
         statusEl.textContent = 'جاري فحص وتنزيل التحديث الجديد داخل البرنامج، يرجى الانتظار...';
         try {
             const res = await window.electronAPI.downloadAppUpdate();
-            if (res && res.success && res.installerPath && typeof window.electronAPI.quitAndInstallAppUpdate === 'function') {
+            const installerPath = res?.path || res?.installerPath || '';
+            if (res && res.success && res.updateAvailable === false) {
+                if (progressWrap) progressWrap.style.display = 'none';
+                statusEl.textContent = 'لا يوجد إصدار أحدث متاح للتنزيل حالياً، يرجى التواصل مع الدعم الفني.';
+                dlBtn.disabled = false;
+            } else if (res && res.success && (installerPath || res.closeForInstall) && typeof window.electronAPI.quitAndInstallAppUpdate === 'function') {
                 if (progressBar) progressBar.style.width = '100%';
                 if (progressPct) progressPct.textContent = '100%';
                 statusEl.textContent = 'تم التنزيل بنجاح! جاري تثبيت التحديث الآن...';
-                await window.electronAPI.quitAndInstallAppUpdate(res.installerPath);
+                const installRes = await window.electronAPI.quitAndInstallAppUpdate(installerPath);
+                if (installRes && installRes.success === false) {
+                    statusEl.textContent = installRes.error || 'تم التنزيل لكن تعذر تشغيل ملف التثبيت تلقائياً.';
+                    dlBtn.disabled = false;
+                }
             } else {
                 statusEl.textContent = res?.error || 'تعذر تنزيل التحديث حالياً، يرجى المحاولة مرة أخرى أو التواصل مع الدعم الفني.';
                 dlBtn.disabled = false;
@@ -782,58 +809,220 @@ function renderForceUpdateOverlay(meta) {
     });
 }
 
-function renderAdminNoticeBanner(id, title, message, accentBg, accentBorder, accentColor) {
-    if (!message || document.getElementById(id)) return;
-    const navHost = document.getElementById('shellNavHost');
-    if (!navHost) return;
-    const bar = document.createElement('div');
-    bar.id = id;
-    bar.setAttribute('dir', 'rtl');
-    bar.style.cssText = `background:${accentBg};border-bottom:1px solid ${accentBorder};color:#f8fafc;padding:9px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:0.88rem;font-weight:600;z-index:50;`;
-    bar.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
-            <span style="background:${accentBorder};color:${accentColor};padding:2px 9px;border-radius:999px;font-size:0.76rem;font-weight:800;white-space:nowrap;">${title}</span>
-            <span style="color:#f8fafc;line-height:1.45;word-break:break-word;">${String(message).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
-        </div>
-        <button type="button" style="background:transparent;border:none;color:#cbd5e1;font-size:1.1rem;cursor:pointer;padding:2px 6px;" title="إغلاق">×</button>
-    `;
-    bar.querySelector('button')?.addEventListener('click', () => bar.remove());
-    navHost.insertAdjacentElement('afterend', bar);
+const SHELL_READ_NOTICES_KEY = 'golden_read_notifications_v1';
+
+function parseShellNotifications(raw, kind) {
+    const str = String(raw || '').trim();
+    if (!str) return [];
+    if (str.startsWith('[')) {
+        try {
+            const arr = JSON.parse(str);
+            if (Array.isArray(arr)) {
+                return arr
+                    .filter((item) => item && typeof item === 'object' && String(item.text || '').trim())
+                    .map((item, idx) => ({
+                        id: String(item.id || `${kind}_${idx}`),
+                        text: String(item.text || '').trim(),
+                        createdAt: item.created_at || null,
+                        kind
+                    }));
+            }
+        } catch (_) {}
+    }
+    return [{
+        id: `legacy_${str.length}`,
+        text: str,
+        createdAt: null,
+        kind
+    }];
+}
+
+function getShellReadNoticeIds() {
+    try {
+        const raw = localStorage.getItem(SHELL_READ_NOTICES_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch (_) {
+        return new Set();
+    }
+}
+
+function saveShellReadNoticeIds(idSet) {
+    try {
+        localStorage.setItem(SHELL_READ_NOTICES_KEY, JSON.stringify(Array.from(idSet).slice(-200)));
+    } catch (_) {}
+}
+
+function formatShellNotifyTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (diffMin < 1) return 'الآن';
+    if (diffMin < 60) return `منذ ${diffMin} دقيقة`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `منذ ${diffHr} ساعة`;
+    try {
+        return d.toLocaleDateString('ar-EG', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch (_) {
+        return '';
+    }
+}
+
+function escapeShellHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function collectActiveShellNotifications(meta) {
+    if (!meta) return [];
+    const priv = parseShellNotifications(meta.customNotice, 'private');
+    const glob = meta.announcementActive ? parseShellNotifications(meta.announcementMessage, 'global') : [];
+    return [...priv, ...glob].sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+    });
+}
+
+function renderShellNotificationsPopover() {
+    const badge = document.getElementById('shellNotifyBadge');
+    const countPill = document.getElementById('shellNotifyCountPill');
+    const listEl = document.getElementById('shellNotifyList');
+    if (!badge || !listEl) return;
+
+    const items = collectActiveShellNotifications(shellState.runtimeMeta);
+    const readIds = getShellReadNoticeIds();
+    const unreadItems = items.filter((item) => !readIds.has(item.id));
+
+    badge.textContent = unreadItems.length > 99 ? '99+' : String(unreadItems.length);
+    badge.classList.toggle('has-unread', unreadItems.length > 0);
+    if (countPill) countPill.textContent = String(items.length);
+
+    if (!items.length) {
+        listEl.innerHTML = '<div class="nav-notify-empty">لا توجد إشعارات حالياً</div>';
+        return;
+    }
+
+    listEl.innerHTML = items.map((item) => {
+        const isUnread = !readIds.has(item.id);
+        const tagLabel = item.kind === 'private' ? 'إشعار خاص من الإدارة' : 'إعلان عام';
+        const timeStr = formatShellNotifyTime(item.createdAt);
+        return `
+            <div class="nav-notify-item${isUnread ? ' unread' : ''}">
+                <div class="nav-notify-item-top">
+                    <span class="nav-notify-tag ${item.kind}">${tagLabel}</span>
+                    ${timeStr ? `<span class="nav-notify-time">${escapeShellHtml(timeStr)}</span>` : ''}
+                </div>
+                <div class="nav-notify-text">${escapeShellHtml(item.text)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function markVisibleShellNotificationsRead() {
+    const items = collectActiveShellNotifications(shellState.runtimeMeta);
+    if (!items.length) return;
+    const readIds = getShellReadNoticeIds();
+    const newlyReadIds = [];
+    for (const item of items) {
+        if (!readIds.has(item.id)) {
+            readIds.add(item.id);
+            newlyReadIds.push(item.id);
+        }
+    }
+    if (newlyReadIds.length > 0) {
+        saveShellReadNoticeIds(readIds);
+        const badge = document.getElementById('shellNotifyBadge');
+        if (badge) {
+            badge.textContent = '0';
+            badge.classList.remove('has-unread');
+        }
+        if (window.electronAPI && typeof window.electronAPI.markClientNoticesRead === 'function') {
+            window.electronAPI.markClientNoticesRead(newlyReadIds).catch(() => {});
+        }
+    }
+}
+
+function bindShellNotificationBellEvents() {
+    const btn = document.getElementById('shellNotifyBtn');
+    const popover = document.getElementById('shellNotifyPopover');
+    if (!btn || !popover || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = !popover.classList.contains('open');
+        if (willOpen) {
+            renderShellNotificationsPopover();
+            popover.classList.add('open');
+            markVisibleShellNotificationsRead();
+        } else {
+            popover.classList.remove('open');
+        }
+    });
+
+    popover.addEventListener('click', (e) => e.stopPropagation());
+
+    if (!shellState.notifyOutsideBound) {
+        shellState.notifyOutsideBound = true;
+        document.addEventListener('click', () => {
+            const p = document.getElementById('shellNotifyPopover');
+            if (p) p.classList.remove('open');
+        });
+        window.addEventListener('blur', () => {
+            const p = document.getElementById('shellNotifyPopover');
+            if (p) p.classList.remove('open');
+        });
+    }
+}
+
+async function applyClientRuntimeMeta(meta) {
+    if (!meta) return;
+    shellState.runtimeMeta = meta;
+    if (meta.forceUpdateRequired) {
+        renderForceUpdateOverlay(meta);
+        return;
+    }
+    renderShellNotificationsPopover();
+    if (meta.showExpiryBanner) {
+        renderExpiryReminderBanner(meta);
+    }
 }
 
 async function initializeClientRuntimeMetaUI() {
     const api = window.electronAPI;
     if (!api || typeof api.getClientRuntimeMeta !== 'function') return;
+    if (!shellState.runtimeMetaTimer) {
+        shellState.runtimeMetaTimer = setInterval(async () => {
+            try {
+                if (typeof api.pollClientNotices === 'function') {
+                    const polled = await api.pollClientNotices();
+                    if (polled && polled.success && polled.meta) {
+                        await applyClientRuntimeMeta(polled.meta);
+                        return;
+                    }
+                }
+                const localRes = await api.getClientRuntimeMeta();
+                if (localRes && localRes.success && localRes.meta) {
+                    await applyClientRuntimeMeta(localRes.meta);
+                }
+            } catch (_) {}
+        }, 25 * 1000);
+    }
     try {
         const res = await api.getClientRuntimeMeta();
-        if (!res || !res.success || !res.meta) return;
-        shellState.runtimeMeta = res.meta;
-        if (res.meta.forceUpdateRequired) {
-            renderForceUpdateOverlay(res.meta);
-            return;
+        if (res && res.success && res.meta) {
+            await applyClientRuntimeMeta(res.meta);
         }
-        if (res.meta.customNotice) {
-            renderAdminNoticeBanner(
-                'clientCustomNoticeBanner',
-                'رسالة خاصة من الإدارة',
-                res.meta.customNotice,
-                'linear-gradient(90deg, rgba(180,83,9,0.92), rgba(146,64,14,0.92))',
-                'rgba(251,191,36,0.45)',
-                '#fef3c7'
-            );
-        }
-        if (res.meta.announcementActive && res.meta.announcementMessage) {
-            renderAdminNoticeBanner(
-                'globalAnnouncementBanner',
-                'إعلان عام',
-                res.meta.announcementMessage,
-                'linear-gradient(90deg, rgba(3,105,161,0.92), rgba(29,78,216,0.92))',
-                'rgba(56,189,248,0.45)',
-                '#e0f2fe'
-            );
-        }
-        if (res.meta.showExpiryBanner) {
-            renderExpiryReminderBanner(res.meta);
+        if (typeof api.pollClientNotices === 'function') {
+            const liveRes = await api.pollClientNotices();
+            if (liveRes && liveRes.success && liveRes.meta) {
+                await applyClientRuntimeMeta(liveRes.meta);
+            }
         }
     } catch (_) {}
 }

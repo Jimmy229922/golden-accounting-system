@@ -439,6 +439,80 @@
         if ($('previewWhatsappText')) $('previewWhatsappText').textContent = wa || 'غير محدد';
     }
 
+    function parseAdminNoticeList(raw) {
+        const str = String(raw || '').trim();
+        if (!str) return [];
+        if (str.startsWith('[')) {
+            try {
+                const arr = JSON.parse(str);
+                if (Array.isArray(arr)) {
+                    return arr.filter((x) => x && typeof x === 'object' && String(x.text || '').trim());
+                }
+            } catch (_) {}
+        }
+        return [{ id: `legacy_${str.length}`, text: str, created_at: null, read_at: null, read_by: [] }];
+    }
+
+    async function persistGlobalAnnouncementsList(list) {
+        const serialized = list.length ? JSON.stringify(list) : '';
+        await callAdminApi('update_global_config', {
+            min_supported_version: $('cfgMinVersion')?.value.trim() || state.globalConfig?.min_supported_version || '10.0.0',
+            force_update_message: $('cfgForceUpdateMsg')?.value.trim() || state.globalConfig?.force_update_message || '',
+            support_whatsapp: $('cfgSupportWhatsapp')?.value.trim() || state.globalConfig?.support_whatsapp || '',
+            telegram_bot_token: $('cfgTelegramBotToken')?.value.trim() || state.globalConfig?.telegram_bot_token || '',
+            telegram_chat_id: $('cfgTelegramChatId')?.value.trim() || state.globalConfig?.telegram_chat_id || '',
+            telegram_alerts_enabled: $('cfgTelegramEnabled') ? Boolean($('cfgTelegramEnabled').checked) : Boolean(state.globalConfig?.telegram_alerts_enabled),
+            announcement_message: serialized,
+            announcement_active: $('cfgAnnouncementActive') ? Boolean($('cfgAnnouncementActive').checked) : Boolean(state.globalConfig?.announcement_active)
+        });
+        if (state.globalConfig) state.globalConfig.announcement_message = serialized;
+        renderGlobalAnnouncementsList();
+    }
+
+    function renderGlobalAnnouncementsList() {
+        const host = $('globalAnnouncementsList');
+        if (!host) return;
+        const list = parseAdminNoticeList(state.globalConfig?.announcement_message);
+        if (!list.length) {
+            host.innerHTML = '<div style="font-size:0.8rem;color:#64748b;text-align:center;padding:12px;border:1px dashed var(--border);border-radius:10px;">لا توجد إعلانات عامة مرسلة حالياً.</div>';
+            return;
+        }
+        host.innerHTML = list.map((item) => {
+            const readBy = Array.isArray(item.read_by) ? item.read_by : [];
+            const readersNames = readBy.map((r) => `${r.company_name || r.company_id}`).join('، ');
+            return `
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;background:rgba(15,23,42,0.72);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+                        <div style="font-size:0.86rem;color:#f8fafc;line-height:1.5;word-break:break-word;white-space:pre-wrap;">${escapeHtml(item.text)}</div>
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:0.74rem;color:#94a3b8;">
+                            ${item.created_at ? `<span><i class="fas fa-clock"></i> ${formatRelativeTime(item.created_at)}</span>` : ''}
+                            <span style="color:${readBy.length ? '#4ade80' : '#fbbf24'};font-weight:700;" title="${escapeHtml(readersNames)}">
+                                <i class="fas ${readBy.length ? 'fa-eye' : 'fa-hourglass-half'}"></i>
+                                ${readBy.length ? `قرأه ${readBy.length} عميل${readersNames ? ` (${escapeHtml(readersNames)})` : ''}` : 'لم يقرأه أحد بعد'}
+                            </span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-danger btn-xs delete-global-ann-btn" data-id="${escapeHtml(item.id)}" title="حذف الإعلان">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+        host.querySelectorAll('.delete-global-ann-btn').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                try {
+                    const next = parseAdminNoticeList(state.globalConfig?.announcement_message).filter((x) => String(x.id) !== String(btn.dataset.id));
+                    await persistGlobalAnnouncementsList(next);
+                    showToast('تم حذف الإعلان العام بنجاح', 'success');
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                }
+            });
+        });
+    }
+
     function populateGlobalConfigForm() {
         const cfg = state.globalConfig || {};
         if ($('cfgMinVersion')) $('cfgMinVersion').value = cfg.min_supported_version || '10.0.0';
@@ -447,8 +521,8 @@
         if ($('cfgTelegramBotToken')) $('cfgTelegramBotToken').value = cfg.telegram_bot_token || '';
         if ($('cfgTelegramChatId')) $('cfgTelegramChatId').value = cfg.telegram_chat_id || '';
         if ($('cfgTelegramEnabled')) $('cfgTelegramEnabled').checked = Boolean(cfg.telegram_alerts_enabled);
-        if ($('cfgAnnouncementMsg')) $('cfgAnnouncementMsg').value = cfg.announcement_message || '';
         if ($('cfgAnnouncementActive')) $('cfgAnnouncementActive').checked = Boolean(cfg.announcement_active);
+        renderGlobalAnnouncementsList();
         updateGlobalConfigPreview();
     }
 
@@ -1039,6 +1113,8 @@
             update_features: 'تعديل الميزات المخصصة',
             update_company_name: 'تعديل اسم الشركة',
             download_client_backup: 'تحميل نسخة احتياطية سحابية',
+            remote_add_notice: 'إرسال إشعار خاص لعميل',
+            remote_delete_notice: 'حذف إشعار خاص لعميل',
             remote_set_notice: 'إرسال رسالة خاصة لعميل',
             remote_clear_notice: 'إزالة رسالة خاصة لعميل',
             remote_force_backup: 'أمر نسخة احتياطية فورية عن بُعد',
@@ -1293,11 +1369,39 @@
                     telegram_bot_token: $('cfgTelegramBotToken') ? $('cfgTelegramBotToken').value.trim() : '',
                     telegram_chat_id: $('cfgTelegramChatId') ? $('cfgTelegramChatId').value.trim() : '',
                     telegram_alerts_enabled: $('cfgTelegramEnabled') ? Boolean($('cfgTelegramEnabled').checked) : false,
-                    announcement_message: $('cfgAnnouncementMsg') ? $('cfgAnnouncementMsg').value.trim() : '',
+                    announcement_message: state.globalConfig?.announcement_message || '',
                     announcement_active: $('cfgAnnouncementActive') ? Boolean($('cfgAnnouncementActive').checked) : false
                 });
                 showToast('تم حفظ الإعدادات العامة بنجاح! ستُطبق على جميع العملاء تلقائياً.', 'success');
                 await loadOverview();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        $('addGlobalAnnouncementBtn')?.addEventListener('click', async () => {
+            const input = $('newGlobalAnnouncementInput');
+            const text = (input?.value || '').trim();
+            if (!text) {
+                showToast('اكتب نص الإعلان أولاً.', 'error');
+                return;
+            }
+            const btn = $('addGlobalAnnouncementBtn');
+            btn.disabled = true;
+            try {
+                if ($('cfgAnnouncementActive')) $('cfgAnnouncementActive').checked = true;
+                const list = parseAdminNoticeList(state.globalConfig?.announcement_message);
+                list.unshift({
+                    id: `g_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    text,
+                    created_at: new Date().toISOString(),
+                    read_by: []
+                });
+                await persistGlobalAnnouncementsList(list);
+                if (input) input.value = '';
+                showToast('تم إرسال الإعلان العام لجميع العملاء لحظياً!', 'success');
             } catch (err) {
                 showToast(err.message, 'error');
             } finally {
@@ -1435,19 +1539,68 @@
             } else if (action === 'client-backups') {
                 openClientBackupsModal(client);
             } else if (action === 'remote-command') {
+                const renderClientNoticesList = () => {
+                    const listHost = $('remoteClientNoticesList');
+                    if (!listHost) return;
+                    const notices = parseAdminNoticeList(client.custom_notice);
+                    if (!notices.length) {
+                        listHost.innerHTML = '<div style="font-size:0.8rem;color:#64748b;text-align:center;padding:10px;border:1px dashed var(--border);border-radius:9px;">لا توجد إشعارات مرسلة لهذا العميل حالياً.</div>';
+                        return;
+                    }
+                    listHost.innerHTML = notices.map((n) => `
+                        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;background:rgba(15,23,42,0.75);border:1px solid var(--border);border-radius:10px;padding:9px 11px;">
+                            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+                                <div style="font-size:0.84rem;color:#f8fafc;line-height:1.45;word-break:break-word;white-space:pre-wrap;">${escapeHtml(n.text)}</div>
+                                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:0.73rem;">
+                                    ${n.created_at ? `<span style="color:#94a3b8;"><i class="fas fa-clock"></i> ${formatRelativeTime(n.created_at)}</span>` : ''}
+                                    ${n.read_at
+                                        ? `<span style="color:#4ade80;font-weight:700;"><i class="fas fa-check-double"></i> تمت القراءة (${formatRelativeTime(n.read_at)})</span>`
+                                        : `<span style="color:#fbbf24;font-weight:700;"><i class="fas fa-hourglass-half"></i> لم يُقرأ بعد</span>`
+                                    }
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-danger btn-xs delete-client-notice-btn" data-id="${escapeHtml(n.id)}" title="حذف الإشعار">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `).join('');
+                    listHost.querySelectorAll('.delete-client-notice-btn').forEach((delBtn) => {
+                        delBtn.addEventListener('click', async () => {
+                            delBtn.disabled = true;
+                            try {
+                                const res = await callAdminApi('send_client_command', {
+                                    license_id: client.id,
+                                    command_type: 'delete_notice',
+                                    notice_id: delBtn.dataset.id
+                                });
+                                client.custom_notice = res.custom_notice ?? '';
+                                renderClientNoticesList();
+                                showToast('تم حذف الإشعار بنجاح', 'success');
+                            } catch (err) {
+                                showToast(err.message, 'error');
+                                delBtn.disabled = false;
+                            }
+                        });
+                    });
+                };
+
                 openModal(`تحكم عن بُعد — ${client.company_name}`, `
                     <div style="display:flex;flex-direction:column;gap:14px;">
                         <div class="field">
-                            <label for="remoteCustomNoticeInput">رسالة تنبيه خاصة تظهر لهذا العميل فقط داخل برنامجه</label>
-                            <textarea id="remoteCustomNoticeInput" rows="3" placeholder="اكتب رسالة خاصة للعميل (اتركها فارغة لإلغاء الرسالة)...">${escapeHtml(client.custom_notice || '')}</textarea>
+                            <label for="remoteCustomNoticeInput"><i class="fas fa-bell" style="color:#fbbf24;margin-left:5px;"></i> إرسال إشعار خاص جديد للعميل (يصل لحظياً في جرس الإشعارات)</label>
+                            <textarea id="remoteCustomNoticeInput" rows="2" placeholder="اكتب الإشعار الخاص للعميل هنا..."></textarea>
                         </div>
                         <div style="display:flex;gap:8px;">
                             <button type="button" id="saveCustomNoticeBtn" class="btn btn-primary" style="flex:1;">
-                                <i class="fas fa-paper-plane"></i> حفظ وإرسال الرسالة
+                                <i class="fas fa-paper-plane"></i> إرسال إشعار جديد
                             </button>
                             <button type="button" id="clearCustomNoticeBtn" class="btn btn-ghost">
-                                مسح الرسالة
+                                مسح الكل
                             </button>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <div style="font-size:0.8rem;font-weight:700;color:#cbd5e1;">الإشعارات المرسلة لهذا العميل (وحالة القراءة):</div>
+                            <div id="remoteClientNoticesList" style="display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto;"></div>
                         </div>
                         <hr style="border-color:var(--border);margin:4px 0;">
                         <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;">
@@ -1467,16 +1620,23 @@
                         </div>
                     </div>
                 `);
+                renderClientNoticesList();
                 $('saveCustomNoticeBtn').addEventListener('click', async () => {
                     const txt = $('remoteCustomNoticeInput').value.trim();
+                    if (!txt) {
+                        showToast('اكتب نص الإشعار أولاً.', 'error');
+                        return;
+                    }
                     try {
-                        await callAdminApi('send_client_command', {
+                        const res = await callAdminApi('send_client_command', {
                             license_id: client.id,
-                            command_type: txt ? 'set_notice' : 'clear_notice',
+                            command_type: 'add_notice',
                             custom_notice: txt
                         });
-                        closeModal();
-                        showToast(txt ? 'تم إرسال الرسالة الخاصة للعميل بنجاح' : 'تم مسح الرسالة الخاصة', 'success');
+                        client.custom_notice = res.custom_notice ?? client.custom_notice;
+                        $('remoteCustomNoticeInput').value = '';
+                        renderClientNoticesList();
+                        showToast('تم إرسال الإشعار الخاص للعميل بنجاح!', 'success');
                         await loadOverview();
                     } catch (err) {
                         showToast(err.message, 'error');
@@ -1485,8 +1645,9 @@
                 $('clearCustomNoticeBtn').addEventListener('click', async () => {
                     try {
                         await callAdminApi('send_client_command', { license_id: client.id, command_type: 'clear_notice' });
-                        closeModal();
-                        showToast('تم مسح الرسالة الخاصة للعميل', 'success');
+                        client.custom_notice = '';
+                        renderClientNoticesList();
+                        showToast('تم مسح جميع إشعارات العميل', 'success');
                         await loadOverview();
                     } catch (err) {
                         showToast(err.message, 'error');

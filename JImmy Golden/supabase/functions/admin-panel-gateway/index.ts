@@ -695,14 +695,54 @@ serve(async (req: Request) => {
 
       const { data: current } = await supabase
         .from("client_licenses")
-        .select("company_id, company_name")
+        .select("company_id, company_name, custom_notice")
         .eq("id", licenseId)
         .maybeSingle();
 
+      const parseNoticeList = (raw: unknown): Array<Record<string, unknown>> => {
+        const str = String(raw || "").trim();
+        if (!str) return [];
+        if (str.startsWith("[")) {
+          try {
+            const arr = JSON.parse(str);
+            if (Array.isArray(arr)) return arr.filter((x) => x && typeof x === "object" && String(x.text || "").trim());
+          } catch (_) {}
+        }
+        return [{ id: `legacy_${str.length}`, text: str, created_at: null, read_at: null }];
+      };
+
       const nowIso = new Date().toISOString();
       const updates: Record<string, unknown> = { updated_at: nowIso };
-      if (commandType === "set_notice") {
-        updates.custom_notice = String(body.custom_notice || "").trim();
+      if (commandType === "add_notice") {
+        const text = String(body.custom_notice || "").trim();
+        if (!text) return jsonResponse({ success: false, error: "نص الإشعار مطلوب." }, 400);
+        const list = parseNoticeList(current?.custom_notice);
+        const newNotice = {
+          id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          text,
+          created_at: nowIso,
+          read_at: null
+        };
+        list.unshift(newNotice);
+        updates.custom_notice = JSON.stringify(list);
+      } else if (commandType === "delete_notice") {
+        const noticeId = String(body.notice_id || "").trim();
+        const list = parseNoticeList(current?.custom_notice).filter((item) => String(item.id || "") !== noticeId);
+        updates.custom_notice = list.length ? JSON.stringify(list) : "";
+      } else if (commandType === "set_notice") {
+        const text = String(body.custom_notice || "").trim();
+        if (!text) {
+          updates.custom_notice = "";
+        } else {
+          const list = parseNoticeList(current?.custom_notice);
+          list.unshift({
+            id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            text,
+            created_at: nowIso,
+            read_at: null
+          });
+          updates.custom_notice = JSON.stringify(list);
+        }
       } else if (commandType === "clear_notice") {
         updates.custom_notice = "";
       } else if (commandType === "force_backup") {
@@ -730,9 +770,13 @@ serve(async (req: Request) => {
         actionType: `remote_${commandType}`,
         targetCompanyId: current?.company_id || licenseId,
         targetCompanyName: current?.company_name || null,
-        details: { command_type: commandType, custom_notice: updates.custom_notice ?? null }
+        details: {
+          command_type: commandType,
+          custom_notice: body.custom_notice ? String(body.custom_notice).trim() : null,
+          notice_id: body.notice_id ? String(body.notice_id).trim() : null
+        }
       });
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true, custom_notice: updates.custom_notice ?? current?.custom_notice ?? "" });
     }
 
     return jsonResponse({ success: false, error: "إجراء غير معروف." }, 400);

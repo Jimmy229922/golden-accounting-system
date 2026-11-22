@@ -325,6 +325,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Client Feature Flags & Runtime Meta
     getClientFeatures: () => invokeChannel('get-client-features'),
     getClientRuntimeMeta: () => invokeChannel('get-client-runtime-meta'),
+    pollClientNotices: () => invokeChannel('poll-client-notices'),
+    markClientNoticesRead: (noticeIds) => invokeChannel('mark-client-notices-read', noticeIds),
     openExternalUrl: (url) => invokeChannel('open-external-url', url),
     chooseBackupFolder: () => invokeChannel('choose-backup-folder'),
     chooseDatabaseFolder: () => invokeChannel('choose-database-folder')
