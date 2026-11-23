@@ -173,6 +173,22 @@ function bindEvents() {
     startRealTimeClock();
     loadAppVersion();
 
+    document.querySelectorAll('.due-sub-row-clickable').forEach((row) => {
+        const triggerOpen = () => {
+            const duesType = row.dataset.duesType;
+            if (duesType && typeof window.showDuesDetails === 'function') {
+                window.showDuesDetails(duesType);
+            }
+        };
+        row.addEventListener('click', triggerOpen);
+        row.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                triggerOpen();
+            }
+        });
+    });
+
     document.querySelectorAll('.chart-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.chart-btn').forEach((b) => b.classList.remove('active'));
@@ -579,6 +595,251 @@ window.showNetProfitDetails = function() {
     });
 };
 
+
+
+function escapeDuesHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+window.showDuesDetails = function(type) {
+    const isReceivables = type === 'receivables';
+    const existing = document.getElementById('duesDetailsModal');
+    if (existing) existing.remove();
+
+    const breakdown = (lastStats && lastStats.duesBreakdown) || {};
+    const rawList = isReceivables ? breakdown.receivablesList : breakdown.payablesList;
+    const items = Array.isArray(rawList)
+        ? rawList.map((row) => ({
+            id: row.id,
+            code: row.code ?? '',
+            name: row.name || '—',
+            phone: row.phone || '',
+            type: row.type || (isReceivables ? 'customer' : 'supplier'),
+            amount: Number(row.amount) || 0
+        }))
+        : [];
+
+    const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
+        || Number(isReceivables ? lastStats?.receivables : lastStats?.payables) || 0;
+    const highestDue = items.length > 0 ? Math.max(...items.map((item) => item.amount)) : 0;
+
+    const modalTitle = isReceivables
+        ? t('dashboard.duesModal.receivablesTitle', 'تفاصيل المستحق على العملاء')
+        : t('dashboard.duesModal.payablesTitle', 'تفاصيل المستحق للموردين');
+    const modalSubtitle = isReceivables
+        ? t('dashboard.duesModal.receivablesSubtitle', 'تفصيل المبالغ المستحقة على كل عميل حسب الرصيد الحالي')
+        : t('dashboard.duesModal.payablesSubtitle', 'تفصيل المبالغ المستحقة لكل مورد حسب الرصيد الحالي');
+    const countLabel = isReceivables
+        ? t('dashboard.duesModal.countCustomers', 'عدد العملاء')
+        : t('dashboard.duesModal.countSuppliers', 'عدد الموردين');
+    const emptyMessage = isReceivables
+        ? t('dashboard.duesModal.emptyCustomers', 'لا توجد مستحقات حالية على العملاء')
+        : t('dashboard.duesModal.emptySuppliers', 'لا توجد مستحقات حالية للموردين');
+    const themeClass = isReceivables ? 'is-receivables' : 'is-payables';
+    const headerIcon = isReceivables ? 'fa-hand-holding-usd' : 'fa-truck-loading';
+
+    const modal = document.createElement('div');
+    modal.id = 'duesDetailsModal';
+    modal.className = `dues-modal-overlay ${themeClass}`;
+
+    modal.innerHTML = `
+        <div class="dues-modal-card" role="dialog" aria-modal="true" aria-labelledby="duesModalTitle">
+            <div class="dues-modal-header">
+                <div class="dues-modal-header-main">
+                    <div class="dues-modal-icon">
+                        <i class="fas ${headerIcon}"></i>
+                    </div>
+                    <div class="dues-modal-titles">
+                        <h3 id="duesModalTitle">${escapeDuesHtml(modalTitle)}</h3>
+                        <p>${escapeDuesHtml(modalSubtitle)}</p>
+                    </div>
+                </div>
+                <button type="button" class="dues-modal-close-btn" id="duesModalCloseX" aria-label="${escapeDuesHtml(t('dashboard.duesModal.close', 'إغلاق'))}">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="dues-modal-summary">
+                <div class="dues-kpi-box dues-kpi-primary">
+                    <span class="dues-kpi-label">${escapeDuesHtml(t('dashboard.duesModal.totalAmount', 'إجمالي المستحقات'))}</span>
+                    <strong class="dues-kpi-value">${money(totalAmount)}</strong>
+                </div>
+                <div class="dues-kpi-box">
+                    <span class="dues-kpi-label">${escapeDuesHtml(countLabel)}</span>
+                    <strong class="dues-kpi-value">${items.length.toLocaleString('en-US')}</strong>
+                </div>
+                <div class="dues-kpi-box">
+                    <span class="dues-kpi-label">${escapeDuesHtml(t('dashboard.duesModal.highestDue', 'أعلى مبلغ مستحق'))}</span>
+                    <strong class="dues-kpi-value">${money(highestDue)}</strong>
+                </div>
+            </div>
+
+            <div class="dues-modal-toolbar">
+                <div class="dues-search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="duesSearchInput" placeholder="${escapeDuesHtml(t('dashboard.duesModal.searchPlaceholder', 'ابحث بالاسم أو الكود أو الهاتف...'))}">
+                </div>
+                <select id="duesSortSelect" class="dues-sort-select">
+                    <option value="amount_desc">${escapeDuesHtml(t('dashboard.duesModal.sortAmountDesc', 'الأعلى مبلغاً'))}</option>
+                    <option value="amount_asc">${escapeDuesHtml(t('dashboard.duesModal.sortAmountAsc', 'الأقل مبلغاً'))}</option>
+                    <option value="name_asc">${escapeDuesHtml(t('dashboard.duesModal.sortNameAsc', 'أبجدياً (أ - ي)'))}</option>
+                </select>
+            </div>
+
+            <div class="dues-modal-body">
+                <div class="dues-modal-table-wrap">
+                    <table class="dues-modal-table">
+                        <thead>
+                            <tr>
+                                <th class="col-rank">#</th>
+                                <th>${escapeDuesHtml(t('common.labels.name', 'الاسم'))}</th>
+                                <th class="col-type">${escapeDuesHtml(t('common.labels.type', 'النوع'))}</th>
+                                <th class="col-share">${escapeDuesHtml(t('dashboard.duesModal.sharePercent', 'النسبة'))}</th>
+                                <th class="col-amount">${escapeDuesHtml(t('common.labels.amount', 'المبلغ'))}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="duesModalTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dues-modal-footer">
+                <div class="dues-footer-stats">
+                    <span class="dues-footer-count" id="duesFilteredCount">0</span>
+                    <span class="dues-footer-sep">•</span>
+                    <span class="dues-footer-total-label">${escapeDuesHtml(t('dashboard.duesModal.filteredTotal', 'إجمالي المعروض'))}:</span>
+                    <strong class="dues-footer-total-val" id="duesFilteredTotal">${money(totalAmount)}</strong>
+                </div>
+                <button type="button" class="dues-modal-btn-close" id="duesModalCloseBtn">
+                    <i class="fas fa-check"></i> ${escapeDuesHtml(t('dashboard.duesModal.close', 'إغلاق'))}
+                </button>
+            </div>
+        </div>
+    `;
+
+    const tbody = modal.querySelector('#duesModalTableBody');
+    const searchInput = modal.querySelector('#duesSearchInput');
+    const sortSelect = modal.querySelector('#duesSortSelect');
+    const filteredCountEl = modal.querySelector('#duesFilteredCount');
+    const filteredTotalEl = modal.querySelector('#duesFilteredTotal');
+
+    const getPartyTypeMeta = (partyType) => {
+        if (partyType === 'supplier') {
+            return { label: t('dashboard.duesModal.typeSupplier', 'مورد'), cls: 'badge-supplier' };
+        }
+        if (partyType === 'both') {
+            return { label: t('dashboard.duesModal.typeBoth', 'عميل ومورد'), cls: 'badge-both' };
+        }
+        return { label: t('dashboard.duesModal.typeCustomer', 'عميل'), cls: 'badge-customer' };
+    };
+
+    const renderRows = () => {
+        const query = (searchInput.value || '').trim().toLowerCase();
+        const sortBy = sortSelect.value || 'amount_desc';
+
+        const filtered = items.filter((item) => {
+            if (!query) return true;
+            return (
+                item.name.toLowerCase().includes(query) ||
+                String(item.code).toLowerCase().includes(query) ||
+                item.phone.toLowerCase().includes(query)
+            );
+        });
+
+        filtered.sort((a, b) => {
+            if (sortBy === 'amount_asc') return a.amount - b.amount;
+            if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'ar');
+            return b.amount - a.amount;
+        });
+
+        const filteredSum = filtered.reduce((sum, item) => sum + item.amount, 0);
+        filteredCountEl.textContent = `${filtered.length} / ${items.length}`;
+        filteredTotalEl.textContent = money(filteredSum);
+
+        if (filtered.length === 0) {
+            const msg = items.length === 0
+                ? emptyMessage
+                : t('dashboard.duesModal.noSearchResults', 'لا توجد نتائج مطابقة للبحث');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5">
+                        <div class="dues-empty-state">
+                            <i class="fas ${items.length === 0 ? 'fa-check-circle' : 'fa-search'}"></i>
+                            <p>${escapeDuesHtml(msg)}</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map((item, idx) => {
+            const share = totalAmount > 0 ? Math.min(100, (item.amount / totalAmount) * 100) : 0;
+            const typeMeta = getPartyTypeMeta(item.type);
+            const metaParts = [];
+            if (item.code) metaParts.push(`<span class="dues-meta-chip" dir="ltr">#${escapeDuesHtml(item.code)}</span>`);
+            if (item.phone) metaParts.push(`<span class="dues-meta-chip" dir="ltr"><i class="fas fa-phone-alt"></i> ${escapeDuesHtml(item.phone)}</span>`);
+
+            return `
+                <tr>
+                    <td class="col-rank"><span class="dues-rank-badge">${idx + 1}</span></td>
+                    <td>
+                        <div class="dues-party-cell">
+                            <span class="dues-party-name">${escapeDuesHtml(item.name)}</span>
+                            ${metaParts.length > 0 ? `<div class="dues-party-meta">${metaParts.join('')}</div>` : ''}
+                        </div>
+                    </td>
+                    <td class="col-type"><span class="dues-type-badge ${typeMeta.cls}">${escapeDuesHtml(typeMeta.label)}</span></td>
+                    <td class="col-share">
+                        <div class="dues-share-wrap">
+                            <span class="dues-share-pct" dir="ltr">${share.toFixed(1)}%</span>
+                            <div class="dues-share-track">
+                                <div class="dues-share-fill" style="width: ${Math.max(share, 2).toFixed(1)}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="col-amount"><strong class="dues-amount-val">${money(item.amount)}</strong></td>
+                </tr>
+            `;
+        }).join('');
+    };
+
+    const closeModal = () => {
+        document.removeEventListener('keydown', onKeyDown);
+        modal.classList.remove('show');
+        setTimeout(() => {
+            if (modal.parentNode) modal.remove();
+        }, 160);
+    };
+
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+        }
+    };
+
+    searchInput.addEventListener('input', renderRows);
+    sortSelect.addEventListener('change', renderRows);
+    modal.querySelector('#duesModalCloseX').addEventListener('click', closeModal);
+    modal.querySelector('#duesModalCloseBtn').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', onKeyDown);
+
+    renderRows();
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => {
+        modal.classList.add('show');
+        if (items.length > 0) searchInput.focus();
+    });
+};
+
 window.showExpensesDetails = function() {
     if (!lastStats || !lastStats.expensesBreakdown) return;
 
@@ -658,6 +919,251 @@ window.showExpensesDetails = function() {
     });
 };
 
+
+
+function escapeDuesHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+window.showDuesDetails = function(type) {
+    const isReceivables = type === 'receivables';
+    const existing = document.getElementById('duesDetailsModal');
+    if (existing) existing.remove();
+
+    const breakdown = (lastStats && lastStats.duesBreakdown) || {};
+    const rawList = isReceivables ? breakdown.receivablesList : breakdown.payablesList;
+    const items = Array.isArray(rawList)
+        ? rawList.map((row) => ({
+            id: row.id,
+            code: row.code ?? '',
+            name: row.name || '—',
+            phone: row.phone || '',
+            type: row.type || (isReceivables ? 'customer' : 'supplier'),
+            amount: Number(row.amount) || 0
+        }))
+        : [];
+
+    const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
+        || Number(isReceivables ? lastStats?.receivables : lastStats?.payables) || 0;
+    const highestDue = items.length > 0 ? Math.max(...items.map((item) => item.amount)) : 0;
+
+    const modalTitle = isReceivables
+        ? t('dashboard.duesModal.receivablesTitle', 'تفاصيل المستحق على العملاء')
+        : t('dashboard.duesModal.payablesTitle', 'تفاصيل المستحق للموردين');
+    const modalSubtitle = isReceivables
+        ? t('dashboard.duesModal.receivablesSubtitle', 'تفصيل المبالغ المستحقة على كل عميل حسب الرصيد الحالي')
+        : t('dashboard.duesModal.payablesSubtitle', 'تفصيل المبالغ المستحقة لكل مورد حسب الرصيد الحالي');
+    const countLabel = isReceivables
+        ? t('dashboard.duesModal.countCustomers', 'عدد العملاء')
+        : t('dashboard.duesModal.countSuppliers', 'عدد الموردين');
+    const emptyMessage = isReceivables
+        ? t('dashboard.duesModal.emptyCustomers', 'لا توجد مستحقات حالية على العملاء')
+        : t('dashboard.duesModal.emptySuppliers', 'لا توجد مستحقات حالية للموردين');
+    const themeClass = isReceivables ? 'is-receivables' : 'is-payables';
+    const headerIcon = isReceivables ? 'fa-hand-holding-usd' : 'fa-truck-loading';
+
+    const modal = document.createElement('div');
+    modal.id = 'duesDetailsModal';
+    modal.className = `dues-modal-overlay ${themeClass}`;
+
+    modal.innerHTML = `
+        <div class="dues-modal-card" role="dialog" aria-modal="true" aria-labelledby="duesModalTitle">
+            <div class="dues-modal-header">
+                <div class="dues-modal-header-main">
+                    <div class="dues-modal-icon">
+                        <i class="fas ${headerIcon}"></i>
+                    </div>
+                    <div class="dues-modal-titles">
+                        <h3 id="duesModalTitle">${escapeDuesHtml(modalTitle)}</h3>
+                        <p>${escapeDuesHtml(modalSubtitle)}</p>
+                    </div>
+                </div>
+                <button type="button" class="dues-modal-close-btn" id="duesModalCloseX" aria-label="${escapeDuesHtml(t('dashboard.duesModal.close', 'إغلاق'))}">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="dues-modal-summary">
+                <div class="dues-kpi-box dues-kpi-primary">
+                    <span class="dues-kpi-label">${escapeDuesHtml(t('dashboard.duesModal.totalAmount', 'إجمالي المستحقات'))}</span>
+                    <strong class="dues-kpi-value">${money(totalAmount)}</strong>
+                </div>
+                <div class="dues-kpi-box">
+                    <span class="dues-kpi-label">${escapeDuesHtml(countLabel)}</span>
+                    <strong class="dues-kpi-value">${items.length.toLocaleString('en-US')}</strong>
+                </div>
+                <div class="dues-kpi-box">
+                    <span class="dues-kpi-label">${escapeDuesHtml(t('dashboard.duesModal.highestDue', 'أعلى مبلغ مستحق'))}</span>
+                    <strong class="dues-kpi-value">${money(highestDue)}</strong>
+                </div>
+            </div>
+
+            <div class="dues-modal-toolbar">
+                <div class="dues-search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="duesSearchInput" placeholder="${escapeDuesHtml(t('dashboard.duesModal.searchPlaceholder', 'ابحث بالاسم أو الكود أو الهاتف...'))}">
+                </div>
+                <select id="duesSortSelect" class="dues-sort-select">
+                    <option value="amount_desc">${escapeDuesHtml(t('dashboard.duesModal.sortAmountDesc', 'الأعلى مبلغاً'))}</option>
+                    <option value="amount_asc">${escapeDuesHtml(t('dashboard.duesModal.sortAmountAsc', 'الأقل مبلغاً'))}</option>
+                    <option value="name_asc">${escapeDuesHtml(t('dashboard.duesModal.sortNameAsc', 'أبجدياً (أ - ي)'))}</option>
+                </select>
+            </div>
+
+            <div class="dues-modal-body">
+                <div class="dues-modal-table-wrap">
+                    <table class="dues-modal-table">
+                        <thead>
+                            <tr>
+                                <th class="col-rank">#</th>
+                                <th>${escapeDuesHtml(t('common.labels.name', 'الاسم'))}</th>
+                                <th class="col-type">${escapeDuesHtml(t('common.labels.type', 'النوع'))}</th>
+                                <th class="col-share">${escapeDuesHtml(t('dashboard.duesModal.sharePercent', 'النسبة'))}</th>
+                                <th class="col-amount">${escapeDuesHtml(t('common.labels.amount', 'المبلغ'))}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="duesModalTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dues-modal-footer">
+                <div class="dues-footer-stats">
+                    <span class="dues-footer-count" id="duesFilteredCount">0</span>
+                    <span class="dues-footer-sep">•</span>
+                    <span class="dues-footer-total-label">${escapeDuesHtml(t('dashboard.duesModal.filteredTotal', 'إجمالي المعروض'))}:</span>
+                    <strong class="dues-footer-total-val" id="duesFilteredTotal">${money(totalAmount)}</strong>
+                </div>
+                <button type="button" class="dues-modal-btn-close" id="duesModalCloseBtn">
+                    <i class="fas fa-check"></i> ${escapeDuesHtml(t('dashboard.duesModal.close', 'إغلاق'))}
+                </button>
+            </div>
+        </div>
+    `;
+
+    const tbody = modal.querySelector('#duesModalTableBody');
+    const searchInput = modal.querySelector('#duesSearchInput');
+    const sortSelect = modal.querySelector('#duesSortSelect');
+    const filteredCountEl = modal.querySelector('#duesFilteredCount');
+    const filteredTotalEl = modal.querySelector('#duesFilteredTotal');
+
+    const getPartyTypeMeta = (partyType) => {
+        if (partyType === 'supplier') {
+            return { label: t('dashboard.duesModal.typeSupplier', 'مورد'), cls: 'badge-supplier' };
+        }
+        if (partyType === 'both') {
+            return { label: t('dashboard.duesModal.typeBoth', 'عميل ومورد'), cls: 'badge-both' };
+        }
+        return { label: t('dashboard.duesModal.typeCustomer', 'عميل'), cls: 'badge-customer' };
+    };
+
+    const renderRows = () => {
+        const query = (searchInput.value || '').trim().toLowerCase();
+        const sortBy = sortSelect.value || 'amount_desc';
+
+        const filtered = items.filter((item) => {
+            if (!query) return true;
+            return (
+                item.name.toLowerCase().includes(query) ||
+                String(item.code).toLowerCase().includes(query) ||
+                item.phone.toLowerCase().includes(query)
+            );
+        });
+
+        filtered.sort((a, b) => {
+            if (sortBy === 'amount_asc') return a.amount - b.amount;
+            if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'ar');
+            return b.amount - a.amount;
+        });
+
+        const filteredSum = filtered.reduce((sum, item) => sum + item.amount, 0);
+        filteredCountEl.textContent = `${filtered.length} / ${items.length}`;
+        filteredTotalEl.textContent = money(filteredSum);
+
+        if (filtered.length === 0) {
+            const msg = items.length === 0
+                ? emptyMessage
+                : t('dashboard.duesModal.noSearchResults', 'لا توجد نتائج مطابقة للبحث');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5">
+                        <div class="dues-empty-state">
+                            <i class="fas ${items.length === 0 ? 'fa-check-circle' : 'fa-search'}"></i>
+                            <p>${escapeDuesHtml(msg)}</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map((item, idx) => {
+            const share = totalAmount > 0 ? Math.min(100, (item.amount / totalAmount) * 100) : 0;
+            const typeMeta = getPartyTypeMeta(item.type);
+            const metaParts = [];
+            if (item.code) metaParts.push(`<span class="dues-meta-chip" dir="ltr">#${escapeDuesHtml(item.code)}</span>`);
+            if (item.phone) metaParts.push(`<span class="dues-meta-chip" dir="ltr"><i class="fas fa-phone-alt"></i> ${escapeDuesHtml(item.phone)}</span>`);
+
+            return `
+                <tr>
+                    <td class="col-rank"><span class="dues-rank-badge">${idx + 1}</span></td>
+                    <td>
+                        <div class="dues-party-cell">
+                            <span class="dues-party-name">${escapeDuesHtml(item.name)}</span>
+                            ${metaParts.length > 0 ? `<div class="dues-party-meta">${metaParts.join('')}</div>` : ''}
+                        </div>
+                    </td>
+                    <td class="col-type"><span class="dues-type-badge ${typeMeta.cls}">${escapeDuesHtml(typeMeta.label)}</span></td>
+                    <td class="col-share">
+                        <div class="dues-share-wrap">
+                            <span class="dues-share-pct" dir="ltr">${share.toFixed(1)}%</span>
+                            <div class="dues-share-track">
+                                <div class="dues-share-fill" style="width: ${Math.max(share, 2).toFixed(1)}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="col-amount"><strong class="dues-amount-val">${money(item.amount)}</strong></td>
+                </tr>
+            `;
+        }).join('');
+    };
+
+    const closeModal = () => {
+        document.removeEventListener('keydown', onKeyDown);
+        modal.classList.remove('show');
+        setTimeout(() => {
+            if (modal.parentNode) modal.remove();
+        }, 160);
+    };
+
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+        }
+    };
+
+    searchInput.addEventListener('input', renderRows);
+    sortSelect.addEventListener('change', renderRows);
+    modal.querySelector('#duesModalCloseX').addEventListener('click', closeModal);
+    modal.querySelector('#duesModalCloseBtn').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', onKeyDown);
+
+    renderRows();
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => {
+        modal.classList.add('show');
+        if (items.length > 0) searchInput.focus();
+    });
+};
+
 window.showRevenuesDetails = function() {
     if (!lastStats || !lastStats.revenuesBreakdown) return;
 
@@ -713,6 +1219,249 @@ window.showRevenuesDetails = function() {
     requestAnimationFrame(() => modal.classList.add('show'));
     modal.addEventListener('click', (e) => {
         if(e.target === modal) modal.remove();
+    });
+};
+
+function escapeDuesHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+window.showDuesDetails = function(type) {
+    const isReceivables = type === 'receivables';
+    const existing = document.getElementById('duesDetailsModal');
+    if (existing) existing.remove();
+
+    const breakdown = (lastStats && lastStats.duesBreakdown) || {};
+    const rawList = isReceivables ? breakdown.receivablesList : breakdown.payablesList;
+    const items = Array.isArray(rawList)
+        ? rawList.map((row) => ({
+            id: row.id,
+            code: row.code ?? '',
+            name: row.name || '—',
+            phone: row.phone || '',
+            type: row.type || (isReceivables ? 'customer' : 'supplier'),
+            amount: Number(row.amount) || 0
+        }))
+        : [];
+
+    const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
+        || Number(isReceivables ? lastStats?.receivables : lastStats?.payables) || 0;
+    const highestDue = items.length > 0 ? Math.max(...items.map((item) => item.amount)) : 0;
+
+    const modalTitle = isReceivables
+        ? t('dashboard.duesModal.receivablesTitle', 'تفاصيل المستحق على العملاء')
+        : t('dashboard.duesModal.payablesTitle', 'تفاصيل المستحق للموردين');
+    const modalSubtitle = isReceivables
+        ? t('dashboard.duesModal.receivablesSubtitle', 'تفصيل المبالغ المستحقة على كل عميل حسب الرصيد الحالي')
+        : t('dashboard.duesModal.payablesSubtitle', 'تفصيل المبالغ المستحقة لكل مورد حسب الرصيد الحالي');
+    const countLabel = isReceivables
+        ? t('dashboard.duesModal.countCustomers', 'عدد العملاء')
+        : t('dashboard.duesModal.countSuppliers', 'عدد الموردين');
+    const emptyMessage = isReceivables
+        ? t('dashboard.duesModal.emptyCustomers', 'لا توجد مستحقات حالية على العملاء')
+        : t('dashboard.duesModal.emptySuppliers', 'لا توجد مستحقات حالية للموردين');
+    const themeClass = isReceivables ? 'is-receivables' : 'is-payables';
+    const headerIcon = isReceivables ? 'fa-hand-holding-usd' : 'fa-truck-loading';
+
+    const modal = document.createElement('div');
+    modal.id = 'duesDetailsModal';
+    modal.className = `dues-modal-overlay ${themeClass}`;
+
+    modal.innerHTML = `
+        <div class="dues-modal-card" role="dialog" aria-modal="true" aria-labelledby="duesModalTitle">
+            <div class="dues-modal-header">
+                <div class="dues-modal-header-main">
+                    <div class="dues-modal-icon">
+                        <i class="fas ${headerIcon}"></i>
+                    </div>
+                    <div class="dues-modal-titles">
+                        <h3 id="duesModalTitle">${escapeDuesHtml(modalTitle)}</h3>
+                        <p>${escapeDuesHtml(modalSubtitle)}</p>
+                    </div>
+                </div>
+                <button type="button" class="dues-modal-close-btn" id="duesModalCloseX" aria-label="${escapeDuesHtml(t('dashboard.duesModal.close', 'إغلاق'))}">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="dues-modal-summary">
+                <div class="dues-kpi-box dues-kpi-primary">
+                    <span class="dues-kpi-label">${escapeDuesHtml(t('dashboard.duesModal.totalAmount', 'إجمالي المستحقات'))}</span>
+                    <strong class="dues-kpi-value">${money(totalAmount)}</strong>
+                </div>
+                <div class="dues-kpi-box">
+                    <span class="dues-kpi-label">${escapeDuesHtml(countLabel)}</span>
+                    <strong class="dues-kpi-value">${items.length.toLocaleString('en-US')}</strong>
+                </div>
+                <div class="dues-kpi-box">
+                    <span class="dues-kpi-label">${escapeDuesHtml(t('dashboard.duesModal.highestDue', 'أعلى مبلغ مستحق'))}</span>
+                    <strong class="dues-kpi-value">${money(highestDue)}</strong>
+                </div>
+            </div>
+
+            <div class="dues-modal-toolbar">
+                <div class="dues-search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="duesSearchInput" placeholder="${escapeDuesHtml(t('dashboard.duesModal.searchPlaceholder', 'ابحث بالاسم أو الكود أو الهاتف...'))}">
+                </div>
+                <select id="duesSortSelect" class="dues-sort-select">
+                    <option value="amount_desc">${escapeDuesHtml(t('dashboard.duesModal.sortAmountDesc', 'الأعلى مبلغاً'))}</option>
+                    <option value="amount_asc">${escapeDuesHtml(t('dashboard.duesModal.sortAmountAsc', 'الأقل مبلغاً'))}</option>
+                    <option value="name_asc">${escapeDuesHtml(t('dashboard.duesModal.sortNameAsc', 'أبجدياً (أ - ي)'))}</option>
+                </select>
+            </div>
+
+            <div class="dues-modal-body">
+                <div class="dues-modal-table-wrap">
+                    <table class="dues-modal-table">
+                        <thead>
+                            <tr>
+                                <th class="col-rank">#</th>
+                                <th>${escapeDuesHtml(t('common.labels.name', 'الاسم'))}</th>
+                                <th class="col-type">${escapeDuesHtml(t('common.labels.type', 'النوع'))}</th>
+                                <th class="col-share">${escapeDuesHtml(t('dashboard.duesModal.sharePercent', 'النسبة'))}</th>
+                                <th class="col-amount">${escapeDuesHtml(t('common.labels.amount', 'المبلغ'))}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="duesModalTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dues-modal-footer">
+                <div class="dues-footer-stats">
+                    <span class="dues-footer-count" id="duesFilteredCount">0</span>
+                    <span class="dues-footer-sep">•</span>
+                    <span class="dues-footer-total-label">${escapeDuesHtml(t('dashboard.duesModal.filteredTotal', 'إجمالي المعروض'))}:</span>
+                    <strong class="dues-footer-total-val" id="duesFilteredTotal">${money(totalAmount)}</strong>
+                </div>
+                <button type="button" class="dues-modal-btn-close" id="duesModalCloseBtn">
+                    <i class="fas fa-check"></i> ${escapeDuesHtml(t('dashboard.duesModal.close', 'إغلاق'))}
+                </button>
+            </div>
+        </div>
+    `;
+
+    const tbody = modal.querySelector('#duesModalTableBody');
+    const searchInput = modal.querySelector('#duesSearchInput');
+    const sortSelect = modal.querySelector('#duesSortSelect');
+    const filteredCountEl = modal.querySelector('#duesFilteredCount');
+    const filteredTotalEl = modal.querySelector('#duesFilteredTotal');
+
+    const getPartyTypeMeta = (partyType) => {
+        if (partyType === 'supplier') {
+            return { label: t('dashboard.duesModal.typeSupplier', 'مورد'), cls: 'badge-supplier' };
+        }
+        if (partyType === 'both') {
+            return { label: t('dashboard.duesModal.typeBoth', 'عميل ومورد'), cls: 'badge-both' };
+        }
+        return { label: t('dashboard.duesModal.typeCustomer', 'عميل'), cls: 'badge-customer' };
+    };
+
+    const renderRows = () => {
+        const query = (searchInput.value || '').trim().toLowerCase();
+        const sortBy = sortSelect.value || 'amount_desc';
+
+        const filtered = items.filter((item) => {
+            if (!query) return true;
+            return (
+                item.name.toLowerCase().includes(query) ||
+                String(item.code).toLowerCase().includes(query) ||
+                item.phone.toLowerCase().includes(query)
+            );
+        });
+
+        filtered.sort((a, b) => {
+            if (sortBy === 'amount_asc') return a.amount - b.amount;
+            if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'ar');
+            return b.amount - a.amount;
+        });
+
+        const filteredSum = filtered.reduce((sum, item) => sum + item.amount, 0);
+        filteredCountEl.textContent = `${filtered.length} / ${items.length}`;
+        filteredTotalEl.textContent = money(filteredSum);
+
+        if (filtered.length === 0) {
+            const msg = items.length === 0
+                ? emptyMessage
+                : t('dashboard.duesModal.noSearchResults', 'لا توجد نتائج مطابقة للبحث');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5">
+                        <div class="dues-empty-state">
+                            <i class="fas ${items.length === 0 ? 'fa-check-circle' : 'fa-search'}"></i>
+                            <p>${escapeDuesHtml(msg)}</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map((item, idx) => {
+            const share = totalAmount > 0 ? Math.min(100, (item.amount / totalAmount) * 100) : 0;
+            const typeMeta = getPartyTypeMeta(item.type);
+            const metaParts = [];
+            if (item.code) metaParts.push(`<span class="dues-meta-chip" dir="ltr">#${escapeDuesHtml(item.code)}</span>`);
+            if (item.phone) metaParts.push(`<span class="dues-meta-chip" dir="ltr"><i class="fas fa-phone-alt"></i> ${escapeDuesHtml(item.phone)}</span>`);
+
+            return `
+                <tr>
+                    <td class="col-rank"><span class="dues-rank-badge">${idx + 1}</span></td>
+                    <td>
+                        <div class="dues-party-cell">
+                            <span class="dues-party-name">${escapeDuesHtml(item.name)}</span>
+                            ${metaParts.length > 0 ? `<div class="dues-party-meta">${metaParts.join('')}</div>` : ''}
+                        </div>
+                    </td>
+                    <td class="col-type"><span class="dues-type-badge ${typeMeta.cls}">${escapeDuesHtml(typeMeta.label)}</span></td>
+                    <td class="col-share">
+                        <div class="dues-share-wrap">
+                            <span class="dues-share-pct" dir="ltr">${share.toFixed(1)}%</span>
+                            <div class="dues-share-track">
+                                <div class="dues-share-fill" style="width: ${Math.max(share, 2).toFixed(1)}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="col-amount"><strong class="dues-amount-val">${money(item.amount)}</strong></td>
+                </tr>
+            `;
+        }).join('');
+    };
+
+    const closeModal = () => {
+        document.removeEventListener('keydown', onKeyDown);
+        modal.classList.remove('show');
+        setTimeout(() => {
+            if (modal.parentNode) modal.remove();
+        }, 160);
+    };
+
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+        }
+    };
+
+    searchInput.addEventListener('input', renderRows);
+    sortSelect.addEventListener('change', renderRows);
+    modal.querySelector('#duesModalCloseX').addEventListener('click', closeModal);
+    modal.querySelector('#duesModalCloseBtn').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', onKeyDown);
+
+    renderRows();
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => {
+        modal.classList.add('show');
+        if (items.length > 0) searchInput.focus();
     });
 };
 

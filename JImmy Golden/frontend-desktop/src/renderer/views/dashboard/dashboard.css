@@ -1034,11 +1034,41 @@
     background: var(--bg-color);
     border-radius: 10px;
     border: 1px solid var(--border-color);
+    transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+.due-sub-row-clickable {
+    cursor: pointer;
+    user-select: none;
+}
+.due-sub-row-clickable:hover {
+    transform: translateX(-2px);
+}
+.due-sub-row-receivables:hover {
+    border-color: rgba(16, 185, 129, 0.55);
+    background: rgba(16, 185, 129, 0.08);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+}
+.due-sub-row-payables:hover {
+    border-color: rgba(239, 68, 68, 0.55);
+    background: rgba(239, 68, 68, 0.08);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.12);
 }
 .due-sub-label {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.due-sub-arrow {
+    font-size: 0.7rem;
+    opacity: 0.45;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.due-sub-row-clickable:hover .due-sub-arrow {
+    opacity: 1;
+    transform: translateX(-3px);
 }
 .due-sub-value {
     font-size: 1.05rem;
@@ -1049,6 +1079,449 @@
 }
 .due-payables {
     color: #ef4444;
+}
+
+.dues-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    direction: rtl;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+.dues-modal-overlay.show {
+    opacity: 1;
+}
+.dues-modal-card {
+    width: min(820px, 95vw);
+    max-height: 86vh;
+    background: var(--card-bg);
+    color: var(--text-color);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateY(12px) scale(0.98);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dues-modal-overlay.show .dues-modal-card {
+    transform: translateY(0) scale(1);
+}
+.dues-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    background: var(--secondary-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+.dues-modal-overlay.is-receivables .dues-modal-header {
+    border-top: 4px solid #10b981;
+}
+.dues-modal-overlay.is-payables .dues-modal-header {
+    border-top: 4px solid #ef4444;
+}
+.dues-modal-header-main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+.dues-modal-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+.dues-modal-overlay.is-receivables .dues-modal-icon {
+    background: rgba(16, 185, 129, 0.14);
+    color: #059669;
+}
+.dues-modal-overlay.is-payables .dues-modal-icon {
+    background: rgba(239, 68, 68, 0.14);
+    color: #dc2626;
+}
+.dues-modal-titles h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--text-color);
+}
+.dues-modal-titles p {
+    margin: 3px 0 0;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+}
+.dues-modal-close-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.dues-modal-close-btn:hover {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #ef4444;
+}
+.dues-modal-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 16px 22px 12px;
+}
+.dues-kpi-box {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.dues-modal-overlay.is-receivables .dues-kpi-primary {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.28);
+}
+.dues-modal-overlay.is-payables .dues-kpi-primary {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.28);
+}
+.dues-kpi-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.dues-kpi-value {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--text-color);
+}
+.dues-modal-overlay.is-receivables .dues-kpi-primary .dues-kpi-value {
+    color: #059669;
+}
+.dues-modal-overlay.is-payables .dues-kpi-primary .dues-kpi-value {
+    color: #dc2626;
+}
+.dues-modal-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 22px 14px;
+}
+.dues-search-box {
+    position: relative;
+    flex: 1;
+}
+.dues-search-box i {
+    position: absolute;
+    right: 13px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+.dues-search-box input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 38px 9px 14px;
+    border-radius: 11px;
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.dues-search-box input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+.dues-sort-select {
+    min-width: 160px;
+    padding: 9px 12px;
+    border-radius: 11px;
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+}
+.dues-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0 22px;
+    display: flex;
+    flex-direction: column;
+}
+.dues-modal-table-wrap {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--card-bg);
+    max-height: 46vh;
+}
+.dues-modal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.dues-modal-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--table-header-bg);
+    color: var(--text-secondary);
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 11px 14px;
+    text-align: right;
+    border-bottom: 1px solid var(--border-color);
+}
+.dues-modal-table tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--table-border);
+    vertical-align: middle;
+}
+.dues-modal-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.dues-modal-table tbody tr:hover td {
+    background: var(--table-hover-bg);
+}
+.dues-modal-table .col-rank {
+    width: 48px;
+    text-align: center;
+}
+.dues-modal-table .col-type {
+    width: 105px;
+    text-align: center;
+}
+.dues-modal-table .col-share {
+    width: 130px;
+}
+.dues-modal-table .col-amount {
+    width: 165px;
+    text-align: left;
+    white-space: nowrap;
+}
+.dues-rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+.dues-party-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.dues-party-name {
+    font-weight: 700;
+    color: var(--text-color);
+    font-size: 0.92rem;
+}
+.dues-party-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.dues-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+.dues-type-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.dues-type-badge.badge-customer {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+}
+.dues-type-badge.badge-supplier {
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+}
+.dues-type-badge.badge-both {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+}
+.dues-share-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.dues-share-pct {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+.dues-share-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--bg-color);
+    overflow: hidden;
+}
+.dues-share-fill {
+    height: 100%;
+    border-radius: 999px;
+}
+.dues-modal-overlay.is-receivables .dues-share-fill {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+.dues-modal-overlay.is-payables .dues-share-fill {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+.dues-amount-val {
+    font-size: 0.96rem;
+    font-weight: 800;
+}
+.dues-modal-overlay.is-receivables .dues-amount-val {
+    color: #059669;
+}
+.dues-modal-overlay.is-payables .dues-amount-val {
+    color: #dc2626;
+}
+.dues-empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.dues-empty-state i {
+    font-size: 2rem;
+    opacity: 0.55;
+}
+.dues-empty-state p {
+    margin: 0;
+    font-weight: 600;
+}
+.dues-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 22px;
+    margin-top: 14px;
+    background: var(--secondary-bg);
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+.dues-footer-stats {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+.dues-footer-count {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    font-weight: 700;
+    color: var(--text-color);
+}
+.dues-footer-total-val {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-color);
+}
+.dues-modal-btn-close {
+    border: none;
+    border-radius: 11px;
+    padding: 9px 22px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffffff;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+}
+.dues-modal-btn-close:hover {
+    filter: brightness(1.06);
+}
+[data-theme="dark"] .dues-modal-overlay {
+    background: rgba(2, 6, 23, 0.78);
+}
+[data-theme="dark"] .dues-modal-overlay.is-receivables .dues-modal-icon,
+[data-theme="dark"] .dues-modal-overlay.is-receivables .dues-kpi-primary .dues-kpi-value,
+[data-theme="dark"] .dues-modal-overlay.is-receivables .dues-amount-val,
+[data-theme="dark"] .dues-type-badge.badge-customer {
+    color: #34d399;
+}
+[data-theme="dark"] .dues-modal-overlay.is-payables .dues-modal-icon,
+[data-theme="dark"] .dues-modal-overlay.is-payables .dues-kpi-primary .dues-kpi-value,
+[data-theme="dark"] .dues-modal-overlay.is-payables .dues-amount-val,
+[data-theme="dark"] .dues-type-badge.badge-supplier {
+    color: #f87171;
+}
+[data-theme="dark"] .dues-type-badge.badge-both {
+    color: #60a5fa;
+}
+@media (max-width: 680px) {
+    .dues-modal-summary {
+        grid-template-columns: 1fr;
+    }
+    .dues-modal-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .dues-modal-table .col-share {
+        display: none;
+    }
 }
 
 /* ============================================

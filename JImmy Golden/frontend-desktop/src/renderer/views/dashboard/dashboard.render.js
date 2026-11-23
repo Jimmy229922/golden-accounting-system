@@ -177,12 +177,18 @@
                         <span class="dues-card-title">${t('dashboard.duesTitle', 'المستحقات')}</span>
                     </div>
                     <div class="dues-combined-content">
-                        <div class="due-sub-row">
-                            <span class="due-sub-label">${t('dashboard.receivables', 'على العملاء')}</span>
+                        <div class="due-sub-row due-sub-row-clickable due-sub-row-receivables" id="receivablesRow" role="button" tabindex="0" data-dues-type="receivables">
+                            <span class="due-sub-label">
+                                <span>${t('dashboard.receivables', 'على العملاء')}</span>
+                                <i class="fas fa-chevron-left due-sub-arrow"></i>
+                            </span>
                             <span class="due-sub-value due-receivables" id="receivables">—</span>
                         </div>
-                        <div class="due-sub-row">
-                            <span class="due-sub-label">${t('dashboard.payables', 'للموردين')}</span>
+                        <div class="due-sub-row due-sub-row-clickable due-sub-row-payables" id="payablesRow" role="button" tabindex="0" data-dues-type="payables">
+                            <span class="due-sub-label">
+                                <span>${t('dashboard.payables', 'للموردين')}</span>
+                                <i class="fas fa-chevron-left due-sub-arrow"></i>
+                            </span>
                             <span class="due-sub-value due-payables" id="payables">—</span>
                         </div>
                     </div>

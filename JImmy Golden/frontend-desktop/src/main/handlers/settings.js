@@ -1012,6 +1012,18 @@ function register() {
             // --- Receivables & Payables (Using standard balances calculation) ---
             const receivables = db.prepare("SELECT COALESCE(SUM(balance), 0) as total FROM parties WHERE balance > 0").get().total;
             const payables = db.prepare("SELECT COALESCE(SUM(ABS(balance)), 0) as total FROM parties WHERE balance < 0").get().total;
+            const receivablesList = db.prepare(`
+                SELECT id, code, name, phone, type, balance as amount
+                FROM parties
+                WHERE balance > 0
+                ORDER BY balance DESC, name ASC
+            `).all();
+            const payablesList = db.prepare(`
+                SELECT id, code, name, phone, type, ABS(balance) as amount
+                FROM parties
+                WHERE balance < 0
+                ORDER BY ABS(balance) DESC, name ASC
+            `).all();
 
             // --- Chart data (last 30 days) ---
             const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
@@ -1174,6 +1186,10 @@ function register() {
                     totalExpenses
                 },
                 netProfit, treasuryBalance, receivables, payables,
+                duesBreakdown: {
+                    receivablesList,
+                    payablesList
+                },
                 chartData: { dailySales, dailyPurchases },
                 recentTransactions,
                 profitDetails: {
