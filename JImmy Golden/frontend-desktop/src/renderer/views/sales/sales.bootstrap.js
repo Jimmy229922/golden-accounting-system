@@ -66,9 +66,6 @@ function initializeElements() {
             onAddRow: () => addInvoiceRow(),
             onSubmitInvoice: submitInvoice,
             onPrintInvoice: printInvoice,
-            onConfirmPrintInvoice: confirmPrintInvoice,
-            onClosePrintPreview: closePrintPreview,
-            onChangePrintPrinter: changePrintPrinter,
             onLoadPrevInvoice: () => navigateInvoice(-1),
             onLoadNextInvoice: () => navigateInvoice(1),
             onOpenDeleteConfirm: openDeleteConfirmModal,
@@ -170,20 +167,8 @@ function initializeElements() {
         });
     }
 
-    if (salesState.dom.printPreviewModal) {
-        salesState.dom.printPreviewModal.addEventListener('click', (event) => {
-            if (event.target === salesState.dom.printPreviewModal) {
-                closePrintPreview();
-            }
-        });
-    }
-
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
-        if (salesState.dom.printPreviewModal?.classList.contains('is-open')) {
-            closePrintPreview();
-            return;
-        }
         if (!salesState.dom.shiftCloseModal) return;
         if (!salesState.dom.shiftCloseModal.classList.contains('is-open')) return;
         closeShiftCloseModal();
@@ -901,163 +886,20 @@ async function loadInvoiceForEdit(id) {
     }
 }
 
-function getSavedPrintPrinterName() {
-    try {
-        return localStorage.getItem(SALES_PRINT_PRINTER_STORAGE_KEY) || '';
-    } catch (_) {
-        return '';
-    }
-}
-
-function savePrintPrinterName(name) {
-    try {
-        if (name) {
-            localStorage.setItem(SALES_PRINT_PRINTER_STORAGE_KEY, name);
-        }
-    } catch (_) {
-    }
-}
-
-function clearSavedPrintPrinterName() {
-    try {
-        localStorage.removeItem(SALES_PRINT_PRINTER_STORAGE_KEY);
-    } catch (_) {
-    }
-}
-
-function syncPrintPreviewContent() {
-    const printArea = document.getElementById('printArea');
-    const previewPage = document.getElementById('salesPrintPreviewPage');
-    if (!printArea || !previewPage) return;
-
-    const clone = printArea.cloneNode(true);
-    clone.style.display = 'block';
-    clone.querySelectorAll('[id]').forEach((element) => element.removeAttribute('id'));
-    previewPage.innerHTML = clone.innerHTML;
-}
-
-function setPrintPreviewOpen(open) {
-    if (!salesState.dom.printPreviewModal) return;
-    salesState.dom.printPreviewModal.style.display = open ? 'flex' : 'none';
-    salesState.dom.printPreviewModal.classList.toggle('is-open', open);
-    salesState.dom.printPreviewModal.setAttribute('aria-hidden', open ? 'false' : 'true');
-    document.body.style.overflow = open ? 'hidden' : '';
-}
-
-async function loadPrintPreviewPrinters({ forceChoose = false } = {}) {
-    const picker = document.getElementById('salesPrintPrinterPicker');
-    const select = document.getElementById('salesPrintPrinterSelect');
-    const status = document.getElementById('salesPrintPrinterStatus');
-    const changeBtn = document.getElementById('salesPrintChangePrinterBtn');
-    if (!picker || !select || !status || !changeBtn) return;
-
-    const savedPrinterName = getSavedPrintPrinterName();
-    let printers = [];
-    try {
-        if (window.electronAPI && typeof window.electronAPI.getPrinters === 'function') {
-            printers = await window.electronAPI.getPrinters();
-        }
-    } catch (_) {
-        printers = [];
-    }
-
-    const normalizedPrinters = Array.isArray(printers) ? printers : [];
-    select.innerHTML = '';
-    normalizedPrinters.forEach((printer) => {
-        const printerName = printer.name || printer.displayName || '';
-        if (!printerName) return;
-        const option = document.createElement('option');
-        option.value = printerName;
-        option.textContent = printer.displayName || printerName;
-        if (printer.isDefault) option.dataset.defaultPrinter = '1';
-        select.appendChild(option);
-    });
-
-    const hasSavedPrinter = savedPrinterName && normalizedPrinters.some((printer) => (printer.name || printer.displayName || '') === savedPrinterName);
-    if (savedPrinterName && !hasSavedPrinter && normalizedPrinters.length > 0) {
-        clearSavedPrintPrinterName();
-    }
-
-    if (hasSavedPrinter && !forceChoose) {
-        picker.style.display = 'none';
-        changeBtn.style.display = '';
-        const selectedPrinter = normalizedPrinters.find((printer) => (printer.name || printer.displayName || '') === savedPrinterName);
-        status.textContent = `الطابعة الحالية: ${selectedPrinter?.displayName || savedPrinterName}`;
-        return;
-    }
-
-    picker.style.display = normalizedPrinters.length > 0 ? 'grid' : 'none';
-    changeBtn.style.display = 'none';
-    status.textContent = normalizedPrinters.length > 0
-        ? 'اختر الطابعة أول مرة، وسيتم استخدامها تلقائياً بعد ذلك.'
-        : 'لم يتم العثور على طابعات. سيتم استخدام نافذة الطباعة العادية.';
-
-    const defaultOption = Array.from(select.options).find((option) => option.dataset.defaultPrinter === '1');
-    if (defaultOption) {
-        select.value = defaultOption.value;
-    }
-}
-
-async function openPrintPreview() {
-    syncPrintPreviewContent();
-    setPrintPreviewOpen(true);
-    await loadPrintPreviewPrinters({ forceChoose: !getSavedPrintPrinterName() });
-}
-
-function closePrintPreview() {
-    setPrintPreviewOpen(false);
-}
-
-async function changePrintPrinter() {
-    clearSavedPrintPrinterName();
-    await loadPrintPreviewPrinters({ forceChoose: true });
-}
-
-async function confirmPrintInvoice() {
-    const printBtn = document.getElementById('salesPrintConfirmBtn');
-    const select = document.getElementById('salesPrintPrinterSelect');
-    const savedPrinterName = getSavedPrintPrinterName();
-    const selectedPrinterName = savedPrinterName || select?.value || '';
-
-    if (printBtn) {
-        printBtn.disabled = true;
-        printBtn.textContent = 'جاري الطباعة...';
-    }
-
-    try {
-        if (window.electronAPI && typeof window.electronAPI.printCurrentWindow === 'function' && selectedPrinterName) {
-            const result = await window.electronAPI.printCurrentWindow({
-                silent: true,
-                deviceName: selectedPrinterName
-            });
-            if (result && result.success) {
-                savePrintPrinterName(selectedPrinterName);
-                closePrintPreview();
-                if (window.showToast) window.showToast('تم إرسال الفاتورة للطابعة', 'success');
-                return;
-            }
-            if (window.showToast) window.showToast((result && result.error) || 'تعذر طباعة الفاتورة', 'error');
-            return;
-        }
-
-        window.print();
-        closePrintPreview();
-    } finally {
-        if (printBtn) {
-            printBtn.disabled = false;
-            printBtn.textContent = 'طباعة';
-        }
-    }
-}
+const salesInvoicePrintPreview = window.invoicePrintDocument.createPreviewController({
+    storageKey: SALES_PRINT_PRINTER_STORAGE_KEY
+});
 
 async function printInvoice() {
-    // 1. Gather all data for printing from the DOM
     const customerSelect = salesState.dom.customerSelect;
-    const customerName = customerSelect.options[customerSelect.selectedIndex]?.text || '';
     const selectedCustomerOption = customerSelect.options[customerSelect.selectedIndex];
+    const customerName = selectedCustomerOption?.text || '';
     const invoiceNumber = document.getElementById('invoiceNumber').value;
-    const invoiceDate = salesState.dom.invoiceDateInput.value || new Date().toLocaleDateString('ar-EG');
+    const invoiceDate = salesState.dom.invoiceDateInput.value || new Date().toISOString().slice(0, 10);
     const customerBalance = parseFloat(selectedCustomerOption?.dataset.balance || '0') || 0;
+    const paymentTypeSelect = document.getElementById('paymentType');
+    const paymentTypeLabel = paymentTypeSelect?.options[paymentTypeSelect.selectedIndex]?.text || '';
+    const notes = document.getElementById('invoiceNotes')?.value || '';
 
     const { items, isValid } = collectInvoiceItemsFromForm();
     if (!isValid || items.length === 0) {
@@ -1065,69 +907,69 @@ async function printInvoice() {
         return;
     }
 
-    const financials = getInvoiceFinancials(parseLocaleFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0);
-
-    // 2. Submit the invoice if not locked
+    const subtotal = parseLocaleFloat(salesState.dom.invoiceSubtotalSpan?.textContent || '0') || 0;
+    const financials = getInvoiceFinancials(subtotal);
     const wasEditing = !!salesState.editingInvoiceId;
     const locked = isEditLocked();
-    
+
     if (!locked) {
         await submitInvoice();
-        
-        // Check if submit was successful by seeing if form reset
         if (customerSelect.value !== '') {
-            // Form didn't reset, meaning save failed or validation failed. Stop printing.
             return;
         }
     }
 
-    // 4. Populate Print Area
-    document.getElementById('printInvoiceNumber').textContent = invoiceNumber || (wasEditing ? 'معدلة' : 'جديدة');
-    document.getElementById('printInvoiceDate').textContent = invoiceDate;
-    document.getElementById('printCustomerName').textContent = customerName;
-
-    const printItemsTbody = document.getElementById('printInvoiceItems');
-    printItemsTbody.innerHTML = '';
-    items.forEach((item, index) => {
-        const itemObj = salesState.allItems.find(i => i.id === item.item_id);
-        const itemName = itemObj ? (itemObj.item_name || itemObj.name || '') : '';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${index + 1}</td>
-            <td>${itemName}</td>
-            <td>${item.quantity}</td>
-            <td>${parseFloat(item.sale_price).toFixed(2)}</td>
-            <td>${parseFloat(item.total_price).toFixed(2)}</td>
-        `;
-        printItemsTbody.appendChild(tr);
-    });
-
-    const netTotal = financials.netTotal;
-    const paid = financials.paidAmount;
-    const remaining = netTotal - paid;
+    const remaining = financials.netTotal - financials.paidAmount;
     const previousBalance = wasEditing && locked ? customerBalance - remaining : customerBalance;
     const currentBalance = wasEditing && locked ? customerBalance : previousBalance + remaining;
+    const { buildInvoiceHtml, loadCompanyInfo, formatMoney: formatPrintMoney, formatQty: formatPrintQty } = window.invoicePrintDocument;
+    const company = await loadCompanyInfo();
 
-    document.getElementById('printInvoiceTotal').textContent = netTotal.toFixed(2);
-    document.getElementById('printInvoicePaid').textContent = paid.toFixed(2);
-    document.getElementById('printInvoiceRemaining').textContent = remaining.toFixed(2);
-    document.getElementById('printCustomerPreviousBalance').textContent = previousBalance.toFixed(2);
-    document.getElementById('printCustomerCurrentBalance').textContent = currentBalance.toFixed(2);
+    const rows = items.map((item, index) => {
+        const itemObj = salesState.allItems.find((i) => i.id === item.item_id);
+        return [
+            { text: index + 1, className: 'idx' },
+            { text: itemObj ? (itemObj.item_name || itemObj.name || '') : '', className: 'text' },
+            { text: itemObj?.unit_name || '—' },
+            { text: formatPrintQty(item.quantity), className: 'strong' },
+            { text: formatPrintMoney(item.sale_price) },
+            { text: formatPrintMoney(item.total_price), className: 'amount' }
+        ];
+    });
 
-    // Get settings for company info
-    try {
-        const settings = await window.electronAPI.getSettings();
-        if (settings) {
-            const companyPhone = settings.companyPhone || settings.company_phone || '';
-            document.getElementById('printCompanyName').textContent = settings.companyName || settings.company_name || 'اسم الشركة';
-            document.getElementById('printCompanyInfo').textContent = companyPhone ? `هاتف: ${companyPhone}` : '';
-            document.getElementById('printFooterText').textContent = settings.invoiceFooter || settings.invoice_notes || 'شكراً لتعاملكم معنا';
-        }
-    } catch(e) {
-        console.error('Error fetching settings for print', e);
-    }
+    const html = buildInvoiceHtml({
+        tone: 'sales',
+        title: 'فاتورة مبيعات',
+        invoiceNumber,
+        company,
+        meta: [
+            { label: 'رقم الفاتورة', value: invoiceNumber || (wasEditing ? 'معدلة' : 'جديدة') },
+            { label: 'التاريخ', value: invoiceDate },
+            { label: 'العميل', value: customerName },
+            { label: 'طريقة الدفع', value: paymentTypeLabel }
+        ],
+        columns: ['م', 'الصنف', 'الوحدة', 'الكمية', 'السعر', 'الإجمالي'],
+        rows,
+        itemsTotal: subtotal,
+        totals: [
+            { label: 'إجمالي الأصناف', value: formatPrintMoney(subtotal) },
+            financials.discountAmount > 0 ? { label: 'الخصم', value: formatPrintMoney(financials.discountAmount), className: 'discount' } : null,
+            { label: 'صافي الفاتورة', value: formatPrintMoney(financials.netTotal), className: 'net' },
+            { label: 'المدفوع', value: formatPrintMoney(financials.paidAmount), className: 'paid' },
+            { label: 'المتبقي من الفاتورة', value: formatPrintMoney(remaining), className: 'remaining' }
+        ],
+        balances: {
+            title: 'حساب العميل',
+            previousLabel: 'الرصيد السابق للعميل',
+            previous: previousBalance,
+            currentLabel: 'إجمالي حساب العميل الحالي',
+            current: currentBalance
+        },
+        notes,
+        footerText: company.footerText
+    });
 
-    await openPrintPreview();
+    await salesInvoicePrintPreview.open(html);
 }
 
 async function submitInvoice() {

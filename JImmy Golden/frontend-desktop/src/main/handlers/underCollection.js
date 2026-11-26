@@ -452,6 +452,63 @@ function register() {
                 ${discountedWhereSql}
                 ORDER BY u.record_date DESC, u.id DESC
             `).all(args);
+            const remainingRows = db.prepare(`
+                SELECT * FROM (
+                    SELECT 
+                        u.id,
+                        u.document_number,
+                        u.record_date,
+                        u.statement,
+                        u.invoice_number,
+                        u.total_usd,
+                        u.discount_usd,
+                        CASE 
+                            WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd 
+                            ELSE u.total_usd 
+                        END as net_usd,
+                        COALESCE(exp.total_paid, 0) as total_paid,
+                        CASE 
+                            WHEN COALESCE(exp.total_paid, 0) > 0 THEN 
+                                MAX(0, (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) - COALESCE(exp.total_paid, 0))
+                            WHEN u.is_collected = 1 AND u.remaining_usd > 0 THEN u.remaining_usd
+                            WHEN u.is_collected = 1 AND u.remaining_usd = 0 THEN 0
+                            ELSE (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END)
+                        END as remaining_usd,
+                        CASE 
+                            WHEN (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) > 0 THEN
+                                ROUND((CASE 
+                                    WHEN COALESCE(exp.total_paid, 0) > 0 THEN 
+                                        MAX(0, (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) - COALESCE(exp.total_paid, 0))
+                                    WHEN u.is_collected = 1 AND u.remaining_usd > 0 THEN u.remaining_usd
+                                    WHEN u.is_collected = 1 AND u.remaining_usd = 0 THEN 0
+                                    ELSE (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END)
+                                END) / (CASE WHEN u.net_usd > 0 OR u.discount_usd > 0 THEN u.net_usd ELSE u.total_usd END) * 100, 2)
+                            ELSE 0
+                        END as remaining_percent
+                    FROM under_collection_records u
+                    LEFT JOIN (
+                        SELECT 
+                            CASE 
+                                WHEN e.under_collection_id IS NOT NULL AND EXISTS (SELECT 1 FROM under_collection_records u_chk WHERE u_chk.id = e.under_collection_id)
+                                    THEN e.under_collection_id
+                                ELSE (
+                                    SELECT u_fb.id
+                                    FROM under_collection_records u_fb
+                                    WHERE LOWER(TRIM(u_fb.invoice_number)) = LOWER(TRIM(e.invoice_number))
+                                    ORDER BY u_fb.id DESC
+                                    LIMIT 1
+                                )
+                            END as target_uc_id,
+                            SUM(e.amount) as total_paid
+                        FROM export_revenues e
+                        WHERE (e.under_collection_id IS NOT NULL) OR (e.invoice_number IS NOT NULL AND TRIM(e.invoice_number) != '')
+                        GROUP BY target_uc_id
+                    ) exp ON u.id = exp.target_uc_id
+                    ${whereSql}
+                ) rem_sub
+                WHERE rem_sub.remaining_usd > 0.005
+                ORDER BY rem_sub.record_date DESC, rem_sub.id DESC
+            `).all(args);
             const rows = db.prepare(`
                 SELECT 
                     u.id, 
@@ -563,6 +620,7 @@ function register() {
                 success: true,
                 rows,
                 discountedRows,
+                remainingRows,
                 customItemNames,
                 existingInvoiceEntries,
                 total,
@@ -573,6 +631,7 @@ function register() {
                 totalRemaining: roundMoney(totalRemaining),
                 totalDiscount: roundMoney(totalDiscount),
                 discountedCount: Number(discountedCount) || 0,
+                remainingCount: remainingRows.length,
                 page,
                 pageSize,
                 totalPages: Math.max(1, Math.ceil(total / pageSize))
@@ -860,7 +919,12 @@ function register() {
 
             const date = new Date().toISOString().slice(0, 10);
             const defaultName = String(payload.defaultName || `Under_Collection_${date}.pdf`).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
-            const defaultPath = path.join(app.getPath('documents'), defaultName);
+            const docsDir = app.getPath('documents');
+            const desktopDir = app.getPath('desktop');
+            const baseSaveDir = (fs.existsSync(docsDir) && !/onedrive/i.test(docsDir))
+                ? docsDir
+                : (fs.existsSync(desktopDir) ? desktopDir : (fs.existsSync(docsDir) ? docsDir : ''));
+            const defaultPath = baseSaveDir ? path.join(baseSaveDir, defaultName) : defaultName;
             const { canceled, filePath } = await dialog.showSaveDialog(win, {
                 title: 'حفظ ملف تحت التحصيل PDF',
                 defaultPath,
@@ -871,13 +935,39 @@ function register() {
                 return { success: false, canceled: true };
             }
 
-            const pdfBuffer = await event.sender.printToPDF({
-                printBackground: true,
-                pageSize: 'A4',
-                landscape: true,
-                marginsType: 0,
-                preferCSSPageSize: true
-            });
+            let pdfBuffer;
+            if (payload && typeof payload.html === 'string' && payload.html.trim()) {
+                const printWin = new BrowserWindow({
+                    show: false,
+                    width: 1280,
+                    height: 900,
+                    webPreferences: {
+                        sandbox: true
+                    }
+                });
+                try {
+                    await printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.html)}`);
+                    pdfBuffer = await printWin.webContents.printToPDF({
+                        printBackground: true,
+                        pageSize: 'A4',
+                        landscape: true,
+                        marginsType: 0,
+                        preferCSSPageSize: true
+                    });
+                } finally {
+                    if (!printWin.isDestroyed()) {
+                        printWin.destroy();
+                    }
+                }
+            } else {
+                pdfBuffer = await event.sender.printToPDF({
+                    printBackground: true,
+                    pageSize: 'A4',
+                    landscape: true,
+                    marginsType: 0,
+                    preferCSSPageSize: true
+                });
+            }
 
             fs.writeFileSync(filePath, pdfBuffer);
             return { success: true, filePath };

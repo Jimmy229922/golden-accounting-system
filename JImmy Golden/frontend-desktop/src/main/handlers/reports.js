@@ -753,48 +753,55 @@ function extractPurchaseDetailMeta(rawQuantity, fallbackQty, rawWeights) {
         }
     });
 
-    ipcMain.handle('save-customer-report-pdf', async (event, payload) => {
-        const sourceWebContents = event.sender;
+    async function exportStatementHtmlToPdf(event, payload, { dialogTitle, fallbackName, landscape }) {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win) {
+            return { success: false, error: 'No active window found' };
+        }
+
+        const html = typeof payload?.html === 'string' ? payload.html : '';
+        if (!html.trim()) {
+            return { success: false, error: 'لا يوجد محتوى للتصدير' };
+        }
+
+        const date = new Date().toISOString().split('T')[0];
+        const defaultName = sanitizeSuggestedFileName(payload?.defaultName || `${fallbackName}_${date}.pdf`);
+        const { canceled, filePath } = await dialog.showSaveDialog(win, {
+            title: dialogTitle,
+            defaultPath: path.join(app.getPath('downloads'), defaultName),
+            filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        });
+
+        if (canceled || !filePath) {
+            return { success: false, canceled: true };
+        }
+
+        const tempHtmlPath = path.join(app.getPath('temp'), `statement_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.html`);
+        const printWin = new BrowserWindow({
+            show: false,
+            width: landscape ? 1123 : 794,
+            height: landscape ? 794 : 1123,
+            webPreferences: { sandbox: true, javascript: false }
+        });
+
         try {
-            const win = BrowserWindow.fromWebContents(sourceWebContents);
-            if (!win) {
-                return { success: false, error: 'No active window found' };
-            }
+            fs.writeFileSync(tempHtmlPath, html, 'utf8');
+            await printWin.loadFile(tempHtmlPath);
 
-            const date = new Date().toISOString().split('T')[0];
-            const requestedDefault = payload?.defaultName;
-            const defaultName = sanitizeSuggestedFileName(requestedDefault || `Customer_Report_${date}.pdf`);
-            const defaultPath = path.join(app.getPath('downloads'), defaultName);
-
-            const { canceled, filePath } = await dialog.showSaveDialog(win, {
-                title: 'حفظ تقرير العميل PDF',
-                defaultPath,
-                filters: [{ name: 'PDF', extensions: ['pdf'] }]
-            });
-
-            if (canceled || !filePath) {
-                return { success: false, canceled: true };
-            }
-
-            await prepareShellFrameForPdfCapture(sourceWebContents);
-
-            const pdfBuffer = await sourceWebContents.printToPDF({
+            const pdfBuffer = await printWin.webContents.printToPDF({
                 printBackground: true,
                 pageSize: 'A4',
-                landscape: true,
-                marginsType: 0,
-                preferCSSPageSize: true
+                landscape,
+                preferCSSPageSize: false,
+                margins: { top: 0.3, bottom: 0.4, left: 0.3, right: 0.3 }
             });
 
-            // Set PDF metadata title to match the chosen filename (without extension)
-            const title = path.basename(filePath, path.extname(filePath));
             const { PDFDocument, StandardFonts, rgb } = getPdfLib();
             const pdfDoc = await PDFDocument.load(pdfBuffer);
-            pdfDoc.setTitle(title);
+            pdfDoc.setTitle(path.basename(filePath, path.extname(filePath)));
             pdfDoc.setCreator('Accounting System');
             pdfDoc.setProducer('Accounting System');
 
-            // Add page numbers
             const pages = pdfDoc.getPages();
             const totalPages = pages.length;
             if (totalPages > 0) {
@@ -805,7 +812,7 @@ function extractPurchaseDetailMeta(rawQuantity, fallbackQty, rawWeights) {
                     const textWidth = font.widthOfTextAtSize(text, 9);
                     page.drawText(text, {
                         x: (width - textWidth) / 2,
-                        y: 6,
+                        y: 10,
                         size: 9,
                         font,
                         color: rgb(0.45, 0.45, 0.45)
@@ -813,85 +820,39 @@ function extractPurchaseDetailMeta(rawQuantity, fallbackQty, rawWeights) {
                 });
             }
 
-            const finalPdf = await pdfDoc.save();
-            fs.writeFileSync(filePath, finalPdf);
-
+            fs.writeFileSync(filePath, await pdfDoc.save());
             return { success: true, filePath };
+        } finally {
+            if (!printWin.isDestroyed()) {
+                printWin.destroy();
+            }
+            try { fs.unlinkSync(tempHtmlPath); } catch (_) {}
+        }
+    }
+
+    ipcMain.handle('save-customer-report-pdf', async (event, payload) => {
+        try {
+            return await exportStatementHtmlToPdf(event, payload, {
+                dialogTitle: 'حفظ كشف حساب تفصيلي PDF',
+                fallbackName: 'Customer_Statement',
+                landscape: true
+            });
         } catch (error) {
             console.error('[save-customer-report-pdf] error:', error);
             return { success: false, error: error.message };
-        } finally {
-            await restoreShellFrameAfterPdfCapture(sourceWebContents);
         }
     });
 
     ipcMain.handle('save-customer-summary-pdf', async (event, payload) => {
-        const sourceWebContents = event.sender;
         try {
-            const win = BrowserWindow.fromWebContents(sourceWebContents);
-            if (!win) {
-                return { success: false, error: 'No active window found' };
-            }
-
-            const date = new Date().toISOString().split('T')[0];
-            const requestedDefault = payload?.defaultName;
-            const defaultName = sanitizeSuggestedFileName(requestedDefault || `Customer_Summary_${date}.pdf`);
-            const defaultPath = path.join(app.getPath('downloads'), defaultName);
-
-            const { canceled, filePath } = await dialog.showSaveDialog(win, {
-                title: 'حفظ فاتورة مجمعة PDF',
-                defaultPath,
-                filters: [{ name: 'PDF', extensions: ['pdf'] }]
+            return await exportStatementHtmlToPdf(event, payload, {
+                dialogTitle: 'حفظ فاتورة مجمعة PDF',
+                fallbackName: 'Customer_Summary',
+                landscape: false
             });
-
-            if (canceled || !filePath) {
-                return { success: false, canceled: true };
-            }
-
-            await prepareShellFrameForPdfCapture(sourceWebContents);
-
-            const pdfBuffer = await sourceWebContents.printToPDF({
-                printBackground: true,
-                pageSize: 'A4',
-                landscape: false,
-                marginsType: 0,
-                preferCSSPageSize: false
-            });
-
-            const title = path.basename(filePath, path.extname(filePath));
-            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
-            const pdfDoc = await PDFDocument.load(pdfBuffer);
-            pdfDoc.setTitle(title);
-            pdfDoc.setCreator('Accounting System');
-            pdfDoc.setProducer('Accounting System');
-
-            const pages = pdfDoc.getPages();
-            const totalPages = pages.length;
-            if (totalPages > 0) {
-                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                pages.forEach((page, i) => {
-                    const { width } = page.getSize();
-                    const text = `${i + 1} / ${totalPages}`;
-                    const textWidth = font.widthOfTextAtSize(text, 9);
-                    page.drawText(text, {
-                        x: (width - textWidth) / 2,
-                        y: 6,
-                        size: 9,
-                        font,
-                        color: rgb(0.45, 0.45, 0.45)
-                    });
-                });
-            }
-
-            const finalPdf = await pdfDoc.save();
-            fs.writeFileSync(filePath, finalPdf);
-
-            return { success: true, filePath };
         } catch (error) {
             console.error('[save-customer-summary-pdf] error:', error);
             return { success: false, error: error.message };
-        } finally {
-            await restoreShellFrameAfterPdfCapture(sourceWebContents);
         }
     });
 

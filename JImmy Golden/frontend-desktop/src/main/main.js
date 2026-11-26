@@ -465,6 +465,49 @@ ipcMain.handle('print-current-window', async (event, options = {}) => {
     });
 });
 
+ipcMain.handle('print-invoice-document', async (_event, options = {}) => {
+    const html = typeof options.html === 'string' ? options.html : '';
+    if (!html.trim()) {
+        return { success: false, error: 'لا يوجد محتوى للطباعة' };
+    }
+
+    const tempHtmlPath = path.join(app.getPath('temp'), `invoice_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.html`);
+    const printWin = new BrowserWindow({
+        show: false,
+        width: 794,
+        height: 1123,
+        webPreferences: { sandbox: true, javascript: false }
+    });
+
+    try {
+        fs.writeFileSync(tempHtmlPath, html, 'utf8');
+        await printWin.loadFile(tempHtmlPath);
+        return await new Promise((resolve) => {
+            printWin.webContents.print({
+                silent: Boolean(options.silent),
+                printBackground: true,
+                deviceName: typeof options.deviceName === 'string' ? options.deviceName : '',
+                pageSize: 'A4',
+                margins: { marginType: 'custom', top: 28, bottom: 28, left: 24, right: 24 }
+            }, (success, failureReason) => {
+                const reason = String(failureReason || '');
+                resolve({
+                    success,
+                    canceled: !success && /cancel/i.test(reason),
+                    error: success ? '' : (reason || 'Print failed')
+                });
+            });
+        });
+    } catch (error) {
+        return { success: false, error: error.message };
+    } finally {
+        if (!printWin.isDestroyed()) {
+            printWin.destroy();
+        }
+        try { fs.unlinkSync(tempHtmlPath); } catch (_) {}
+    }
+});
+
 // Focus existing window when a second instance tries to launch
 app.on('second-instance', () => {
     const win = getMainWindow();

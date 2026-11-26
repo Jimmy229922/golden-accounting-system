@@ -16,6 +16,8 @@ const state = {
     totalDiscount: 0,
     discountedCount: 0,
     discountedRows: [],
+    remainingCount: 0,
+    remainingRows: [],
     totalCount: 0,
     customItemNames: [],
     existingInvoiceEntries: []
@@ -940,11 +942,12 @@ function renderPage() {
                         <div id="underCollectionCollectedSurplusNote" style="display: none;"></div>
                     </div>
                 </div>
-                <div class="stat-card stat-remaining">
+                <div class="stat-card stat-remaining" id="underCollectionRemainingCard" role="button" tabindex="0" title="اضغط لعرض تفاصيل الفواتير المتبقية وفلترتها">
                     <div class="stat-icon"><i class="fas fa-clock"></i></div>
                     <div class="stat-info">
                         <div class="stat-title">إجمالي الفواتير بالدولار بعد التحصيل</div>
                         <div class="stat-value" id="underCollectionTotalRemaining">0.00</div>
+                        <div id="underCollectionRemainingNote" class="stat-discount-note"></div>
                     </div>
                 </div>
                 <div class="stat-card stat-discount" id="underCollectionDiscountCard" role="button" tabindex="0" title="اضغط لعرض تفاصيل الفواتير المخصومة">
@@ -1210,6 +1213,28 @@ function renderPage() {
                 </div>
             </div>
         </div>
+        <div id="remainingDetailsModal" class="petty-modal-overlay hidden" style="z-index: 100001;">
+            <div class="petty-modal-card remaining-details-modal-card" role="dialog" aria-modal="true" aria-labelledby="remainingDetailsTitle">
+                <div class="petty-modal-header" style="padding: 14px 22px;">
+                    <div class="petty-modal-title">
+                        <i class="fas fa-percentage" style="color: #d97706;"></i>
+                        <h2 id="remainingDetailsTitle">تفاصيل الفواتير المتبقية ونسب التحصيل</h2>
+                    </div>
+                    <button type="button" class="petty-modal-close" id="closeRemainingDetailsBtn" aria-label="إغلاق">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="petty-modal-body" id="remainingDetailsContent" style="padding: 18px 22px; max-height: 80vh;"></div>
+                <div class="petty-modal-footer" style="padding: 12px 22px; justify-content: space-between;">
+                    <button type="button" class="btn btn-outline" id="exportRemainingPdfBtn" style="border-radius: 8px; padding: 8px 18px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-file-pdf"></i> تصدير PDF للنتيجة الحالية
+                    </button>
+                    <button type="button" class="btn btn-primary" id="confirmRemainingDetailsBtn" style="border-radius: 8px; padding: 8px 24px;">
+                        إغلاق
+                    </button>
+                </div>
+            </div>
+        </div>
         <div id="ucProductDropdownPortal" class="uc-product-dropdown hidden" role="listbox"></div>
     `;
 }
@@ -1347,6 +1372,22 @@ function bindEvents() {
     const discountDetailsModal = document.getElementById('discountDetailsModal');
     discountDetailsModal?.addEventListener('click', (e) => {
         if (e.target === discountDetailsModal) closeDiscountDetailsModal();
+    });
+
+    const remainingCard = document.getElementById('underCollectionRemainingCard');
+    remainingCard?.addEventListener('click', openRemainingDetailsModal);
+    remainingCard?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openRemainingDetailsModal();
+        }
+    });
+    document.getElementById('closeRemainingDetailsBtn')?.addEventListener('click', closeRemainingDetailsModal);
+    document.getElementById('confirmRemainingDetailsBtn')?.addEventListener('click', closeRemainingDetailsModal);
+    document.getElementById('exportRemainingPdfBtn')?.addEventListener('click', exportRemainingDetailsPdf);
+    const remainingDetailsModal = document.getElementById('remainingDetailsModal');
+    remainingDetailsModal?.addEventListener('click', (e) => {
+        if (e.target === remainingDetailsModal) closeRemainingDetailsModal();
     });
 
     window.financialPagination?.bind(document.getElementById('pagination'), {
@@ -1580,6 +1621,604 @@ function closeDiscountDetailsModal() {
     document.getElementById('discountDetailsModal')?.classList.add('hidden');
 }
 
+const remainingModalFilter = {
+    excludeFull: false,
+    selectedPercents: new Set(),
+    minPercent: '',
+    maxPercent: '',
+    search: ''
+};
+
+function getRemainingRowsList() {
+    const source = Array.isArray(state.remainingRows) && state.remainingRows.length
+        ? state.remainingRows
+        : (Array.isArray(state.rows) ? state.rows : []).filter((r) => (Number(r?.remaining_usd) || 0) > 0.005);
+
+    return source.map((row) => {
+        const netUsd = row.net_usd !== undefined && row.net_usd !== null && (Number(row.net_usd) > 0 || (Number(row.discount_usd) || 0) > 0)
+            ? Number(row.net_usd)
+            : Math.max(0, roundMoney((Number(row.total_usd) || 0) - (Number(row.discount_usd) || 0)));
+        const remainingUsd = Math.max(0, Number(row.remaining_usd) || 0);
+        const totalPaid = Math.max(0, Number(row.total_paid) || 0);
+        const rawPercent = row.remaining_percent !== undefined && row.remaining_percent !== null
+            ? Number(row.remaining_percent)
+            : (netUsd > 0 ? roundMoney((remainingUsd / netUsd) * 100) : 0);
+        const remainingPercent = Math.max(0, Math.min(100, roundMoney(rawPercent)));
+        return {
+            ...row,
+            _netUsd: netUsd,
+            _totalPaid: totalPaid,
+            _remainingUsd: remainingUsd,
+            _remainingPercent: remainingPercent,
+            _percentBucket: Math.round(remainingPercent)
+        };
+    });
+}
+
+function getFilteredRemainingRows(allRows) {
+    const hasMin = remainingModalFilter.minPercent !== '' && Number.isFinite(Number(remainingModalFilter.minPercent));
+    const hasMax = remainingModalFilter.maxPercent !== '' && Number.isFinite(Number(remainingModalFilter.maxPercent));
+    const minVal = hasMin ? Number(remainingModalFilter.minPercent) : null;
+    const maxVal = hasMax ? Number(remainingModalFilter.maxPercent) : null;
+    const query = String(remainingModalFilter.search || '').trim().toLowerCase();
+
+    return allRows.filter((row) => {
+        const pct = row._remainingPercent;
+        if (remainingModalFilter.excludeFull && pct >= 99.99) {
+            return false;
+        }
+        if (remainingModalFilter.selectedPercents.size > 0) {
+            const matchedExact = remainingModalFilter.selectedPercents.has(String(row._percentBucket));
+            if (!matchedExact) return false;
+        }
+        if (minVal !== null && pct < minVal) {
+            return false;
+        }
+        if (maxVal !== null && pct > maxVal) {
+            return false;
+        }
+        if (query) {
+            const haystack = `${row.document_number || ''} ${row.invoice_number || ''} ${row.statement || ''}`.toLowerCase();
+            if (!haystack.includes(query)) return false;
+        }
+        return true;
+    });
+}
+
+function renderRemainingDetailsModalBody() {
+    const contentEl = document.getElementById('remainingDetailsContent');
+    if (!contentEl) return;
+
+    const allRows = getRemainingRowsList();
+    const filteredRows = getFilteredRemainingRows(allRows);
+
+    const percentCounts = new Map();
+    allRows.forEach((row) => {
+        const key = String(row._percentBucket);
+        percentCounts.set(key, (percentCounts.get(key) || 0) + 1);
+    });
+    const sortedPercentBuckets = Array.from(percentCounts.keys()).sort((a, b) => Number(a) - Number(b));
+
+    let sumNet = 0;
+    let sumPaid = 0;
+    let sumRemaining = 0;
+    filteredRows.forEach((row) => {
+        sumNet += row._netUsd;
+        sumPaid += row._totalPaid;
+        sumRemaining += row._remainingUsd;
+    });
+
+    const isAllActive = !remainingModalFilter.excludeFull
+        && remainingModalFilter.selectedPercents.size === 0
+        && remainingModalFilter.minPercent === ''
+        && remainingModalFilter.maxPercent === ''
+        && !remainingModalFilter.search;
+
+    const under100Count = allRows.filter((r) => r._remainingPercent < 99.99).length;
+
+    const percentChipsHtml = sortedPercentBuckets.map((bucket) => {
+        const isActive = remainingModalFilter.selectedPercents.has(bucket);
+        const count = percentCounts.get(bucket) || 0;
+        return `
+            <button type="button" class="rem-filter-chip ${isActive ? 'active' : ''}" data-rem-bucket="${escapeHtml(bucket)}">
+                <span>${escapeHtml(bucket)}%</span>
+                <span class="rem-chip-count">${count}</span>
+            </button>
+        `;
+    }).join('');
+
+    const filterBarHtml = `
+        <div class="remaining-filter-bar">
+            <div class="remaining-filter-top">
+                <div class="remaining-quick-modes">
+                    <button type="button" class="rem-filter-chip ${isAllActive ? 'active' : ''}" id="remFilterAllBtn">
+                        <i class="fas fa-layer-group"></i> الكل <span class="rem-chip-count">${allRows.length}</span>
+                    </button>
+                    <button type="button" class="rem-filter-chip ${remainingModalFilter.excludeFull ? 'active' : ''}" id="remFilterUnder100Btn">
+                        <i class="fas fa-filter"></i> أقل من 100% <span class="rem-chip-count">${under100Count}</span>
+                    </button>
+                </div>
+                <div class="remaining-range-inputs">
+                    <label for="remMinPercent">من %</label>
+                    <input type="number" id="remMinPercent" min="0" max="100" step="1" placeholder="0" value="${escapeHtml(remainingModalFilter.minPercent)}">
+                    <label for="remMaxPercent">إلى %</label>
+                    <input type="number" id="remMaxPercent" min="0" max="100" step="1" placeholder="100" value="${escapeHtml(remainingModalFilter.maxPercent)}">
+                    <input type="text" id="remSearchInput" class="remaining-search-input" placeholder="بحث برقم الفاتورة أو البيان..." value="${escapeHtml(remainingModalFilter.search)}">
+                    <button type="button" class="btn btn-outline" id="remResetFiltersBtn" style="padding: 5px 12px; font-size: 0.8rem;">
+                        <i class="fas fa-undo"></i> إعادة ضبط
+                    </button>
+                </div>
+            </div>
+            ${sortedPercentBuckets.length ? `
+                <div class="remaining-percent-chips-row">
+                    <span class="remaining-percent-chips-label"><i class="fas fa-check-double"></i> اختر نسبة أو أكثر:</span>
+                    ${percentChipsHtml}
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    const summaryHtml = `
+        <div class="discount-summary-grid">
+            <div class="discount-summary-box">
+                <span class="discount-summary-label"><i class="fas fa-file-invoice"></i> عدد الفواتير المطابقة</span>
+                <strong class="discount-summary-val">${filteredRows.length.toLocaleString('en-US')} فاتورة</strong>
+            </div>
+            <div class="discount-summary-box">
+                <span class="discount-summary-label"><i class="fas fa-receipt"></i> إجمالي صافي الفواتير</span>
+                <strong class="discount-summary-val">${formatMoney(sumNet)} $</strong>
+            </div>
+            <div class="discount-summary-box is-net">
+                <span class="discount-summary-label"><i class="fas fa-check-double"></i> إجمالي المحصل</span>
+                <strong class="discount-summary-val">${formatMoney(sumPaid)} $</strong>
+            </div>
+            <div class="discount-summary-box is-warning">
+                <span class="discount-summary-label"><i class="fas fa-clock"></i> إجمالي المتبقي</span>
+                <strong class="discount-summary-val">${formatMoney(sumRemaining)} $</strong>
+            </div>
+        </div>
+    `;
+
+    const tableBodyHtml = filteredRows.length
+        ? filteredRows.map((row, idx) => {
+            const pct = row._remainingPercent;
+            const pillClass = pct >= 99.99 ? 'is-full' : (pct >= 30 ? 'is-mid' : 'is-low');
+            return `
+                <tr>
+                    <td><span class="discount-doc-pill">${escapeHtml(row.document_number || idx + 1)}</span></td>
+                    <td>${escapeHtml(row.record_date || '')}</td>
+                    <td><strong class="discount-inv-num">${escapeHtml(row.invoice_number || '')}</strong></td>
+                    <td class="statement-cell">${escapeHtml(row.statement || '')}</td>
+                    <td>${formatMoney(row._netUsd)} $</td>
+                    <td><strong class="discount-net-val">${formatMoney(row._totalPaid)} $</strong></td>
+                    <td><strong style="color: #d97706;">${formatMoney(row._remainingUsd)} $</strong></td>
+                    <td>
+                        <div class="remaining-percent-cell">
+                            <span class="remaining-percent-pill ${pillClass}">${pct.toFixed(pct % 1 === 0 ? 0 : 2)}%</span>
+                            <div class="remaining-progress-track">
+                                <div class="remaining-progress-fill" style="width: ${pct}%;"></div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('')
+        : `<tr><td colspan="8" class="petty-empty">لا توجد فواتير مطابقة لفلتر النسبة المحدد</td></tr>`;
+
+    contentEl.innerHTML = `
+        ${summaryHtml}
+        ${filterBarHtml}
+        <div class="discount-table-wrap">
+            <table class="petty-table discount-details-table">
+                <thead>
+                    <tr>
+                        <th>التسلسل</th>
+                        <th>التاريخ</th>
+                        <th>رقم الفاتورة</th>
+                        <th>البيان</th>
+                        <th>صافي الفاتورة</th>
+                        <th>المحصل</th>
+                        <th>المتبقي</th>
+                        <th>نسبة المتبقي</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableBodyHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    document.getElementById('remFilterAllBtn')?.addEventListener('click', () => {
+        remainingModalFilter.excludeFull = false;
+        remainingModalFilter.selectedPercents.clear();
+        remainingModalFilter.minPercent = '';
+        remainingModalFilter.maxPercent = '';
+        remainingModalFilter.search = '';
+        renderRemainingDetailsModalBody();
+    });
+
+    document.getElementById('remFilterUnder100Btn')?.addEventListener('click', () => {
+        remainingModalFilter.excludeFull = !remainingModalFilter.excludeFull;
+        if (remainingModalFilter.excludeFull) {
+            remainingModalFilter.selectedPercents.delete('100');
+        }
+        renderRemainingDetailsModalBody();
+    });
+
+    document.getElementById('remResetFiltersBtn')?.addEventListener('click', () => {
+        remainingModalFilter.excludeFull = false;
+        remainingModalFilter.selectedPercents.clear();
+        remainingModalFilter.minPercent = '';
+        remainingModalFilter.maxPercent = '';
+        remainingModalFilter.search = '';
+        renderRemainingDetailsModalBody();
+    });
+
+    contentEl.querySelectorAll('[data-rem-bucket]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const bucket = btn.getAttribute('data-rem-bucket');
+            if (!bucket) return;
+            if (remainingModalFilter.selectedPercents.has(bucket)) {
+                remainingModalFilter.selectedPercents.delete(bucket);
+            } else {
+                remainingModalFilter.selectedPercents.add(bucket);
+                if (bucket === '100') {
+                    remainingModalFilter.excludeFull = false;
+                }
+            }
+            renderRemainingDetailsModalBody();
+        });
+    });
+
+    const minInput = document.getElementById('remMinPercent');
+    const maxInput = document.getElementById('remMaxPercent');
+    const searchInput = document.getElementById('remSearchInput');
+
+    minInput?.addEventListener('input', (e) => {
+        remainingModalFilter.minPercent = e.target.value;
+        renderRemainingDetailsModalBody();
+        const nextEl = document.getElementById('remMinPercent');
+        if (nextEl) {
+            nextEl.focus();
+            nextEl.selectionStart = nextEl.selectionEnd = nextEl.value.length;
+        }
+    });
+
+    maxInput?.addEventListener('input', (e) => {
+        remainingModalFilter.maxPercent = e.target.value;
+        renderRemainingDetailsModalBody();
+        const nextEl = document.getElementById('remMaxPercent');
+        if (nextEl) {
+            nextEl.focus();
+            nextEl.selectionStart = nextEl.selectionEnd = nextEl.value.length;
+        }
+    });
+
+    searchInput?.addEventListener('input', (e) => {
+        remainingModalFilter.search = e.target.value;
+        renderRemainingDetailsModalBody();
+        const nextEl = document.getElementById('remSearchInput');
+        if (nextEl) {
+            nextEl.focus();
+            nextEl.selectionStart = nextEl.selectionEnd = nextEl.value.length;
+        }
+    });
+}
+
+function openRemainingDetailsModal() {
+    const modalEl = document.getElementById('remainingDetailsModal');
+    if (!modalEl) return;
+    renderRemainingDetailsModalBody();
+    modalEl.classList.remove('hidden');
+}
+
+function closeRemainingDetailsModal() {
+    document.getElementById('remainingDetailsModal')?.classList.add('hidden');
+}
+
+function getRemainingFilterDescription() {
+    const parts = [];
+    if (remainingModalFilter.excludeFull) {
+        parts.push('أقل من 100%');
+    }
+    if (remainingModalFilter.selectedPercents.size > 0) {
+        const sorted = Array.from(remainingModalFilter.selectedPercents).sort((a, b) => Number(a) - Number(b));
+        parts.push(`النسب المختارة: ${sorted.map((p) => `${p}%`).join(' ، ')}`);
+    }
+    if (remainingModalFilter.minPercent !== '' || remainingModalFilter.maxPercent !== '') {
+        const minLabel = remainingModalFilter.minPercent !== '' ? `${remainingModalFilter.minPercent}%` : '0%';
+        const maxLabel = remainingModalFilter.maxPercent !== '' ? `${remainingModalFilter.maxPercent}%` : '100%';
+        parts.push(`النطاق: من ${minLabel} إلى ${maxLabel}`);
+    }
+    if (remainingModalFilter.search) {
+        parts.push(`بحث: "${remainingModalFilter.search}"`);
+    }
+    return parts.length ? parts.join(' | ') : 'جميع الفواتير المتبقية (بدون استبعاد)';
+}
+
+async function exportRemainingDetailsPdf() {
+    const allRows = getRemainingRowsList();
+    const filteredRows = getFilteredRemainingRows(allRows);
+    if (!filteredRows.length) {
+        showMessage('لا توجد نتائج حالية لتصديرها PDF', 'info');
+        return;
+    }
+
+    let sumNet = 0;
+    let sumPaid = 0;
+    let sumRemaining = 0;
+    filteredRows.forEach((row) => {
+        sumNet += row._netUsd;
+        sumPaid += row._totalPaid;
+        sumRemaining += row._remainingUsd;
+    });
+
+    const filterSummary = getRemainingFilterDescription();
+    const rowsHtml = filteredRows.map((row, idx) => {
+        const pct = row._remainingPercent;
+        const pctText = `${pct.toFixed(pct % 1 === 0 ? 0 : 2)}%`;
+        const pctBadgeClass = pct >= 99.99 ? 'pct-full' : (pct >= 30 ? 'pct-mid' : 'pct-low');
+        return `
+            <tr>
+                <td class="col-index">${idx + 1}</td>
+                <td><span class="doc-pill">${escapeHtml(row.document_number || '')}</span></td>
+                <td class="col-date">${escapeHtml(row.record_date || '')}</td>
+                <td><span class="inv-pill">${escapeHtml(row.invoice_number || '')}</span></td>
+                <td class="rem-print-statement">${escapeHtml(row.statement || '')}</td>
+                <td class="col-net">${formatMoney(row._netUsd)} $</td>
+                <td class="col-paid">${formatMoney(row._totalPaid)} $</td>
+                <td class="col-rem">${formatMoney(row._remainingUsd)} $</td>
+                <td><span class="pct-pill ${pctBadgeClass}">${pctText}</span></td>
+            </tr>
+        `;
+    }).join('');
+
+    const totalPct = sumNet > 0 ? roundMoney((sumRemaining / sumNet) * 100) : 0;
+    const printHtml = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>كشف تفاصيل الفواتير المتبقية ونسب التحصيل</title>
+<style>
+    @page { size: A4 landscape; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+        color: #0f172a;
+        font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+        direction: rtl;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .rem-print-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 65%, #0284c7 100%);
+        color: #ffffff;
+    }
+    .rem-print-title-wrap h1 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 800;
+        color: #ffffff;
+    }
+    .rem-print-filter-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #e0f2fe;
+    }
+    .rem-print-meta {
+        text-align: left;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #e2e8f0;
+        line-height: 1.7;
+        white-space: nowrap;
+        background: rgba(15, 23, 42, 0.35);
+        padding: 7px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .rem-print-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .rem-print-box {
+        border: 1px solid #cbd5e1;
+        border-top: 3px solid #0284c7;
+        border-radius: 10px;
+        padding: 8px 12px;
+        background: #f0f9ff;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .rem-print-box.is-net {
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        border-top-color: #4f46e5;
+    }
+    .rem-print-box.is-paid {
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+        border-top-color: #059669;
+    }
+    .rem-print-box.is-rem {
+        background: #fffbeb;
+        border-color: #fde68a;
+        border-top-color: #d97706;
+    }
+    .rem-print-box span { font-size: 11px; font-weight: 700; color: #475569; }
+    .rem-print-box strong { font-size: 15px; font-weight: 800; color: #0f172a; }
+    .rem-print-box.is-net strong { color: #3730a3; }
+    .rem-print-box.is-paid strong { color: #047857; }
+    .rem-print-box.is-rem strong { color: #b45309; }
+    .rem-print-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11.5px;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .rem-print-table thead { display: table-header-group; }
+    .rem-print-table tfoot { display: table-row-group; }
+    .rem-print-table tr { page-break-inside: avoid; break-inside: avoid; }
+    .rem-print-table th,
+    .rem-print-table td {
+        border: 1px solid #dbeafe;
+        padding: 6px 8px;
+        text-align: center;
+        vertical-align: middle;
+    }
+    .rem-print-table th {
+        background: linear-gradient(180deg, #1e3a8a 0%, #1d4ed8 100%);
+        color: #ffffff;
+        font-weight: 800;
+        border-color: #1e40af;
+        padding: 8px;
+    }
+    .rem-print-table tbody tr:nth-child(odd) { background: #ffffff; }
+    .rem-print-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .col-index { font-weight: 700; color: #64748b; }
+    .col-date { color: #334155; white-space: nowrap; }
+    .doc-pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        font-weight: 800;
+        font-size: 11px;
+    }
+    .inv-pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: #f1f5f9;
+        color: #0f172a;
+        font-weight: 800;
+    }
+    .rem-print-table td.rem-print-statement {
+        text-align: right;
+        max-width: 260px;
+        word-break: break-word;
+        color: #1e293b;
+        font-weight: 600;
+    }
+    .col-net { font-weight: 700; color: #3730a3; white-space: nowrap; }
+    .col-paid { font-weight: 700; color: #059669; white-space: nowrap; }
+    .col-rem { font-weight: 800; color: #b45309; background: rgba(254, 243, 199, 0.35); white-space: nowrap; }
+    .pct-pill {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-weight: 800;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    .pct-pill.pct-full { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .pct-pill.pct-mid { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .pct-pill.pct-low { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0; }
+    .rem-print-table tfoot td {
+        background: #0f172a;
+        color: #ffffff;
+        border-color: #1e293b;
+        font-weight: 800;
+        font-size: 12.5px;
+        padding: 8px;
+    }
+    .rem-print-table tfoot td.tot-net { color: #93c5fd; }
+    .rem-print-table tfoot td.tot-paid { color: #6ee7b7; }
+    .rem-print-table tfoot td.tot-rem { color: #fcd34d; }
+</style>
+</head>
+<body>
+    <div class="rem-print-header">
+        <div class="rem-print-title-wrap">
+            <h1>كشف تفاصيل الفواتير المتبقية ونسب التحصيل</h1>
+            <span class="rem-print-filter-badge">الفلتر المطبق: ${escapeHtml(filterSummary)}</span>
+        </div>
+        <div class="rem-print-meta">
+            <div>تاريخ الطباعة: ${escapeHtml(today())}</div>
+            <div>عدد الفواتير: ${filteredRows.length.toLocaleString('en-US')}</div>
+        </div>
+    </div>
+    <div class="rem-print-summary">
+        <div class="rem-print-box">
+            <span>عدد الفواتير</span>
+            <strong>${filteredRows.length.toLocaleString('en-US')} فاتورة</strong>
+        </div>
+        <div class="rem-print-box is-net">
+            <span>إجمالي صافي الفواتير</span>
+            <strong>${formatMoney(sumNet)} $</strong>
+        </div>
+        <div class="rem-print-box is-paid">
+            <span>إجمالي المحصل</span>
+            <strong>${formatMoney(sumPaid)} $</strong>
+        </div>
+        <div class="rem-print-box is-rem">
+            <span>إجمالي المتبقي</span>
+            <strong>${formatMoney(sumRemaining)} $</strong>
+        </div>
+    </div>
+    <table class="rem-print-table">
+        <thead>
+            <tr>
+                <th>م</th>
+                <th>التسلسل</th>
+                <th>التاريخ</th>
+                <th>رقم الفاتورة</th>
+                <th>البيان</th>
+                <th>صافي الفاتورة</th>
+                <th>المحصل</th>
+                <th>المتبقي</th>
+                <th>نسبة المتبقي</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${rowsHtml}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5">الإجمالي النهائي</td>
+                <td class="tot-net">${formatMoney(sumNet)} $</td>
+                <td class="tot-paid">${formatMoney(sumPaid)} $</td>
+                <td class="tot-rem">${formatMoney(sumRemaining)} $</td>
+                <td class="tot-rem">${totalPct}%</td>
+            </tr>
+        </tfoot>
+    </table>
+</body>
+</html>`;
+
+    const date = today();
+    const result = await window.electronAPI.saveUnderCollectionPdf({
+        defaultName: `Remaining_Under_Collection_${date}.pdf`,
+        html: printHtml
+    });
+    if (result && result.success) {
+        showMessage('تم حفظ ملف PDF للنتيجة المحددة بنجاح', 'success');
+    } else if (result && !result.canceled) {
+        showMessage(result.error || 'تعذر حفظ ملف PDF', 'error');
+    }
+}
+
 async function refreshDocumentNumber() {
     const result = await window.electronAPI.getNextUnderCollectionNumber();
     if (result && result.success) {
@@ -1607,6 +2246,7 @@ async function loadRecords() {
 
     state.rows = Array.isArray(result.rows) ? result.rows : [];
     state.discountedRows = Array.isArray(result.discountedRows) ? result.discountedRows : [];
+    state.remainingRows = Array.isArray(result.remainingRows) ? result.remainingRows : [];
     state.customItemNames = Array.isArray(result.customItemNames) ? result.customItemNames : state.customItemNames;
     state.existingInvoiceEntries = Array.isArray(result.existingInvoiceEntries) ? result.existingInvoiceEntries : state.existingInvoiceEntries;
     state.page = Number(result.page) || state.page;
@@ -1619,6 +2259,7 @@ async function loadRecords() {
     state.totalRemaining = Number(result.totalRemaining) || 0;
     state.totalDiscount = Number(result.totalDiscount) || 0;
     state.discountedCount = Number(result.discountedCount) || 0;
+    state.remainingCount = Number(result.remainingCount) || 0;
     state.totalCount = Number(result.total) || 0;
     renderRows();
     renderPagination();
@@ -1664,6 +2305,18 @@ function renderSummary() {
 
     if (totalCountEl) {
         totalCountEl.textContent = (Number(state.totalCount) || 0).toLocaleString('en-US');
+    }
+
+    const remainingNoteEl = document.getElementById('underCollectionRemainingNote');
+    if (remainingNoteEl) {
+        const remCount = Number(state.remainingCount) || getRemainingRowsList().length;
+        if (remCount > 0) {
+            remainingNoteEl.innerHTML = `<span class="stat-remaining-badge"><i class="fas fa-eye"></i> ${remCount.toLocaleString('en-US')} فاتورة متبقية — اضغط للتفاصيل</span>`;
+            remainingNoteEl.style.display = 'block';
+        } else {
+            remainingNoteEl.innerHTML = `<span class="stat-remaining-badge is-empty"><i class="fas fa-check-circle"></i> لا توجد فواتير متبقية</span>`;
+            remainingNoteEl.style.display = 'block';
+        }
     }
 
     if (state.totalSurplus > 0) {

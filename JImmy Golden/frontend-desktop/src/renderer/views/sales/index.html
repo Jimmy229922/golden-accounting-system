@@ -22,6 +22,7 @@
     <script src="sales.api.js"></script>
     <script src="sales.render.js"></script>
     <script src="sales.events.js"></script>
+    <script src="../../assets/js/shared/invoicePrintDocument.js"></script>
     <script src="sales.bootstrap.js"></script>
 
     <script src="sales.js"></script>
@@ -34,50 +35,5 @@
 
     <script src="../../assets/js/globalSearch.details.js"></script>
     <link rel="stylesheet" href="../../assets/styles/toast.css">
-
-    <!-- Print Template -->
-    <div id="printArea" class="print-shell" style="display: none;">
-        <div class="print-head">
-            <div class="print-header-top">
-                <div class="print-header-company">
-                    <h2 id="printCompanyName" class="print-company-name"></h2>
-                    <p id="printCompanyInfo" class="print-company-info"></p>
-                </div>
-            </div>
-            <div class="print-header-details">
-                <div class="print-detail"><span class="print-detail-label">رقم الفاتورة:</span> <span id="printInvoiceNumber"></span></div>
-                <div class="print-detail"><span class="print-detail-label">التاريخ:</span> <span id="printInvoiceDate"></span></div>
-                <div class="print-detail"><span class="print-detail-label">العميل:</span> <span id="printCustomerName"></span></div>
-            </div>
-            <h1>فاتورة مبيعات</h1>
-        </div>
-        <div class="print-body">
-            <table class="print-items-table">
-                <thead>
-                    <tr>
-                        <th>م</th>
-                        <th>الصنف</th>
-                        <th>الكمية</th>
-                        <th>السعر</th>
-                        <th>الإجمالي</th>
-                    </tr>
-                </thead>
-                <tbody id="printInvoiceItems">
-                </tbody>
-            </table>
-            <div class="print-summary">
-                <table class="print-summary-table">
-                    <tr><td>إجمالي الفاتورة:</td><td id="printInvoiceTotal">0.00</td></tr>
-                    <tr><td>المدفوع:</td><td id="printInvoicePaid">0.00</td></tr>
-                    <tr><td>المتبقي من الفاتورة:</td><td id="printInvoiceRemaining">0.00</td></tr>
-                    <tr class="print-highlight-row"><td>الرصيد السابق للعميل:</td><td id="printCustomerPreviousBalance">0.00</td></tr>
-                    <tr class="print-highlight-row"><td>إجمالي حساب العميل الحالي:</td><td id="printCustomerCurrentBalance">0.00</td></tr>
-                </table>
-            </div>
-        </div>
-        <div class="print-footer">
-            <p id="printFooterText"></p>
-        </div>
-    </div>
 </body>
 </html>

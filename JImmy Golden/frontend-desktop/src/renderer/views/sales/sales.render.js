@@ -182,29 +182,6 @@
                 </div>
             </div>
 
-            <div id="salesPrintPreviewModal" class="sales-print-preview-modal" style="display: none;" aria-hidden="true">
-                <div class="sales-print-preview-panel" role="dialog" aria-modal="true" aria-label="معاينة الفاتورة">
-                    <div class="sales-print-preview-header">
-                        <div>
-                            <h3 class="sales-print-preview-title">معاينة الفاتورة</h3>
-                            <p id="salesPrintPrinterStatus" class="sales-print-preview-subtitle"></p>
-                        </div>
-                        <div class="sales-print-preview-actions">
-                            <button class="btn btn-outline" type="button" data-action="change-print-printer" id="salesPrintChangePrinterBtn" style="display: none;">تغيير الطابعة</button>
-                            <button class="btn btn-success" type="button" data-action="confirm-print-invoice" id="salesPrintConfirmBtn">طباعة</button>
-                            <button class="btn btn-outline" type="button" data-action="close-print-preview">إغلاق</button>
-                        </div>
-                    </div>
-                    <div id="salesPrintPrinterPicker" class="sales-print-printer-picker" style="display: none;">
-                        <label for="salesPrintPrinterSelect">اختر الطابعة</label>
-                        <select id="salesPrintPrinterSelect" class="form-control"></select>
-                    </div>
-                    <div class="sales-print-preview-body">
-                        <div id="salesPrintPreviewPage" class="sales-print-preview-page"></div>
-                    </div>
-                </div>
-            </div>
-
             <div id="salesShiftCloseModal" class="sales-shift-modal-overlay" style="display: none;" aria-hidden="true">
                 <div class="sales-shift-modal" role="dialog" aria-modal="true" aria-label="إقفال وردية المبيعات">
                     <div class="sales-shift-modal-header">

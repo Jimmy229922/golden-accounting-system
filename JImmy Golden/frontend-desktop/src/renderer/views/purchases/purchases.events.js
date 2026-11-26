@@ -21,7 +21,7 @@
                 }
 
                 if (action === 'print-invoice') {
-                    window.print();
+                    handlers.onPrintInvoice();
                     return;
                 }
 

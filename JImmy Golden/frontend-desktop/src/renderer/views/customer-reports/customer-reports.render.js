@@ -44,32 +44,6 @@
             </div>
 
             <div id="reportContainer" class="report-container">
-                <div class="print-header" id="printHeader">
-                    <div class="print-header-top">
-                        <div class="print-header-logo" id="printHeaderLogo"></div>
-                        <div class="print-header-company">
-                            <h2>${t('customerReports.accountStatement', 'كشف حساب')}</h2>
-                            <div class="print-company-name" id="printCompanyName"></div>
-                            <div class="print-company-info" id="printCompanyInfo"></div>
-                        </div>
-                        <div class="print-header-logo-placeholder"></div>
-                    </div>
-                    <div class="print-header-details">
-                        <div class="print-detail">
-                            <span class="print-detail-label">${t('customerReports.printCustomer', 'العميل')}:</span>
-                            <span class="print-detail-value" id="printCustomerName">—</span>
-                        </div>
-                        <div class="print-detail">
-                            <span class="print-detail-label">${t('customerReports.printPeriod', 'الفترة')}:</span>
-                            <span class="print-detail-value" id="printPeriod">—</span>
-                        </div>
-                        <div class="print-detail">
-                            <span class="print-detail-label">${t('customerReports.printDate', 'تاريخ الطباعة')}:</span>
-                            <span class="print-detail-value" id="printDate">—</span>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="summary-strip">
                     <div class="summary-card">
                         <div class="sc-icon sales"><i class="fas fa-shopping-cart"></i></div>
@@ -134,29 +108,6 @@
                     </table>
                     <div class="balance-footer" id="balanceFooter"></div>
                     <div class="customer-report-pagination no-print" id="customerReportPagination"></div>
-                </div>
-
-                <div class="print-summary" id="printSummary">
-                    <table class="print-summary-table">
-                        <thead>
-                            <tr>
-                                <th>${t('customerReports.summaryDebit', 'إجمالي الديون لينا (مدين)')}</th>
-                                <th>${t('customerReports.summaryCredit', 'إجمالي المستحقات علينا (دائن)')}</th>
-                                <th>${t('customerReports.summaryNet', 'صافي الحركة')}</th>
-                                <th>${t('customerReports.summaryOpening', 'رصيد أول المدة')}</th>
-                                <th>${t('customerReports.summaryClosing', 'الرصيد الختامي')}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td id="summaryDebit">0.00</td>
-                                <td id="summaryCredit">0.00</td>
-                                <td id="summaryNet">0.00</td>
-                                <td id="summaryOpening">0.00</td>
-                                <td id="summaryClosing">0.00</td>
-                            </tr>
-                        </tbody>
-                    </table>
                 </div>
 
                 <!-- PDF Options Modal -->

@@ -860,7 +860,7 @@ function parseShellNotifications(raw, kind) {
                     .map((item, idx) => ({
                         id: String(item.id || `${kind}_${idx}`),
                         text: String(item.text || '').trim(),
-                        createdAt: item.created_at || null,
+                        createdAt: item.created_at || item.createdAt || item.timestamp || item.date || null,
                         kind
                     }));
             }
@@ -914,20 +914,30 @@ function escapeShellHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
+function getNoticeTimestampMs(item) {
+    if (!item || typeof item !== 'object') return 0;
+    const raw = item.createdAt || item.created_at || item.timestamp || item.date || null;
+    if (!raw) return 0;
+    const ms = new Date(raw).getTime();
+    return Number.isFinite(ms) ? ms : 0;
+}
+
 function collectActiveShellNotifications(meta) {
     const adminItems = [];
     if (meta) {
         const priv = parseShellNotifications(meta.customNotice, 'private');
         const glob = meta.announcementActive ? parseShellNotifications(meta.announcementMessage, 'global') : [];
         adminItems.push(...priv, ...glob);
-        adminItems.sort((a, b) => {
-            const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return tb - ta;
-        });
     }
     const smartItems = Array.isArray(shellState.smartAlerts) ? shellState.smartAlerts : [];
-    return [...adminItems, ...smartItems];
+    const combined = [...adminItems, ...smartItems].map((item, idx) => ({ item, idx }));
+    combined.sort((a, b) => {
+        const tb = getNoticeTimestampMs(b.item);
+        const ta = getNoticeTimestampMs(a.item);
+        if (tb !== ta) return tb - ta;
+        return b.idx - a.idx;
+    });
+    return combined.map((entry) => entry.item);
 }
 
 function renderShellNotificationsPopover() {

@@ -70,6 +70,7 @@ function initializeElements() {
             onViewSupplierReport: openSupplierReport,
             onAddRow: () => addInvoiceRow(),
             onSubmitInvoice: submitInvoice,
+            onPrintInvoice: printInvoice,
             onLoadPrevInvoice: () => navigateInvoice(-1),
             onLoadNextInvoice: () => navigateInvoice(1),
             onRemoveRow: removeRow,
@@ -1943,6 +1944,113 @@ function collectInvoiceItemsFromForm() {
     });
 
     return { items, isValid: isValid && items.length > 0 };
+}
+
+const PURCHASES_PRINT_PRINTER_STORAGE_KEY = 'purchases.invoicePrinterName';
+const purchasesInvoicePrintPreview = window.invoicePrintDocument.createPreviewController({
+    storageKey: PURCHASES_PRINT_PRINTER_STORAGE_KEY
+});
+
+function getPrintableBaskeelMeta(rawQuantity, rawWeights) {
+    let rate = 0;
+    let manualNet1 = 0;
+    try {
+        const parsed = JSON.parse(rawWeights || '[]');
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            rate = Number(parsed.rate) > 0 ? Number(parsed.rate) : 0;
+            manualNet1 = Number(parsed.manualNet1) > 0 ? Number(parsed.manualNet1) : 0;
+        }
+    } catch (_) {}
+
+    const net1 = manualNet1 > 0 ? manualNet1 : roundMoney((Number(rawQuantity) || 0) * PURCHASE_NET_FACTOR);
+    return { net1, rateText: rate > 0 ? `${rate}%` : '—' };
+}
+
+async function printInvoice() {
+    const supplierSelect = purchasesState.dom.supplierSelect;
+    if (!supplierSelect || !supplierSelect.value) {
+        if (window.showToast) window.showToast(t('purchases.selectSupplier', 'اختر المورد'), 'error');
+        return;
+    }
+
+    const { items, isValid } = collectInvoiceItemsFromForm();
+    if (!isValid || items.length === 0) {
+        if (window.showToast) window.showToast('الرجاء إدخال أصناف صحيحة قبل الطباعة', 'error');
+        return;
+    }
+
+    const selectedOption = supplierSelect.options[supplierSelect.selectedIndex];
+    const supplierName = selectedOption?.text || '';
+    const supplierBalance = parseFloat(selectedOption?.dataset.balance || '0') || 0;
+    const invoiceNumber = document.getElementById('invoiceNumber')?.value || '';
+    const invoiceDate = purchasesState.dom.invoiceDateInput?.value || new Date().toISOString().slice(0, 10);
+    const paymentTypeSelect = document.getElementById('paymentType');
+    const paymentTypeLabel = paymentTypeSelect?.options[paymentTypeSelect.selectedIndex]?.text || '';
+    const notes = document.getElementById('invoiceNotes')?.value || '';
+
+    const financials = calculateInvoiceFinancialsFromForm();
+    const customRemaining = parseLocaleFloat(purchasesState.dom.invoiceRemainingSpan?.value);
+    const remaining = purchasesState.isRemainingCustomized && Number.isFinite(customRemaining)
+        ? customRemaining
+        : financials.supplierRemaining;
+    const isEditing = Boolean(purchasesState.editingInvoiceId);
+    const previousBalance = isEditing ? supplierBalance + remaining : supplierBalance;
+    const currentBalance = isEditing ? supplierBalance : supplierBalance - remaining;
+
+    const { buildInvoiceHtml, loadCompanyInfo, formatMoney: formatPrintMoney, formatQty: formatPrintQty } = window.invoicePrintDocument;
+    const company = await loadCompanyInfo();
+
+    let itemsTotal = 0;
+    const rows = items.map((item, index) => {
+        const itemObj = purchasesState.allItems.find((i) => i.id === item.item_id);
+        const meta = getPrintableBaskeelMeta(item.raw_quantity, item.raw_weights);
+        itemsTotal += Number(item.total_price) || 0;
+        return [
+            { text: index + 1, className: 'idx' },
+            { text: itemObj ? (itemObj.item_name || itemObj.name || '') : '', className: 'text' },
+            { text: itemObj?.unit_name || '—' },
+            { text: formatPrintQty(item.raw_quantity) },
+            { text: formatPrintQty(meta.net1) },
+            { text: meta.rateText },
+            { text: formatPrintQty(item.quantity), className: 'strong' },
+            { text: formatPrintMoney(item.cost_price) },
+            { text: formatPrintMoney(item.total_price), className: 'amount' }
+        ];
+    });
+
+    const html = buildInvoiceHtml({
+        tone: 'purchase',
+        title: 'فاتورة مشتريات',
+        invoiceNumber,
+        company,
+        meta: [
+            { label: 'رقم الفاتورة', value: invoiceNumber || (isEditing ? 'معدلة' : 'جديدة') },
+            { label: 'التاريخ', value: invoiceDate },
+            { label: 'المورد', value: supplierName },
+            { label: 'طريقة الدفع', value: paymentTypeLabel }
+        ],
+        columns: ['م', 'الصنف', 'الوحدة', 'الكمية الخام', 'صافي 1%', 'المعدل %', 'الكمية النهائية', 'السعر', 'الإجمالي'],
+        rows,
+        itemsTotal,
+        totals: [
+            { label: 'إجمالي الكمية الخام', value: formatPrintMoney(financials.rawSubtotal) },
+            financials.discountAmount > 0 ? { label: 'خصم 1%', value: formatPrintMoney(financials.discountAmount), className: 'discount' } : null,
+            { label: 'صافي الفاتورة', value: formatPrintMoney(financials.netTotal), className: 'net' },
+            { label: 'المدفوع', value: formatPrintMoney(financials.paidAmount), className: 'paid' },
+            { label: 'المتبقي من الفاتورة', value: formatPrintMoney(remaining), className: 'remaining' }
+        ],
+        balances: {
+            title: 'حساب المورد',
+            previousLabel: 'الرصيد السابق للمورد',
+            previous: previousBalance,
+            currentLabel: 'إجمالي حساب المورد الحالي',
+            current: currentBalance
+        },
+        notes,
+        footerText: company.footerText
+    });
+
+    await purchasesInvoicePrintPreview.open(html);
 }
 
 function buildInvoicePayload(financials, customRemaining) {

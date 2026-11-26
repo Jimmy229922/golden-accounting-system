@@ -37,21 +37,6 @@
                     return;
                 }
 
-                if (action === 'confirm-print-invoice') {
-                    handlers.onConfirmPrintInvoice();
-                    return;
-                }
-
-                if (action === 'close-print-preview') {
-                    handlers.onClosePrintPreview();
-                    return;
-                }
-
-                if (action === 'change-print-printer') {
-                    handlers.onChangePrintPrinter();
-                    return;
-                }
-
                 if (action === 'load-prev-invoice') {
                     handlers.onLoadPrevInvoice();
                     return;

@@ -929,6 +929,7 @@
     "totalPaymentsOut": "إجمالي السداد",
     "showReport": "عرض التقرير",
     "accountStatement": "كشف حساب",
+    "detailedStatementTitle": "كشف حساب تفصيلي",
     "allPeriods": "كل الفترات",
     "printCustomer": "العميل",
     "printPeriod": "الفترة",
