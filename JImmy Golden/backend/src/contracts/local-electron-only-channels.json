@@ -5,6 +5,7 @@
   "get-printers",
   "invite-unlocked",
   "print-current-window",
+  "print-invoice-document",
   "send-sync-diagnostic-report",
   "trigger-manual-sync"
 ]

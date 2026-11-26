@@ -732,7 +732,7 @@ function renderRows() {
         }
 
         return `
-            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-advances-total="${deductedAdv}" data-deducted-advance="${deductedAdv}" data-remaining-advance="${remainingAdv}" data-total-advance="${totalAdv}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'} ${isLowWage ? 'is-low-wage-row' : ''}">
+            <tr data-worker-id="${row.id}" data-daily-wage="${row.daily_wage}" data-auto-transfer="${row.auto_transfer_to_petty ? '1' : '0'}" data-advances-total="${deductedAdv}" data-deducted-advance="${deductedAdv}" data-remaining-advance="${remainingAdv}" data-total-advance="${totalAdv}" data-gross-pay="${row.gross_pay || 0}" data-net-pay="${row.net_pay || 0}" class="${row.is_active ? '' : 'is-archived'} ${isLowWage ? 'is-low-wage-row' : ''}">
                 <td>${index + 1}</td>
                 <td class="worker-name-cell"${notesTitle}>
                     <div class="worker-name-box ${isLowWage ? 'worker-name-low-wage' : ''}"${isLowWage ? ' title="الأجر اليومي 50 ج أو أقل - انقر لتصحيحه"' : ''}>
@@ -944,7 +944,9 @@ function updateSummaryFromTable() {
     let netPay = 0;
 
     rows.forEach((row) => {
-        grossPay += Number(row.dataset.grossPay) || 0;
+        if (row.dataset.autoTransfer !== '1') {
+            grossPay += Number(row.dataset.grossPay) || 0;
+        }
         remainingAdvancesTotal += Number(row.dataset.remainingAdvance ?? row.dataset.advancesTotal) || 0;
         deductedAdvancesTotal += Number(row.dataset.deductedAdvance) || 0;
         totalAdvancesBalance += Number(row.dataset.totalAdvance) || 0;

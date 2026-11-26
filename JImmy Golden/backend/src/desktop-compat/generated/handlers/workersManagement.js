@@ -344,7 +344,9 @@ function getWeekData(weekStart, includeArchived = false) {
     });
 
     const totals = rows.reduce((summary, row) => {
-        summary.gross_pay = roundMoney(summary.gross_pay + row.gross_pay);
+        if (!row.auto_transfer_to_petty) {
+            summary.gross_pay = roundMoney(summary.gross_pay + row.gross_pay);
+        }
         summary.advances_total = roundMoney(summary.advances_total + row.deducted_advance_amount);
         summary.remaining_advance_balance = roundMoney(summary.remaining_advance_balance + row.remaining_advance_balance);
         summary.total_advance_balance = roundMoney(summary.total_advance_balance + row.total_advance_balance);

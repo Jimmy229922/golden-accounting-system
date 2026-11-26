@@ -1,0 +1,1099 @@
+const { ipcMain, dialog, BrowserWindow } = require('electron');
+const fs = require('fs');
+const path = require('path');
+const { app } = require('electron');
+const { db } = require('../db');
+let pdfLibModule = null;
+function getPdfLib() {
+    if (!pdfLibModule) {
+        pdfLibModule = require('pdf-lib');
+    }
+    return pdfLibModule;
+}
+const { sanitizeSuggestedFileName } = require('./utils');
+
+function getCustomerStatementTransactionEffect(trans) {
+    if (!trans) return 0;
+    if (trans.type === 'sales') {
+        return (Number(trans.total_amount) - Number(trans.paid_amount)) || 0;
+    }
+    if (trans.type === 'local_sale') {
+        return Number(trans.total_amount) || 0;
+    }
+    if (trans.type === 'purchase') {
+        return -((Number(trans.total_amount) - Number(trans.paid_amount)) || 0);
+    }
+    if (trans.type === 'payment_in') {
+        return -(Number(trans.paid_amount) || 0);
+    }
+    if (trans.type === 'payment_out') {
+        return Number(trans.paid_amount) || 0;
+    }
+    return 0;
+}
+
+
+async function prepareShellFrameForPdfCapture(webContents) {
+    if (!webContents || webContents.isDestroyed()) {
+        return;
+    }
+
+    try {
+        await webContents.executeJavaScript(`
+            (() => {
+                const shellRoot = document.querySelector('.shell-root');
+                const frame = document.getElementById('shellFrame');
+                if (!shellRoot || !frame) return;
+
+                const shellNav = document.querySelector('.shell-top-nav');
+                const shellStage = document.querySelector('.shell-stage');
+                const htmlEl = document.documentElement;
+                const bodyEl = document.body;
+
+                const state = {
+                    htmlOverflow: htmlEl ? (htmlEl.style.overflow || '') : '',
+                    bodyOverflow: bodyEl ? (bodyEl.style.overflow || '') : '',
+                    rootHeight: shellRoot.style.height || '',
+                    rootMinHeight: shellRoot.style.minHeight || '',
+                    rootOverflow: shellRoot.style.overflow || '',
+                    navDisplay: shellNav ? (shellNav.style.display || '') : '',
+                    stagePadding: shellStage ? (shellStage.style.padding || '') : '',
+                    stageOverflow: shellStage ? (shellStage.style.overflow || '') : '',
+                    stageBackground: shellStage ? (shellStage.style.background || '') : '',
+                    frameHeight: frame.style.height || '',
+                    frameOverflow: frame.style.overflow || '',
+                    frameBorderRadius: frame.style.borderRadius || '',
+                    frameBoxShadow: frame.style.boxShadow || '',
+                    frameDocHtmlOverflow: '',
+                    frameDocBodyOverflow: '',
+                    injectedStyleId: 'pdf-shell-capture-style'
+                };
+
+                if (htmlEl) htmlEl.style.overflow = 'visible';
+                if (bodyEl) bodyEl.style.overflow = 'visible';
+                shellRoot.style.height = 'auto';
+                shellRoot.style.minHeight = '0';
+                shellRoot.style.overflow = 'visible';
+
+                if (shellNav) shellNav.style.display = 'none';
+                if (shellStage) {
+                    shellStage.style.padding = '0';
+                    shellStage.style.overflow = 'visible';
+                    shellStage.style.background = '#fff';
+                }
+
+                frame.style.overflow = 'visible';
+                frame.style.borderRadius = '0';
+                frame.style.boxShadow = 'none';
+
+                try {
+                    const frameDoc = frame.contentDocument;
+                    const frameWin = frame.contentWindow;
+                    if (frameDoc && frameWin) {
+                        const frameHtml = frameDoc.documentElement;
+                        const frameBody = frameDoc.body;
+
+                        state.frameDocHtmlOverflow = frameHtml ? (frameHtml.style.overflow || '') : '';
+                        state.frameDocBodyOverflow = frameBody ? (frameBody.style.overflow || '') : '';
+
+                        if (frameHtml) frameHtml.style.overflow = 'visible';
+                        if (frameBody) frameBody.style.overflow = 'visible';
+
+                        if (!frameDoc.getElementById(state.injectedStyleId)) {
+                            const style = frameDoc.createElement('style');
+                            style.id = state.injectedStyleId;
+                            style.textContent = '.top-nav, .shell-top-nav { display: none !important; } html, body, #app, .content, .report-container { overflow: visible !important; max-height: none !important; height: auto !important; }';
+                            frameDoc.head.appendChild(style);
+                        }
+
+                        const printableHeight = Math.max(
+                            frameHtml ? frameHtml.scrollHeight : 0,
+                            frameBody ? frameBody.scrollHeight : 0,
+                            frameWin.innerHeight || 0
+                        );
+                        frame.style.height = String(Math.max(printableHeight + 24, 1200)) + 'px';
+                    }
+                } catch (_) {}
+
+                window.__pdfShellCaptureState = state;
+            })();
+        `, true);
+    } catch (_) {
+        // Ignore capture prep errors and continue with normal print flow.
+    }
+}
+
+async function restoreShellFrameAfterPdfCapture(webContents) {
+    if (!webContents || webContents.isDestroyed()) {
+        return;
+    }
+
+    try {
+        await webContents.executeJavaScript(`
+            (() => {
+                const state = window.__pdfShellCaptureState;
+                if (!state) return;
+
+                const shellRoot = document.querySelector('.shell-root');
+                const frame = document.getElementById('shellFrame');
+                const shellNav = document.querySelector('.shell-top-nav');
+                const shellStage = document.querySelector('.shell-stage');
+                const htmlEl = document.documentElement;
+                const bodyEl = document.body;
+
+                if (htmlEl) htmlEl.style.overflow = state.htmlOverflow || '';
+                if (bodyEl) bodyEl.style.overflow = state.bodyOverflow || '';
+
+                if (shellRoot) {
+                    shellRoot.style.height = state.rootHeight || '';
+                    shellRoot.style.minHeight = state.rootMinHeight || '';
+                    shellRoot.style.overflow = state.rootOverflow || '';
+                }
+
+                if (shellNav) shellNav.style.display = state.navDisplay || '';
+                if (shellStage) {
+                    shellStage.style.padding = state.stagePadding || '';
+                    shellStage.style.overflow = state.stageOverflow || '';
+                    shellStage.style.background = state.stageBackground || '';
+                }
+
+                if (frame) {
+                    frame.style.height = state.frameHeight || '';
+                    frame.style.overflow = state.frameOverflow || '';
+                    frame.style.borderRadius = state.frameBorderRadius || '';
+                    frame.style.boxShadow = state.frameBoxShadow || '';
+
+                    try {
+                        const frameDoc = frame.contentDocument;
+                        if (frameDoc) {
+                            const frameHtml = frameDoc.documentElement;
+                            const frameBody = frameDoc.body;
+                            if (frameHtml) frameHtml.style.overflow = state.frameDocHtmlOverflow || '';
+                            if (frameBody) frameBody.style.overflow = state.frameDocBodyOverflow || '';
+
+                            const injectedStyle = frameDoc.getElementById(state.injectedStyleId || 'pdf-shell-capture-style');
+                            if (injectedStyle && injectedStyle.parentNode) {
+                                injectedStyle.parentNode.removeChild(injectedStyle);
+                            }
+                        }
+                    } catch (_) {}
+                }
+
+                delete window.__pdfShellCaptureState;
+            })();
+        `, true);
+    } catch (_) {
+        // Ignore restore errors.
+    }
+}
+
+function register() {
+    // --- Reports Handlers ---
+
+    ipcMain.handle('get-all-reports', (event, filters) => {
+        try {
+        const { startDate, endDate, customerId, type } = filters;
+        
+        // Helper to build query parts
+        const buildQuery = (table, typeLabel) => {
+            const dateCol = 'invoice_date';
+            const numCol = 'invoice_number';
+            const joinCol = typeLabel === 'sales' ? 'customer_id' : 'supplier_id';
+            let sql = `
+                SELECT 
+                    '${typeLabel}' as type,
+                    i.id,
+                    i.${numCol} as invoice_number,
+                    i.${dateCol} as invoice_date,
+                    i.total_amount,
+                    c.name as customer_name,
+                    i.created_at,
+                    i.paid_amount,
+                    i.remaining_amount
+                FROM ${table} i
+                LEFT JOIN parties c ON i.${joinCol} = c.id
+                WHERE 1=1
+            `;
+            
+            if (startDate) {
+                sql += ` AND i.${dateCol} >= @startDate`;
+            }
+            if (endDate) {
+                sql += ` AND i.${dateCol} <= @endDate`;
+            }
+            if (customerId) {
+                sql += ` AND i.${joinCol} = @customerId`;
+            }
+            return sql;
+        };
+
+        let queries = [];
+        if (type === 'all' || type === 'sales') {
+            queries.push(buildQuery('sales_invoices', 'sales'));
+        }
+        if (type === 'all' || type === 'purchase') {
+            queries.push(buildQuery('purchase_invoices', 'purchase'));
+        }
+
+        // Treasury transactions (receipt/payment)
+        const buildTreasuryQuery = (treasuryType, typeLabel) => {
+            let sql = `
+                SELECT 
+                    '${typeLabel}' as type,
+                    t.id,
+                    t.voucher_number as invoice_number,
+                    t.transaction_date as invoice_date,
+                    t.amount as total_amount,
+                    c.name as customer_name,
+                    t.created_at,
+                    t.amount as paid_amount,
+                    0 as remaining_amount
+                FROM treasury_transactions t
+                LEFT JOIN parties c ON t.customer_id = c.id
+                WHERE t.type = '${treasuryType}' AND t.customer_id IS NOT NULL
+            `;
+            if (startDate) {
+                sql += ` AND t.transaction_date >= @startDate`;
+            }
+            if (endDate) {
+                sql += ` AND t.transaction_date <= @endDate`;
+            }
+            if (customerId) {
+                sql += ` AND t.customer_id = @customerId`;
+            }
+            return sql;
+        };
+
+        if (type === 'all' || type === 'receipt') {
+            queries.push(buildTreasuryQuery('income', 'receipt'));
+        }
+        if (type === 'all' || type === 'payment') {
+            queries.push(buildTreasuryQuery('expense', 'payment'));
+        }
+
+        if (queries.length === 0) return [];
+
+        const finalQuery = queries.join(' UNION ALL ') + ' ORDER BY 7 DESC, 2 DESC';
+        
+        return db.prepare(finalQuery).all({ startDate, endDate, customerId });
+        } catch (error) {
+            console.error('[get-all-reports] Error:', error);
+            return { error: error.message, stack: error.stack };
+        }
+    });
+
+    ipcMain.handle('get-customer-full-report', (event, customerId) => {
+        try {
+        const salesQuery = `
+            SELECT 
+                'sales' as type,
+                si.id,
+                si.invoice_number,
+                si.invoice_date,
+                si.total_amount,
+                si.paid_amount,
+                si.remaining_amount,
+                si.notes
+            FROM sales_invoices si
+            WHERE si.customer_id = ?
+        `;
+        const purchaseQuery = `
+            SELECT 
+                'purchase' as type,
+                pi.id,
+                pi.invoice_number,
+                pi.invoice_date,
+                pi.total_amount,
+                pi.paid_amount,
+                pi.remaining_amount,
+                pi.notes
+            FROM purchase_invoices pi
+            WHERE pi.supplier_id = ?
+        `;
+
+        const paymentsQuery = `
+            SELECT 
+                CASE WHEN type = 'income' THEN 'payment_in' ELSE 'payment_out' END as type,
+                id,
+                COALESCE(voucher_number, '-') as invoice_number,
+                transaction_date as invoice_date,
+                amount as total_amount,
+                amount as paid_amount,
+                0 as remaining_amount,
+                description as notes
+            FROM treasury_transactions
+            WHERE (customer_id = ?
+               OR (related_type = 'sales' AND related_invoice_id IN (SELECT id FROM sales_invoices WHERE customer_id = ?)))
+            AND COALESCE(related_type, '') <> 'purchase'
+        `;
+
+        const sales = db.prepare(salesQuery).all(customerId);
+        const purchases = db.prepare(purchaseQuery).all(customerId);
+        const payments = db.prepare(paymentsQuery).all(customerId, customerId);
+        
+        // Combine and sort
+        return [...sales, ...purchases, ...payments].sort((a, b) => new Date(b.invoice_date) - new Date(a.invoice_date));
+        } catch (error) {
+            console.error('[get-customer-full-report] Error:', error);
+            return [];
+        }
+    });
+
+    // كشف حساب تفصيلي للعميل (يعتمد على دفتر الأستاذ)
+    ipcMain.handle('get-customer-detailed-statement', (event, { customerId, startDate, endDate }) => {
+        try {
+            const customer = db.prepare('SELECT * FROM parties WHERE id = ?').get(customerId);
+            if (!customer) {
+                return { success: false, error: 'العميل غير موجود' };
+            }
+
+            const custId = Number(customerId);
+            let openingBalance = 0;
+
+            if (startDate) {
+                const obResult = db.prepare(`
+                    SELECT COALESCE(SUM(amount), 0) as net
+                    FROM party_ledger
+                    WHERE party_id = ? AND transaction_date < ?
+                `).get(custId, startDate);
+                openingBalance = obResult.net;
+            }
+
+            const params = [custId];
+            let dateFilter = '';
+            if (startDate) {
+                dateFilter += ' AND pl.transaction_date >= ?';
+                params.push(startDate);
+            }
+            if (endDate) {
+                dateFilter += ' AND pl.transaction_date <= ?';
+                params.push(endDate);
+            }
+
+            const query = `
+                SELECT 
+                    CASE 
+                        WHEN pl.transaction_type = 'sales_invoice' THEN 'sales'
+                        WHEN pl.transaction_type = 'local_sale' THEN 'local_sale'
+                        WHEN pl.transaction_type = 'purchase_invoice' THEN 'purchase'
+                        WHEN pl.transaction_type = 'treasury_income' THEN 'payment_in'
+                        WHEN pl.transaction_type = 'treasury_expense' THEN 'payment_out'
+                        WHEN pl.transaction_type = 'opening_balance' THEN 'opening_balance'
+                    END as type,
+                    COALESCE(si.invoice_number, pi.invoice_number, tt.voucher_number, ls.document_number, '-') as doc_number,
+                    pl.transaction_date as trans_date,
+                    CASE
+                        WHEN pl.transaction_type = 'opening_balance' THEN 0
+                        WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
+                        ELSE COALESCE(si.total_amount, pi.total_amount, 0)
+                    END as total_amount,
+                    CASE
+                        WHEN pl.transaction_type IN ('opening_balance', 'local_sale') THEN 0
+                        ELSE COALESCE(si.paid_amount, pi.paid_amount, tt.amount, 0)
+                    END as paid_amount,
+                    CASE
+                        WHEN pl.transaction_type = 'opening_balance' THEN ABS(pl.amount)
+                        WHEN pl.transaction_type = 'local_sale' THEN COALESCE(ls.total, 0)
+                        WHEN pl.transaction_type = 'purchase_invoice' THEN COALESCE(pi.remaining_amount, pi.total_amount - pi.paid_amount, 0)
+                        ELSE COALESCE(si.total_amount - si.paid_amount, pi.total_amount - pi.paid_amount, 0)
+                    END as remaining_amount,
+                    COALESCE(si.notes, pi.notes, tt.description, ls.statement, 'رصيد افتتاحي') as notes,
+                    pl.amount as effect_amount,
+                    pl.id as ledger_id,
+                    pl.reference_id as id
+                FROM party_ledger pl
+                LEFT JOIN sales_invoices si ON pl.transaction_type = 'sales_invoice' AND pl.reference_id = si.id
+                LEFT JOIN local_sales ls ON pl.transaction_type = 'local_sale' AND pl.reference_id = ls.id
+                LEFT JOIN purchase_invoices pi ON pl.transaction_type = 'purchase_invoice' AND pl.reference_id = pi.id
+                LEFT JOIN treasury_transactions tt ON pl.transaction_type IN ('treasury_income', 'treasury_expense') AND pl.reference_id = tt.id
+                WHERE pl.party_id = ? ${dateFilter}
+                ORDER BY pl.transaction_date ASC, pl.id ASC
+            `;
+
+            const transactions = db.prepare(query).all(...params);
+            
+            let runningBalance = openingBalance;
+            for (const trans of transactions) {
+                runningBalance += trans.effect_amount;
+                trans.running_balance = runningBalance;
+            }
+
+            // حساب الإجماليات
+            const totalSales = transactions.filter(t => t.type === 'sales' || t.type === 'local_sale').reduce((s, t) => s + Number(t.total_amount || 0), 0);
+            const totalPurchases = transactions.filter(t => t.type === 'purchase').reduce((s, t) => s + Number(t.total_amount || 0), 0);
+            const totalPaymentsIn = transactions.filter(t => t.type === 'payment_in').reduce((s, t) => s + Number(t.paid_amount || 0), 0) +
+                                    transactions.filter(t => t.type === 'sales').reduce((s, t) => s + Number(t.paid_amount || 0), 0);
+            const totalPaymentsOut = transactions.filter(t => t.type === 'payment_out').reduce((s, t) => s + Number(t.paid_amount || 0), 0) +
+                                     transactions.filter(t => t.type === 'purchase').reduce((s, t) => s + Number(t.paid_amount || 0), 0);
+
+            const totals = {
+                totalSales,
+                totalPurchases,
+                totalPaymentsIn,
+                totalPaymentsOut,
+                totalSalesReturns: 0,
+                totalPurchaseReturns: 0,
+                openingBalance,
+                closingBalance: runningBalance
+            };
+
+            return {
+                success: true,
+                customer: customer,
+                transactions: transactions,
+                totals: totals,
+                period: { startDate, endDate }
+            };
+        } catch (error) {
+            console.error('Error getting customer detailed statement:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+function extractPurchaseDetailMeta(rawQuantity, fallbackQty, rawWeights) {
+    let method = 'normal';
+    let rate = 0;
+    let manualNet1 = 0;
+
+    if (typeof rawWeights === 'string' && rawWeights.trim()) {
+        try {
+            const parsed = JSON.parse(rawWeights.trim());
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                method = parsed.method === 'rate' ? 'rate' : 'normal';
+                rate = Number.isFinite(Number(parsed.rate)) && Number(parsed.rate) > 0 ? Number(parsed.rate) : 0;
+                manualNet1 = Number.isFinite(Number(parsed.manualNet1)) && Number(parsed.manualNet1) > 0 ? Number(parsed.manualNet1) : 0;
+            }
+        } catch (_) {}
+    }
+
+    const rawNum = Number(rawQuantity);
+    const fallbackNum = Number(fallbackQty);
+    const resolvedRawQty = Number.isFinite(rawNum) && rawNum > 0
+        ? rawNum
+        : (Number.isFinite(fallbackNum) && fallbackNum > 0 ? fallbackNum : 0);
+
+    const autoNet1Qty = Math.round((resolvedRawQty * 0.99 + Number.EPSILON) * 100) / 100;
+    const resolvedNet1Qty = manualNet1 > 0 ? manualNet1 : autoNet1Qty;
+    let resolvedRate = (method === 'rate' && rate > 0) || rate > 0 ? rate : null;
+
+    if (resolvedRate === null && resolvedNet1Qty > 0 && Number.isFinite(fallbackNum) && fallbackNum > 0) {
+        const roundedNet1 = Math.round(resolvedNet1Qty);
+        if (roundedNet1 > 0 && Math.abs(fallbackNum - resolvedNet1Qty) > 0.01 && fallbackNum < resolvedNet1Qty) {
+            const inferred = Math.round(((fallbackNum / roundedNet1) * 100 + Number.EPSILON) * 100) / 100;
+            if (inferred > 0 && inferred < 100) {
+                resolvedRate = inferred;
+            }
+        }
+    }
+
+    return {
+        raw_quantity: resolvedRawQty,
+        net1_quantity: resolvedNet1Qty,
+        rate_percent: resolvedRate
+    };
+}
+
+    // تحميل تفاصيل الأصناف عند الطلب (Lazy Loading)
+    ipcMain.handle('get-statement-item-details', (event, { type, id }) => {
+        try {
+            let details = [];
+            if (type === 'sales') {
+                details = db.prepare(`
+                    SELECT sid.quantity, sid.sale_price as price, sid.total_price,
+                           i.name as item_name, u.name as unit_name
+                    FROM sales_invoice_details sid
+                    JOIN items i ON sid.item_id = i.id
+                    LEFT JOIN units u ON i.unit_id = u.id
+                    WHERE sid.invoice_id = ?
+                    ORDER BY sid.id ASC
+                `).all(id);
+            } else if (type === 'purchase') {
+                const rawDetails = db.prepare(`
+                    SELECT pid.raw_quantity, pid.raw_weights, pid.quantity, pid.cost_price as price, pid.total_price,
+                           i.name as item_name, u.name as unit_name
+                    FROM purchase_invoice_details pid
+                    JOIN items i ON pid.item_id = i.id
+                    LEFT JOIN units u ON i.unit_id = u.id
+                    WHERE pid.invoice_id = ?
+                    ORDER BY pid.id ASC
+                `).all(id);
+                details = rawDetails.map((row) => {
+                    const meta = extractPurchaseDetailMeta(row.raw_quantity, row.quantity, row.raw_weights);
+                    return {
+                        ...row,
+                        raw_quantity: meta.raw_quantity,
+                        net1_quantity: meta.net1_quantity,
+                        rate_percent: meta.rate_percent
+                    };
+                });
+            } else if (type === 'local_sale') {
+                details = db.prepare(`
+                    SELECT quantity, price, total as total_price,
+                           statement as item_name, '' as unit_name
+                    FROM local_sales
+                    WHERE id = ?
+                `).all(id);
+            }
+            return { success: true, details };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // كشف حساب مجمع للعميل - يجمع كل الأصناف من كل الفواتير في جدول واحد
+    ipcMain.handle('get-customer-summary-statement', (event, { customerId, startDate, endDate }) => {
+        try {
+            const customer = db.prepare('SELECT * FROM parties WHERE id = ?').get(customerId);
+            if (!customer) {
+                return { success: false, error: 'العميل غير موجود' };
+            }
+
+            const custId = Number(customerId);
+
+            // --- جلب أصناف المبيعات ---
+            let salesItemsQuery = `
+                SELECT i.name as item_name, u.name as unit_name,
+                       SUM(sid.quantity) as total_qty,
+                       ROUND(SUM(sid.total_price) * 1.0 / SUM(sid.quantity), 2) as avg_price,
+                       SUM(sid.total_price) as total_amount
+                FROM sales_invoice_details sid
+                JOIN sales_invoices si ON sid.invoice_id = si.id
+                JOIN items i ON sid.item_id = i.id
+                LEFT JOIN units u ON i.unit_id = u.id
+                WHERE si.customer_id = ?`;
+            const salesParams = [custId];
+            if (startDate) { salesItemsQuery += ' AND si.invoice_date >= ?'; salesParams.push(startDate); }
+            if (endDate) { salesItemsQuery += ' AND si.invoice_date <= ?'; salesParams.push(endDate); }
+            salesItemsQuery += ' GROUP BY i.id ORDER BY i.name ASC';
+
+            // --- جلب أصناف المشتريات ---
+            let purchaseItemsQuery = `
+                SELECT i.id as item_id, i.name as item_name, u.name as unit_name,
+                       pid.raw_quantity, pid.raw_weights, pid.quantity, pid.total_price
+                FROM purchase_invoice_details pid
+                JOIN purchase_invoices pi ON pid.invoice_id = pi.id
+                JOIN items i ON pid.item_id = i.id
+                LEFT JOIN units u ON i.unit_id = u.id
+                WHERE pi.supplier_id = ?`;
+            const purchaseParams = [custId];
+            if (startDate) { purchaseItemsQuery += ' AND pi.invoice_date >= ?'; purchaseParams.push(startDate); }
+            if (endDate) { purchaseItemsQuery += ' AND pi.invoice_date <= ?'; purchaseParams.push(endDate); }
+            purchaseItemsQuery += ' ORDER BY i.name ASC, pid.id ASC';
+
+            const salesItems = db.prepare(salesItemsQuery).all(...salesParams);
+            const rawPurchaseRows = db.prepare(purchaseItemsQuery).all(...purchaseParams);
+            const purchaseGroups = new Map();
+            for (const row of rawPurchaseRows) {
+                const meta = extractPurchaseDetailMeta(row.raw_quantity, row.quantity, row.raw_weights);
+                const key = row.item_id;
+                if (!purchaseGroups.has(key)) {
+                    purchaseGroups.set(key, {
+                        item_name: row.item_name,
+                        unit_name: row.unit_name,
+                        total_raw_qty: 0,
+                        total_net1_qty: 0,
+                        total_qty: 0,
+                        total_amount: 0,
+                        ratesSet: new Set()
+                    });
+                }
+                const group = purchaseGroups.get(key);
+                group.total_raw_qty += meta.raw_quantity;
+                group.total_net1_qty += meta.net1_quantity;
+                group.total_qty += Number(row.quantity) || 0;
+                group.total_amount += Number(row.total_price) || 0;
+                if (meta.rate_percent !== null && Number.isFinite(Number(meta.rate_percent)) && Number(meta.rate_percent) > 0) {
+                    group.ratesSet.add(Number(meta.rate_percent));
+                }
+            }
+            const purchaseItems = Array.from(purchaseGroups.values()).map((group) => {
+                const totalRawQty = Math.round((group.total_raw_qty + Number.EPSILON) * 100) / 100;
+                const totalNet1Qty = Math.round((group.total_net1_qty + Number.EPSILON) * 100) / 100;
+                const totalQty = Math.round((group.total_qty + Number.EPSILON) * 100) / 100;
+                const totalAmount = Math.round((group.total_amount + Number.EPSILON) * 100) / 100;
+                const avgPrice = totalQty > 0 ? Math.round(((totalAmount / totalQty) + Number.EPSILON) * 100) / 100 : 0;
+                const ratesList = Array.from(group.ratesSet);
+                return {
+                    item_name: group.item_name,
+                    unit_name: group.unit_name,
+                    total_raw_qty: totalRawQty,
+                    total_net1_qty: totalNet1Qty,
+                    rate_percent: ratesList.length === 1 ? ratesList[0] : null,
+                    rate_display: ratesList.length > 0 ? ratesList.map((r) => `${r}%`).join(' / ') : '—',
+                    total_qty: totalQty,
+                    avg_price: avgPrice,
+                    total_amount: totalAmount
+                };
+            });
+            const salesReturnItems = [];
+            const purchaseReturnItems = [];
+
+            // --- إجماليات التحصيلات والسداد ---
+            let paymentsQuery = `
+                SELECT type, SUM(amount) as total_amount
+                FROM treasury_transactions
+                WHERE (customer_id = ?
+                   OR (related_type = 'purchase' AND related_invoice_id IN (SELECT id FROM purchase_invoices WHERE supplier_id = ?)))
+                AND COALESCE(related_type, '') NOT IN ('sales', 'purchase')`;
+            const paymentParams = [custId, custId];
+            if (startDate) { paymentsQuery += ' AND transaction_date >= ?'; paymentParams.push(startDate); }
+            if (endDate) { paymentsQuery += ' AND transaction_date <= ?'; paymentParams.push(endDate); }
+            paymentsQuery += ' GROUP BY type';
+
+            const paymentRows = db.prepare(paymentsQuery).all(...paymentParams);
+            let totalPaymentsIn = 0;
+            let totalPaymentsOut = 0;
+            for (const row of paymentRows) {
+                if (row.type === 'income') totalPaymentsIn = row.total_amount;
+                else totalPaymentsOut = row.total_amount;
+            }
+            let invoicePaymentsQuery = `
+                SELECT COALESCE(SUM(paid_amount), 0) as total_amount
+                FROM sales_invoices
+                WHERE customer_id = ? AND paid_amount > 0`;
+            const invoicePaymentParams = [custId];
+            if (startDate) { invoicePaymentsQuery += ' AND invoice_date >= ?'; invoicePaymentParams.push(startDate); }
+            if (endDate) { invoicePaymentsQuery += ' AND invoice_date <= ?'; invoicePaymentParams.push(endDate); }
+            const invoicePaymentRow = db.prepare(invoicePaymentsQuery).get(...invoicePaymentParams);
+            totalPaymentsIn += invoicePaymentRow.total_amount || 0;
+
+            // --- حساب الرصيد الافتتاحي من دفتر الأستاذ ---
+            let openingBalance = 0;
+            if (startDate) {
+                const obResult = db.prepare(`
+                    SELECT COALESCE(SUM(amount), 0) as net
+                    FROM party_ledger
+                    WHERE party_id = ? AND transaction_date < ?
+                `).get(custId, startDate);
+                openingBalance = obResult.net;
+            }
+
+            const totalSales = salesItems.reduce((s, i) => s + i.total_amount, 0);
+            const totalPurchases = purchaseItems.reduce((s, i) => s + i.total_amount, 0);
+            const totalSalesReturns = 0;
+            const totalPurchaseReturns = 0;
+
+            const totalDebit = totalSales + totalPaymentsOut;
+            const totalCredit = totalPurchases + totalPaymentsIn;
+            
+            // حساب الرصيد الختامي بشكل تصاعدي
+            let closingBalance = openingBalance + (totalDebit - totalCredit);
+
+            return {
+                success: true,
+                customer,
+                salesItems,
+                purchaseItems,
+                salesReturnItems,
+                purchaseReturnItems,
+                totals: {
+                    totalSales,
+                    totalPurchases,
+                    totalPaymentsIn,
+                    totalPaymentsOut,
+                    totalSalesReturns,
+                    totalPurchaseReturns,
+                    openingBalance,
+                    closingBalance
+                },
+                period: { startDate, endDate }
+            };
+        } catch (error) {
+            console.error('Error getting customer summary statement:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // --- PDF Export Handlers ---
+
+    ipcMain.handle('save-debtor-creditor-pdf', async (event, payload) => {
+        try {
+            const win = BrowserWindow.fromWebContents(event.sender);
+            if (!win) {
+                return { success: false, error: 'No active window found' };
+            }
+
+            const date = new Date().toISOString().split('T')[0];
+            const requestedDefault = payload?.defaultName;
+            const defaultName = sanitizeSuggestedFileName(requestedDefault || `Debtor_Creditor_Report_${date}.pdf`);
+            const defaultPath = path.join(app.getPath('documents'), defaultName);
+
+            const { canceled, filePath } = await dialog.showSaveDialog(win, {
+                title: 'حفظ تقرير PDF',
+                defaultPath,
+                filters: [{ name: 'PDF', extensions: ['pdf'] }]
+            });
+
+            if (canceled || !filePath) {
+                return { success: false, canceled: true };
+            }
+
+            const pdfBuffer = await win.webContents.printToPDF({
+                printBackground: true,
+                pageSize: 'A4',
+                marginsType: 1,
+                preferCSSPageSize: true
+            });
+
+            // Set PDF metadata title to match the chosen filename (without extension)
+            const title = path.basename(filePath, path.extname(filePath));
+            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
+            const pdfDoc = await PDFDocument.load(pdfBuffer);
+            pdfDoc.setTitle(title);
+            pdfDoc.setCreator('Accounting System');
+            pdfDoc.setProducer('Accounting System');
+
+            const finalPdf = await pdfDoc.save();
+            fs.writeFileSync(filePath, finalPdf);
+
+            return { success: true, filePath };
+        } catch (error) {
+            console.error('[save-debtor-creditor-pdf] error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    async function exportStatementHtmlToPdf(event, payload, { dialogTitle, fallbackName, landscape }) {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win) {
+            return { success: false, error: 'No active window found' };
+        }
+
+        const html = typeof payload?.html === 'string' ? payload.html : '';
+        if (!html.trim()) {
+            return { success: false, error: 'لا يوجد محتوى للتصدير' };
+        }
+
+        const date = new Date().toISOString().split('T')[0];
+        const defaultName = sanitizeSuggestedFileName(payload?.defaultName || `${fallbackName}_${date}.pdf`);
+        const { canceled, filePath } = await dialog.showSaveDialog(win, {
+            title: dialogTitle,
+            defaultPath: path.join(app.getPath('downloads'), defaultName),
+            filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        });
+
+        if (canceled || !filePath) {
+            return { success: false, canceled: true };
+        }
+
+        const tempHtmlPath = path.join(app.getPath('temp'), `statement_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.html`);
+        const printWin = new BrowserWindow({
+            show: false,
+            width: landscape ? 1123 : 794,
+            height: landscape ? 794 : 1123,
+            webPreferences: { sandbox: true, javascript: false }
+        });
+
+        try {
+            fs.writeFileSync(tempHtmlPath, html, 'utf8');
+            await printWin.loadFile(tempHtmlPath);
+
+            const pdfBuffer = await printWin.webContents.printToPDF({
+                printBackground: true,
+                pageSize: 'A4',
+                landscape,
+                preferCSSPageSize: false,
+                margins: { top: 0.3, bottom: 0.4, left: 0.3, right: 0.3 }
+            });
+
+            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
+            const pdfDoc = await PDFDocument.load(pdfBuffer);
+            pdfDoc.setTitle(path.basename(filePath, path.extname(filePath)));
+            pdfDoc.setCreator('Accounting System');
+            pdfDoc.setProducer('Accounting System');
+
+            const pages = pdfDoc.getPages();
+            const totalPages = pages.length;
+            if (totalPages > 0) {
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                pages.forEach((page, i) => {
+                    const { width } = page.getSize();
+                    const text = `${i + 1} / ${totalPages}`;
+                    const textWidth = font.widthOfTextAtSize(text, 9);
+                    page.drawText(text, {
+                        x: (width - textWidth) / 2,
+                        y: 10,
+                        size: 9,
+                        font,
+                        color: rgb(0.45, 0.45, 0.45)
+                    });
+                });
+            }
+
+            fs.writeFileSync(filePath, await pdfDoc.save());
+            return { success: true, filePath };
+        } finally {
+            if (!printWin.isDestroyed()) {
+                printWin.destroy();
+            }
+            try { fs.unlinkSync(tempHtmlPath); } catch (_) {}
+        }
+    }
+
+    ipcMain.handle('save-customer-report-pdf', async (event, payload) => {
+        try {
+            return await exportStatementHtmlToPdf(event, payload, {
+                dialogTitle: 'حفظ كشف حساب تفصيلي PDF',
+                fallbackName: 'Customer_Statement',
+                landscape: true
+            });
+        } catch (error) {
+            console.error('[save-customer-report-pdf] error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-customer-summary-pdf', async (event, payload) => {
+        try {
+            return await exportStatementHtmlToPdf(event, payload, {
+                dialogTitle: 'حفظ فاتورة مجمعة PDF',
+                fallbackName: 'Customer_Summary',
+                landscape: false
+            });
+        } catch (error) {
+            console.error('[save-customer-summary-pdf] error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-daily-finance-report', (event, filters = {}) => {
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            const startDate = String(filters.startDate || filters.date || today).trim();
+            const endDate = String(filters.endDate || filters.date || startDate).trim();
+
+            const salesInvoices = db.prepare(`
+                SELECT si.id, si.invoice_number, si.invoice_date, si.total_amount,
+                       si.paid_amount, si.remaining_amount, si.notes, si.created_at,
+                       c.name AS customer_name
+                FROM sales_invoices si
+                LEFT JOIN parties c ON si.customer_id = c.id
+                WHERE si.invoice_date >= @startDate AND si.invoice_date <= @endDate AND si.paid_amount > 0
+                ORDER BY si.invoice_date DESC, si.id DESC
+            `).all({ startDate, endDate });
+
+            const localSales = db.prepare(`
+                SELECT ls.id, ls.document_number, ls.record_date, ls.quantity, ls.price,
+                       ls.total, ls.statement, ls.created_at, c.name AS customer_name
+                FROM local_sales ls
+                LEFT JOIN parties c ON ls.customer_id = c.id
+                WHERE ls.record_date >= @startDate AND ls.record_date <= @endDate
+                ORDER BY ls.record_date DESC, ls.id DESC
+            `).all({ startDate, endDate });
+
+            const exportRevenues = db.prepare(`
+                SELECT er.id, er.document_number, er.record_date, er.amount, er.currency,
+                       er.exchange_rate, er.amount_egp, er.statement, er.created_at
+                FROM export_revenues er
+                WHERE er.record_date >= @startDate AND er.record_date <= @endDate
+                ORDER BY er.record_date DESC, er.id DESC
+            `).all({ startDate, endDate });
+
+            const treasuryIncome = db.prepare(`
+                SELECT t.id, t.voucher_number, t.amount, t.transaction_date, t.description,
+                       t.created_at, c.name AS customer_name
+                FROM treasury_transactions t
+                LEFT JOIN parties c ON t.customer_id = c.id
+                WHERE t.type = 'income'
+                  AND t.transaction_date >= @startDate
+                  AND t.transaction_date <= @endDate
+                  AND COALESCE(t.related_type, '') NOT IN ('sales_shift_close', 'customer_collection_shift_close')
+                ORDER BY t.transaction_date DESC, t.id DESC
+            `).all({ startDate, endDate });
+
+            const purchaseInvoices = db.prepare(`
+                SELECT pi.id, pi.invoice_number, pi.invoice_date, pi.total_amount,
+                       pi.paid_amount, pi.remaining_amount, pi.notes, pi.created_at,
+                       c.name AS supplier_name
+                FROM purchase_invoices pi
+                LEFT JOIN parties c ON pi.supplier_id = c.id
+                WHERE pi.invoice_date >= @startDate AND pi.invoice_date <= @endDate AND pi.paid_amount > 0
+                ORDER BY pi.invoice_date DESC, pi.id DESC
+            `).all({ startDate, endDate });
+
+            const pettyExpenses = db.prepare(`
+                SELECT pe.id, pe.document_number, pe.expense_date, pe.category,
+                       pe.amount, pe.statement, pe.notes, pe.created_at
+                FROM petty_expenses pe
+                WHERE pe.expense_date >= @startDate AND pe.expense_date <= @endDate
+                ORDER BY pe.expense_date DESC, pe.id DESC
+            `).all({ startDate, endDate });
+
+            const factoryPettyExpenses = db.prepare(`
+                SELECT fpe.id, fpe.document_number, fpe.expense_date, fpe.category,
+                       fpe.amount, fpe.statement, fpe.notes, fpe.created_at
+                FROM factory_petty_expenses fpe
+                WHERE fpe.expense_date >= @startDate AND fpe.expense_date <= @endDate
+                ORDER BY fpe.expense_date DESC, fpe.id DESC
+            `).all({ startDate, endDate });
+
+            const treasuryExpense = db.prepare(`
+                SELECT t.id, t.voucher_number, t.amount, t.transaction_date, t.description,
+                       t.created_at, c.name AS party_name
+                FROM treasury_transactions t
+                LEFT JOIN parties c ON t.customer_id = c.id
+                WHERE t.type = 'expense'
+                  AND t.transaction_date >= @startDate
+                  AND t.transaction_date <= @endDate
+                  AND t.id NOT IN (
+                      SELECT COALESCE(treasury_transaction_id, 0) FROM petty_expenses WHERE treasury_transaction_id IS NOT NULL
+                      UNION
+                      SELECT COALESCE(treasury_transaction_id, 0) FROM factory_petty_expenses WHERE treasury_transaction_id IS NOT NULL
+                  )
+                ORDER BY t.transaction_date DESC, t.id DESC
+            `).all({ startDate, endDate });
+
+            const totalSalesPaid = salesInvoices.reduce((sum, r) => sum + (Number(r.paid_amount) || 0), 0);
+            const totalLocalSales = localSales.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+            const totalExportRevenues = exportRevenues.reduce((sum, r) => sum + (Number(r.amount_egp) || 0), 0);
+            const totalTreasuryIncome = treasuryIncome.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+            const totalPurchasesPaid = purchaseInvoices.reduce((sum, r) => sum + (Number(r.paid_amount) || 0), 0);
+            const totalPetty = pettyExpenses.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+            const totalFactoryPetty = factoryPettyExpenses.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+            const totalTreasuryExpense = treasuryExpense.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+            const totalIncome = Math.round((totalSalesPaid + totalLocalSales + totalExportRevenues + totalTreasuryIncome) * 100) / 100;
+            const totalExpense = Math.round((totalPurchasesPaid + totalPetty + totalFactoryPetty + totalTreasuryExpense) * 100) / 100;
+            const netFlow = Math.round((totalIncome - totalExpense) * 100) / 100;
+
+            return {
+                success: true,
+                period: { startDate, endDate },
+                income: {
+                    salesInvoices,
+                    localSales,
+                    exportRevenues,
+                    treasuryIncome,
+                    subtotals: {
+                        salesPaid: totalSalesPaid,
+                        localSales: totalLocalSales,
+                        exportRevenues: totalExportRevenues,
+                        treasuryIncome: totalTreasuryIncome
+                    }
+                },
+                expense: {
+                    purchaseInvoices,
+                    pettyExpenses,
+                    factoryPettyExpenses,
+                    treasuryExpense,
+                    subtotals: {
+                        purchasesPaid: totalPurchasesPaid,
+                        pettyExpenses: totalPetty,
+                        factoryPettyExpenses: totalFactoryPetty,
+                        treasuryExpense: totalTreasuryExpense
+                    }
+                },
+                totals: {
+                    totalIncome,
+                    totalExpense,
+                    netFlow
+                }
+            };
+        } catch (error) {
+            console.error('[get-daily-finance-report] error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-daily-report-pdf', async (event, payload) => {
+        const sourceWebContents = event.sender;
+        try {
+            const win = BrowserWindow.fromWebContents(sourceWebContents);
+            if (!win) {
+                return { success: false, error: 'No active window found' };
+            }
+
+            const date = new Date().toISOString().split('T')[0];
+            const requestedDefault = payload?.defaultName;
+            const defaultName = sanitizeSuggestedFileName(requestedDefault || `Daily_Finance_Report_${date}.pdf`);
+            const defaultPath = path.join(app.getPath('downloads'), defaultName);
+
+            const { canceled, filePath } = await dialog.showSaveDialog(win, {
+                title: 'حفظ التقرير اليومي PDF',
+                defaultPath,
+                filters: [{ name: 'PDF', extensions: ['pdf'] }]
+            });
+
+            if (canceled || !filePath) {
+                return { success: false, canceled: true };
+            }
+
+            let pdfBuffer;
+            if (payload && typeof payload.html === 'string' && payload.html.trim().length > 0) {
+                const printWin = new BrowserWindow({
+                    show: false,
+                    width: 794,
+                    height: 1123,
+                    backgroundColor: '#ffffff',
+                    webPreferences: {
+                        sandbox: true,
+                        nodeIntegration: false,
+                        contextIsolation: true
+                    }
+                });
+                try {
+                    const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(payload.html)}`;
+                    await printWin.loadURL(dataUrl);
+                    pdfBuffer = await printWin.webContents.printToPDF({
+                        printBackground: true,
+                        pageSize: 'A4',
+                        landscape: false,
+                        marginsType: 0,
+                        preferCSSPageSize: true
+                    });
+                } finally {
+                    if (!printWin.isDestroyed()) {
+                        printWin.destroy();
+                    }
+                }
+            } else {
+                await prepareShellFrameForPdfCapture(sourceWebContents);
+                pdfBuffer = await sourceWebContents.printToPDF({
+                    printBackground: true,
+                    pageSize: 'A4',
+                    landscape: false,
+                    marginsType: 0,
+                    preferCSSPageSize: true
+                });
+            }
+
+            const title = path.basename(filePath, path.extname(filePath));
+            const { PDFDocument, StandardFonts, rgb } = getPdfLib();
+            const pdfDoc = await PDFDocument.load(pdfBuffer);
+            pdfDoc.setTitle(title);
+            pdfDoc.setCreator('Accounting System');
+            pdfDoc.setProducer('Accounting System');
+
+            const pages = pdfDoc.getPages();
+            const totalPages = pages.length;
+            if (totalPages > 0) {
+                const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                pages.forEach((page, i) => {
+                    const { width } = page.getSize();
+                    const text = `${i + 1} / ${totalPages}`;
+                    const textWidth = font.widthOfTextAtSize(text, 9);
+                    page.drawText(text, {
+                        x: (width - textWidth) / 2,
+                        y: 6,
+                        size: 9,
+                        font,
+                        color: rgb(0.45, 0.45, 0.45)
+                    });
+                });
+            }
+
+            const finalPdf = await pdfDoc.save();
+            fs.writeFileSync(filePath, finalPdf);
+
+            return { success: true, filePath };
+        } catch (error) {
+            console.error('[save-daily-report-pdf] error:', error);
+            return { success: false, error: error.message };
+        } finally {
+            await restoreShellFrameAfterPdfCapture(sourceWebContents);
+        }
+    });
+}
+
+module.exports = { register };

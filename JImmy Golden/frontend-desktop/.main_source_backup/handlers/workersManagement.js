@@ -1,0 +1,815 @@
+const { ipcMain } = require('electron');
+const { db } = require('../db');
+
+const ATTENDANCE_DAYS = [
+    'saturday',
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday'
+];
+const ALLOWED_DURATIONS = new Set([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]);
+const ALLOWED_BASE_DURATIONS = new Set([0.5, 1]);
+
+function roundMoney(value) {
+    const n = Number(value) || 0;
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function parseIsoDate(value) {
+    const text = String(value || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+
+    const date = new Date(`${text}T00:00:00Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text) {
+        return null;
+    }
+
+    return { text, date };
+}
+
+function normalizeWeekStart(value) {
+    const parsed = parseIsoDate(value);
+    if (!parsed) {
+        throw new Error('تاريخ بداية الأسبوع غير صحيح');
+    }
+
+    if (parsed.date.getUTCDay() !== 6) {
+        throw new Error('بداية الأسبوع يجب أن تكون يوم السبت');
+    }
+
+    return parsed.text;
+}
+
+function getCurrentSaturday() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const dayOfMonth = String(now.getDate()).padStart(2, '0');
+    const localDate = new Date(`${year}-${month}-${dayOfMonth}T00:00:00Z`);
+    const day = localDate.getUTCDay();
+    const diff = (day === 6) ? 0 : -(day + 1);
+    localDate.setUTCDate(localDate.getUTCDate() + diff);
+    return localDate.toISOString().slice(0, 10);
+}
+
+function getWeekEnd(weekStart) {
+    const parsed = parseIsoDate(weekStart);
+    const date = parsed.date;
+    date.setUTCDate(date.getUTCDate() + 6);
+    return date.toISOString().slice(0, 10);
+}
+
+function getNextDocumentNumber() {
+    const row = db.prepare(`
+        SELECT document_number
+        FROM petty_expenses
+        WHERE document_number GLOB 'NTH-[0-9]*'
+        ORDER BY CAST(SUBSTR(document_number, 5) AS INTEGER) DESC
+        LIMIT 1
+    `).get();
+
+    const lastNumber = row ? Number(String(row.document_number).slice(4)) : 0;
+    return `NTH-${String((Number.isFinite(lastNumber) ? lastNumber : 0) + 1).padStart(4, '0')}`;
+}
+
+function normalizeWorkerPayload(data = {}) {
+    const name = String(data.name || '').trim();
+    const dailyWage = roundMoney(data.daily_wage);
+    const jobTitle = String(data.job_title || '').trim();
+    const notes = String(data.notes || '').trim();
+    const autoTransferToPetty = data.auto_transfer_to_petty ? 1 : 0;
+
+    if (!name) {
+        throw new Error('اسم العامل مطلوب');
+    }
+
+    if (!Number.isFinite(Number(data.daily_wage)) || dailyWage <= 0) {
+        throw new Error('الأجر اليومي يجب أن يكون أكبر من صفر');
+    }
+
+    if (!jobTitle) {
+        throw new Error('الوظيفة مطلوبة');
+    }
+
+    return {
+        name,
+        daily_wage: dailyWage,
+        job_title: jobTitle,
+        notes,
+        auto_transfer_to_petty: autoTransferToPetty
+    };
+}
+
+function normalizeAttendanceEntry(entry = {}, weekStart = '') {
+    const workerId = Number(entry.worker_id);
+    if (!Number.isInteger(workerId) || workerId <= 0) {
+        throw new Error('معرف العامل غير صحيح');
+    }
+
+    const isNewLogic = weekStart >= '2026-07-11';
+    const normalized = { worker_id: workerId };
+    for (const day of ATTENDANCE_DAYS) {
+        const present = entry[`${day}_present`] ? 1 : 0;
+        const duration = present ? Number(entry[`${day}_duration`]) : 0;
+        const baseDuration = present ? Number(entry[`${day}_base_duration`]) : 0;
+
+        if (present && !ALLOWED_DURATIONS.has(duration)) {
+            throw new Error('مدة العمل يجب أن تكون من نصف يوم حتى 5 أيام إضافي أو بدون إضافي');
+        }
+
+        if (present && isNewLogic && !ALLOWED_BASE_DURATIONS.has(baseDuration)) {
+            throw new Error('مدة الحضور الأساسي يجب أن تكون نصف يوم أو يومًا كاملًا');
+        }
+
+        normalized[`${day}_present`] = present;
+        normalized[`${day}_base_duration`] = present && isNewLogic ? baseDuration : 0;
+        normalized[`${day}_duration`] = present ? duration : 0;
+    }
+
+    return normalized;
+}
+
+function normalizeAdvancePayload(data = {}) {
+    const workerId = Number(data.worker_id);
+    const weekStart = normalizeWeekStart(data.week_start_date);
+    const parsedAdvanceDate = parseIsoDate(data.advance_date);
+    const amount = roundMoney(data.amount);
+
+    if (!Number.isInteger(workerId) || workerId <= 0) {
+        throw new Error('معرف العامل غير صحيح');
+    }
+
+    if (!parsedAdvanceDate) {
+        throw new Error('تاريخ السلفة غير صحيح');
+    }
+
+    const weekEnd = getWeekEnd(weekStart);
+    if (parsedAdvanceDate.text < weekStart || parsedAdvanceDate.text > weekEnd) {
+        throw new Error('تاريخ السلفة يجب أن يكون داخل الأسبوع المحدد');
+    }
+
+    if (!Number.isFinite(Number(data.amount)) || amount <= 0) {
+        throw new Error('مبلغ السلفة يجب أن يكون أكبر من صفر');
+    }
+
+    return {
+        worker_id: workerId,
+        week_start_date: weekStart,
+        advance_date: parsedAdvanceDate.text,
+        amount,
+        notes: String(data.notes || '').trim()
+    };
+}
+
+function getWeekData(weekStart, includeArchived = false) {
+    const workers = db.prepare(`
+        SELECT
+            w.id AS worker_id,
+            w.name,
+            w.daily_wage,
+            w.job_title,
+            w.notes,
+            w.is_active,
+            w.auto_transfer_to_petty,
+            (SELECT COALESCE(SUM(amount), 0) FROM worker_advances WHERE worker_id = w.id) AS historical_advances_total,
+            (SELECT COALESCE(SUM(deducted_amount), 0) FROM worker_advance_deductions WHERE worker_id = w.id) AS historical_deductions_total,
+            a.id AS attendance_id,
+            a.daily_wage AS week_daily_wage,
+            a.petty_expense_id,
+            a.saturday_present,
+            a.saturday_base_duration,
+            a.saturday_duration,
+            a.sunday_present,
+            a.sunday_base_duration,
+            a.sunday_duration,
+            a.monday_present,
+            a.monday_base_duration,
+            a.monday_duration,
+            a.tuesday_present,
+            a.tuesday_base_duration,
+            a.tuesday_duration,
+            a.wednesday_present,
+            a.wednesday_base_duration,
+            a.wednesday_duration,
+            a.thursday_present,
+            a.thursday_base_duration,
+            a.thursday_duration,
+            a.friday_present,
+            a.friday_base_duration,
+            a.friday_duration
+        FROM workers w
+        LEFT JOIN worker_weekly_attendance a
+            ON a.worker_id = w.id
+           AND a.week_start_date = @week_start_date
+        WHERE (@include_archived = 0 AND w.is_active = 1)
+           OR (@include_archived = 1 AND w.is_active = 0)
+        ORDER BY w.is_active DESC, w.id ASC
+    `).all({
+        week_start_date: weekStart,
+        include_archived: includeArchived ? 1 : 0
+    });
+
+    const allAdvancesUpToWeek = db.prepare(`
+        SELECT id, worker_id, week_start_date, advance_date, amount, notes, created_at, updated_at
+        FROM worker_advances
+        WHERE week_start_date <= ?
+        ORDER BY advance_date ASC, id ASC
+    `).all(weekStart);
+
+    const allDeductionsUpToWeek = db.prepare(`
+        SELECT id, worker_id, week_start_date, deducted_amount, notes, created_at, updated_at
+        FROM worker_advance_deductions
+        WHERE week_start_date <= ?
+        ORDER BY week_start_date ASC, id ASC
+    `).all(weekStart);
+
+    const advancesByWorker = new Map();
+    const priorAdvancesByWorker = new Map();
+    for (const advance of allAdvancesUpToWeek) {
+        const normalizedAdv = {
+            ...advance,
+            amount: roundMoney(advance.amount)
+        };
+        if (advance.week_start_date === weekStart) {
+            const list = advancesByWorker.get(advance.worker_id) || [];
+            list.push(normalizedAdv);
+            advancesByWorker.set(advance.worker_id, list);
+        } else {
+            const list = priorAdvancesByWorker.get(advance.worker_id) || [];
+            list.push(normalizedAdv);
+            priorAdvancesByWorker.set(advance.worker_id, list);
+        }
+    }
+
+    const weekDeductionByWorker = new Map();
+    const priorDeductionsByWorker = new Map();
+    for (const deduction of allDeductionsUpToWeek) {
+        const normalizedDed = {
+            ...deduction,
+            deducted_amount: roundMoney(deduction.deducted_amount)
+        };
+        if (deduction.week_start_date === weekStart) {
+            weekDeductionByWorker.set(deduction.worker_id, normalizedDed);
+        } else {
+            const list = priorDeductionsByWorker.get(deduction.worker_id) || [];
+            list.push(normalizedDed);
+            priorDeductionsByWorker.set(deduction.worker_id, list);
+        }
+    }
+
+    const isNewLogic = weekStart >= '2026-07-11';
+    const rows = workers.map((worker) => {
+        const attendance = {};
+        let attendanceUnits = 0;
+
+        for (const day of ATTENDANCE_DAYS) {
+            const present = Boolean(worker[`${day}_present`]);
+            const defaultDuration = isNewLogic ? 0 : 1;
+            const duration = present && ALLOWED_DURATIONS.has(Number(worker[`${day}_duration`]))
+                ? Number(worker[`${day}_duration`])
+                : (present ? defaultDuration : 0);
+            const baseDuration = present && isNewLogic && ALLOWED_BASE_DURATIONS.has(Number(worker[`${day}_base_duration`]))
+                ? Number(worker[`${day}_base_duration`])
+                : (present ? 1 : 0);
+
+            attendance[day] = { present, base_duration: baseDuration, duration };
+            attendanceUnits += present ? (isNewLogic ? (baseDuration + duration) : duration) : 0;
+        }
+
+        const dailyWage = worker.attendance_id
+            ? roundMoney(worker.week_daily_wage)
+            : roundMoney(worker.daily_wage);
+        const workerAdvances = advancesByWorker.get(worker.worker_id) || [];
+        const priorAdvances = priorAdvancesByWorker.get(worker.worker_id) || [];
+        const priorDeductions = priorDeductionsByWorker.get(worker.worker_id) || [];
+        const currentDeductionRow = weekDeductionByWorker.get(worker.worker_id) || null;
+
+        let runningCarriedBalance = 0;
+        const priorWeeksSet = new Set([
+            ...priorAdvances.map((a) => a.week_start_date),
+            ...priorDeductions.map((d) => d.week_start_date)
+        ]);
+        const sortedPriorWeeks = Array.from(priorWeeksSet).sort();
+        for (const w of sortedPriorWeeks) {
+            const wAdv = priorAdvances
+                .filter((a) => a.week_start_date === w)
+                .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+            const wDed = priorDeductions
+                .filter((d) => d.week_start_date === w)
+                .reduce((sum, item) => sum + Number(item.deducted_amount || 0), 0);
+            runningCarriedBalance = roundMoney(runningCarriedBalance + wAdv);
+            const effDed = roundMoney(Math.min(Math.max(0, wDed), runningCarriedBalance));
+            runningCarriedBalance = roundMoney(Math.max(0, runningCarriedBalance - effDed));
+        }
+
+        const carriedOverAdvance = runningCarriedBalance;
+        const weekAdvancesTotal = roundMoney(workerAdvances.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+        const totalAdvanceBalance = roundMoney(carriedOverAdvance + weekAdvancesTotal);
+        const rawWeekDeducted = currentDeductionRow ? roundMoney(currentDeductionRow.deducted_amount) : 0;
+        const deductedAdvanceAmount = roundMoney(Math.min(Math.max(0, rawWeekDeducted), totalAdvanceBalance));
+        const remainingAdvanceBalance = roundMoney(Math.max(0, totalAdvanceBalance - deductedAdvanceAmount));
+        const grossPay = roundMoney(dailyWage * attendanceUnits);
+
+        return {
+            id: worker.worker_id,
+            name: worker.name,
+            daily_wage: dailyWage,
+            current_daily_wage: roundMoney(worker.daily_wage),
+            job_title: worker.job_title,
+            notes: worker.notes || '',
+            is_active: Boolean(worker.is_active),
+            auto_transfer_to_petty: Boolean(worker.auto_transfer_to_petty),
+            has_attendance_record: Boolean(worker.attendance_id),
+            petty_expense_id: worker.petty_expense_id || null,
+            attendance,
+            attendance_units: attendanceUnits,
+            gross_pay: grossPay,
+            carried_over_advance: carriedOverAdvance,
+            week_advances_total: weekAdvancesTotal,
+            total_advance_balance: totalAdvanceBalance,
+            deducted_advance_amount: deductedAdvanceAmount,
+            deduction_notes: currentDeductionRow?.notes || '',
+            remaining_advance_balance: remainingAdvanceBalance,
+            advances_total: deductedAdvanceAmount,
+            net_pay: roundMoney(grossPay - deductedAdvanceAmount),
+            advances: workerAdvances,
+            prior_advances: [...priorAdvances].reverse(),
+            prior_deductions: [...priorDeductions].reverse(),
+            historical_advances_total: roundMoney(worker.historical_advances_total || 0),
+            historical_deductions_total: roundMoney(worker.historical_deductions_total || 0)
+        };
+    });
+
+    const totals = rows.reduce((summary, row) => {
+        if (!row.auto_transfer_to_petty) {
+            summary.gross_pay = roundMoney(summary.gross_pay + row.gross_pay);
+        }
+        summary.advances_total = roundMoney(summary.advances_total + row.deducted_advance_amount);
+        summary.remaining_advance_balance = roundMoney(summary.remaining_advance_balance + row.remaining_advance_balance);
+        summary.total_advance_balance = roundMoney(summary.total_advance_balance + row.total_advance_balance);
+        summary.deducted_advance_amount = roundMoney(summary.deducted_advance_amount + row.deducted_advance_amount);
+        summary.net_pay = roundMoney(summary.net_pay + row.net_pay);
+        return summary;
+    }, {
+        workers_count: rows.length,
+        gross_pay: 0,
+        advances_total: 0,
+        remaining_advance_balance: 0,
+        total_advance_balance: 0,
+        deducted_advance_amount: 0,
+        net_pay: 0
+    });
+
+    return {
+        week_start_date: weekStart,
+        week_end_date: getWeekEnd(weekStart),
+        rows,
+        totals
+    };
+}
+
+function register() {
+    ipcMain.handle('get-workers-management-week', (event, params = {}) => {
+        try {
+            const weekStart = normalizeWeekStart(params.week_start_date);
+            return {
+                success: true,
+                ...getWeekData(weekStart, Boolean(params.include_archived))
+            };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-workers-management-weeks', () => {
+        try {
+            const rows = db.prepare(`
+                SELECT week_start_date
+                FROM (
+                    SELECT week_start_date FROM worker_weekly_attendance
+                    UNION
+                    SELECT week_start_date FROM worker_advances
+                    UNION
+                    SELECT week_start_date FROM worker_advance_deductions
+                )
+                ORDER BY week_start_date DESC
+                LIMIT 260
+            `).all();
+
+            return {
+                success: true,
+                weeks: rows.map((row) => row.week_start_date)
+            };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-worker', (event, data = {}) => {
+        try {
+            const payload = normalizeWorkerPayload(data);
+            const info = db.prepare(`
+                INSERT INTO workers (name, daily_wage, job_title, notes, auto_transfer_to_petty)
+                VALUES (@name, @daily_wage, @job_title, @notes, @auto_transfer_to_petty)
+            `).run(payload);
+
+            return { success: true, id: info.lastInsertRowid };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('update-worker', (event, data = {}) => {
+        try {
+            const id = Number(data.id);
+            if (!Number.isInteger(id) || id <= 0) {
+                return { success: false, error: 'معرف العامل غير صحيح' };
+            }
+
+            const existing = db.prepare('SELECT id FROM workers WHERE id = ?').get(id);
+            if (!existing) {
+                return { success: false, error: 'العامل غير موجود' };
+            }
+
+            let effectiveFromWeek = null;
+            if (data.effective_from_week) {
+                effectiveFromWeek = normalizeWeekStart(data.effective_from_week);
+            } else if (data.week_start_date) {
+                effectiveFromWeek = normalizeWeekStart(data.week_start_date);
+            } else {
+                effectiveFromWeek = getCurrentSaturday();
+            }
+
+            const payload = normalizeWorkerPayload(data);
+            const updateTransaction = db.transaction(() => {
+                db.prepare(`
+                    UPDATE workers
+                    SET name = @name,
+                        daily_wage = @daily_wage,
+                        job_title = @job_title,
+                        notes = @notes,
+                        auto_transfer_to_petty = @auto_transfer_to_petty,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = @id
+                `).run({ ...payload, id });
+
+                db.prepare(`
+                    UPDATE worker_weekly_attendance
+                    SET daily_wage = @daily_wage
+                    WHERE worker_id = @id
+                      AND week_start_date >= @effective_from_week
+                `).run({ daily_wage: payload.daily_wage, id, effective_from_week: effectiveFromWeek });
+            });
+
+            updateTransaction();
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('archive-worker', (event, idValue) => {
+        try {
+            const id = Number(idValue);
+            if (!Number.isInteger(id) || id <= 0) {
+                return { success: false, error: 'معرف العامل غير صحيح' };
+            }
+
+            const info = db.prepare(`
+                UPDATE workers
+                SET is_active = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND is_active = 1
+            `).run(id);
+
+            if (!info.changes) {
+                return { success: false, error: 'العامل غير موجود أو مؤرشف بالفعل' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('restore-worker', (event, idValue) => {
+        try {
+            const id = Number(idValue);
+            if (!Number.isInteger(id) || id <= 0) {
+                return { success: false, error: 'معرف العامل غير صحيح' };
+            }
+
+            const info = db.prepare(`
+                UPDATE workers
+                SET is_active = 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND is_active = 0
+            `).run(id);
+
+            if (!info.changes) {
+                return { success: false, error: 'العامل غير موجود أو نشط بالفعل' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-workers-week-attendance', (event, data = {}) => {
+        try {
+            const weekStart = normalizeWeekStart(data.week_start_date);
+            const entries = Array.isArray(data.entries) ? data.entries : [];
+            const normalizedEntries = entries.map((entry) => normalizeAttendanceEntry(entry, weekStart));
+            const getWorker = db.prepare('SELECT id, name, daily_wage, auto_transfer_to_petty FROM workers WHERE id = ?');
+            const getExisting = db.prepare(`
+                SELECT daily_wage, petty_expense_id
+                FROM worker_weekly_attendance
+                WHERE worker_id = ? AND week_start_date = ?
+            `);
+            const upsertAttendance = db.prepare(`
+                INSERT INTO worker_weekly_attendance (
+                    worker_id, week_start_date, daily_wage, petty_expense_id,
+                    saturday_present, saturday_base_duration, saturday_duration,
+                    sunday_present, sunday_base_duration, sunday_duration,
+                    monday_present, monday_base_duration, monday_duration,
+                    tuesday_present, tuesday_base_duration, tuesday_duration,
+                    wednesday_present, wednesday_base_duration, wednesday_duration,
+                    thursday_present, thursday_base_duration, thursday_duration,
+                    friday_present, friday_base_duration, friday_duration
+                ) VALUES (
+                    @worker_id, @week_start_date, @daily_wage, @petty_expense_id,
+                    @saturday_present, @saturday_base_duration, @saturday_duration,
+                    @sunday_present, @sunday_base_duration, @sunday_duration,
+                    @monday_present, @monday_base_duration, @monday_duration,
+                    @tuesday_present, @tuesday_base_duration, @tuesday_duration,
+                    @wednesday_present, @wednesday_base_duration, @wednesday_duration,
+                    @thursday_present, @thursday_base_duration, @thursday_duration,
+                    @friday_present, @friday_base_duration, @friday_duration
+                )
+                ON CONFLICT(worker_id, week_start_date) DO UPDATE SET
+                    petty_expense_id = excluded.petty_expense_id,
+                    saturday_present = excluded.saturday_present,
+                    saturday_base_duration = excluded.saturday_base_duration,
+                    saturday_duration = excluded.saturday_duration,
+                    sunday_present = excluded.sunday_present,
+                    sunday_base_duration = excluded.sunday_base_duration,
+                    sunday_duration = excluded.sunday_duration,
+                    monday_present = excluded.monday_present,
+                    monday_base_duration = excluded.monday_base_duration,
+                    monday_duration = excluded.monday_duration,
+                    tuesday_present = excluded.tuesday_present,
+                    tuesday_base_duration = excluded.tuesday_base_duration,
+                    tuesday_duration = excluded.tuesday_duration,
+                    wednesday_present = excluded.wednesday_present,
+                    wednesday_base_duration = excluded.wednesday_base_duration,
+                    wednesday_duration = excluded.wednesday_duration,
+                    thursday_present = excluded.thursday_present,
+                    thursday_base_duration = excluded.thursday_base_duration,
+                    thursday_duration = excluded.thursday_duration,
+                    friday_present = excluded.friday_present,
+                    friday_base_duration = excluded.friday_base_duration,
+                    friday_duration = excluded.friday_duration,
+                    updated_at = CURRENT_TIMESTAMP
+            `);
+
+            const transferredWorkers = [];
+            const saveTransaction = db.transaction(() => {
+                for (const entry of normalizedEntries) {
+                    const worker = getWorker.get(entry.worker_id);
+                    if (!worker) {
+                        throw new Error('تعذر العثور على أحد العمال');
+                    }
+
+                    const existing = getExisting.get(entry.worker_id, weekStart);
+                    const effectiveWage = existing ? roundMoney(existing.daily_wage) : roundMoney(worker.daily_wage);
+
+                    let attendanceUnits = 0;
+                    const isNewLogic = weekStart >= '2026-07-11';
+                    for (const day of ATTENDANCE_DAYS) {
+                        const present = entry[`${day}_present`];
+                        const duration = present ? Number(entry[`${day}_duration`] || 0) : 0;
+                        const baseDuration = present && isNewLogic ? Number(entry[`${day}_base_duration`] || 0) : (present ? 1 : 0);
+                        attendanceUnits += present ? (isNewLogic ? (baseDuration + duration) : duration) : 0;
+                    }
+                    const grossPay = roundMoney(effectiveWage * attendanceUnits);
+
+                    let pettyExpenseId = existing ? existing.petty_expense_id : null;
+                    const shouldTransfer = Boolean(worker.auto_transfer_to_petty) || (worker.name && worker.name.includes('محمد منصور'));
+
+                    if (shouldTransfer) {
+                        const weekEnd = getWeekEnd(weekStart);
+                        if (grossPay > 0) {
+                            if (pettyExpenseId) {
+                                const existingExpense = db.prepare('SELECT id, document_number, treasury_transaction_id FROM petty_expenses WHERE id = ?').get(pettyExpenseId);
+                                if (existingExpense) {
+                                    db.prepare(`
+                                        UPDATE petty_expenses
+                                        SET amount = @amount,
+                                            expense_date = @expense_date,
+                                            statement = @statement,
+                                            notes = @notes
+                                        WHERE id = @id
+                                    `).run({
+                                        id: existingExpense.id,
+                                        amount: grossPay,
+                                        expense_date: weekEnd,
+                                        statement: `أجر أسبوعي - ${worker.name}`,
+                                        notes: `إدارة العمال: أسبوع من ${weekStart} إلى ${weekEnd}`
+                                    });
+
+                                    if (existingExpense.treasury_transaction_id) {
+                                        db.prepare(`
+                                            UPDATE treasury_transactions
+                                            SET amount = @amount,
+                                                transaction_date = @transaction_date,
+                                                description = @description
+                                            WHERE id = @id
+                                        `).run({
+                                            id: existingExpense.treasury_transaction_id,
+                                            amount: grossPay,
+                                            transaction_date: weekEnd,
+                                            description: `مصروفات نثريات ${existingExpense.document_number} - أجر أسبوعي - ${worker.name}`
+                                        });
+                                    }
+                                } else {
+                                    pettyExpenseId = null;
+                                }
+                            }
+
+                            if (!pettyExpenseId) {
+                                const docNumber = getNextDocumentNumber();
+                                const expInfo = db.prepare(`
+                                    INSERT INTO petty_expenses (category, document_number, expense_date, amount, statement, notes)
+                                    VALUES ('general', @document_number, @expense_date, @amount, @statement, @notes)
+                                `).run({
+                                    document_number: docNumber,
+                                    expense_date: weekEnd,
+                                    amount: grossPay,
+                                    statement: `أجر أسبوعي - ${worker.name}`,
+                                    notes: `إدارة العمال: أسبوع من ${weekStart} إلى ${weekEnd}`
+                                });
+                                pettyExpenseId = expInfo.lastInsertRowid;
+
+                                const trInfo = db.prepare(`
+                                    INSERT INTO treasury_transactions (type, amount, transaction_date, description, related_invoice_id, related_type)
+                                    VALUES ('expense', @amount, @transaction_date, @description, @related_invoice_id, NULL)
+                                `).run({
+                                    amount: grossPay,
+                                    transaction_date: weekEnd,
+                                    description: `مصروفات نثريات ${docNumber} - أجر أسبوعي - ${worker.name}`,
+                                    related_invoice_id: pettyExpenseId
+                                });
+
+                                db.prepare('UPDATE petty_expenses SET treasury_transaction_id = ? WHERE id = ?').run(trInfo.lastInsertRowid, pettyExpenseId);
+                            }
+
+                            transferredWorkers.push(worker.name);
+                        } else if (pettyExpenseId) {
+                            const existingExpense = db.prepare('SELECT id, treasury_transaction_id FROM petty_expenses WHERE id = ?').get(pettyExpenseId);
+                            if (existingExpense) {
+                                db.prepare('UPDATE petty_expenses SET treasury_transaction_id = NULL WHERE id = ?').run(existingExpense.id);
+                                db.prepare('DELETE FROM petty_expenses WHERE id = ?').run(existingExpense.id);
+                                if (existingExpense.treasury_transaction_id) {
+                                    db.prepare('DELETE FROM treasury_transactions WHERE id = ?').run(existingExpense.treasury_transaction_id);
+                                }
+                            }
+                            pettyExpenseId = null;
+                        }
+                    }
+
+                    upsertAttendance.run({
+                        ...entry,
+                        week_start_date: weekStart,
+                        daily_wage: effectiveWage,
+                        petty_expense_id: pettyExpenseId
+                    });
+                }
+            });
+
+            saveTransaction();
+            return { success: true, transferred_workers: transferredWorkers };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-worker-advance', (event, data = {}) => {
+        try {
+            const payload = normalizeAdvancePayload(data);
+            const worker = db.prepare('SELECT id FROM workers WHERE id = ?').get(payload.worker_id);
+            if (!worker) {
+                return { success: false, error: 'العامل غير موجود' };
+            }
+
+            const info = db.prepare(`
+                INSERT INTO worker_advances (worker_id, week_start_date, advance_date, amount, notes)
+                VALUES (@worker_id, @week_start_date, @advance_date, @amount, @notes)
+            `).run(payload);
+
+            return { success: true, id: info.lastInsertRowid };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('update-worker-advance', (event, data = {}) => {
+        try {
+            const id = Number(data.id);
+            if (!Number.isInteger(id) || id <= 0) {
+                return { success: false, error: 'معرف السلفة غير صحيح' };
+            }
+
+            const existing = db.prepare('SELECT id FROM worker_advances WHERE id = ?').get(id);
+            if (!existing) {
+                return { success: false, error: 'السلفة غير موجودة' };
+            }
+
+            const payload = normalizeAdvancePayload(data);
+            db.prepare(`
+                UPDATE worker_advances
+                SET worker_id = @worker_id,
+                    week_start_date = @week_start_date,
+                    advance_date = @advance_date,
+                    amount = @amount,
+                    notes = @notes,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = @id
+            `).run({ ...payload, id });
+
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('delete-worker-advance', (event, idValue) => {
+        try {
+            const id = Number(idValue);
+            if (!Number.isInteger(id) || id <= 0) {
+                return { success: false, error: 'معرف السلفة غير صحيح' };
+            }
+
+            const info = db.prepare('DELETE FROM worker_advances WHERE id = ?').run(id);
+            if (!info.changes) {
+                return { success: false, error: 'السلفة غير موجودة' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-worker-advance-deduction', (event, data = {}) => {
+        try {
+            const workerId = Number(data.worker_id);
+            const weekStart = normalizeWeekStart(data.week_start_date);
+            const deductedAmount = roundMoney(data.deducted_amount);
+            const notes = String(data.notes || '').trim();
+
+            if (!Number.isInteger(workerId) || workerId <= 0) {
+                return { success: false, error: 'معرف العامل غير صحيح' };
+            }
+
+            if (!Number.isFinite(Number(data.deducted_amount)) || deductedAmount < 0) {
+                return { success: false, error: 'مبلغ التنزيل يجب أن يكون صفرًا أو أكبر' };
+            }
+
+            const worker = db.prepare('SELECT id FROM workers WHERE id = ?').get(workerId);
+            if (!worker) {
+                return { success: false, error: 'العامل غير موجود' };
+            }
+
+            if (deductedAmount === 0) {
+                db.prepare('DELETE FROM worker_advance_deductions WHERE worker_id = ? AND week_start_date = ?').run(workerId, weekStart);
+                return { success: true, deducted_amount: 0 };
+            }
+
+            db.prepare(`
+                INSERT INTO worker_advance_deductions (worker_id, week_start_date, deducted_amount, notes)
+                VALUES (@worker_id, @week_start_date, @deducted_amount, @notes)
+                ON CONFLICT(worker_id, week_start_date) DO UPDATE SET
+                    deducted_amount = excluded.deducted_amount,
+                    notes = excluded.notes,
+                    updated_at = CURRENT_TIMESTAMP
+            `).run({
+                worker_id: workerId,
+                week_start_date: weekStart,
+                deducted_amount: deductedAmount,
+                notes
+            });
+
+            return { success: true, deducted_amount: deductedAmount };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+}
+
+module.exports = { register };

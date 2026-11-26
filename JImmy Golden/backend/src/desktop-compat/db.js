@@ -473,6 +473,7 @@ function initDB() {
             final_amount_usd REAL DEFAULT 0,
             final_rate REAL DEFAULT 0,
             final_amount_egp REAL DEFAULT 0,
+            middle_payments_json TEXT DEFAULT '[]',
             total_amount_usd REAL DEFAULT 0,
             total_amount_egp REAL DEFAULT 0,
             purchase_cost_egp REAL DEFAULT 0,
@@ -492,6 +493,7 @@ function initDB() {
 
     runAddColumnMigration("ALTER TABLE external_work_shipments ADD COLUMN quantity_tons REAL DEFAULT 0", 'external_work_shipments', 'quantity_tons');
     runAddColumnMigration("ALTER TABLE external_work_shipments ADD COLUMN cost_per_ton_egp REAL DEFAULT 0", 'external_work_shipments', 'cost_per_ton_egp');
+    runAddColumnMigration("ALTER TABLE external_work_shipments ADD COLUMN middle_payments_json TEXT DEFAULT '[]'", 'external_work_shipments', 'middle_payments_json');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS external_work_sales (

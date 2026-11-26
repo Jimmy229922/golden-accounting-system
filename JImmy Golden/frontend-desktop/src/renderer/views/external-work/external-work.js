@@ -333,9 +333,14 @@ function renderPage() {
                         </div>
 
                         <div class="modal-section-card">
-                            <div class="modal-section-title">
-                                <i class="fas fa-dollar-sign"></i>
-                                <span>2. دفعات الشراء والتحويلات الخارجية ($ -> ج.م)</span>
+                            <div class="modal-section-title modal-section-title-between">
+                                <div class="modal-section-title-main">
+                                    <i class="fas fa-dollar-sign"></i>
+                                    <span>2. دفعات الشراء والتحويلات الخارجية ($ -> ج.م)</span>
+                                </div>
+                                <button type="button" id="addMiddlePaymentBtn" class="btn-add-middle-payment">
+                                    <i class="fas fa-plus-circle"></i> إضافة دفعة متوسطة
+                                </button>
                             </div>
                             <div class="form-grid-3" style="margin-bottom: 12px;">
                                 <div class="form-group">
@@ -351,6 +356,8 @@ function renderPage() {
                                     <input type="text" id="modalAdvanceEgp" class="form-control uneditable" readonly placeholder="0.00">
                                 </div>
                             </div>
+
+                            <div id="middlePaymentsContainer" class="middle-payments-list"></div>
 
                             <div class="form-grid-3">
                                 <div class="form-group">
@@ -515,11 +522,16 @@ function bindEvents() {
         state.editingId = null;
         document.getElementById('modalTitle').textContent = 'تسجيل شحنة مشتريات شغل خارجي';
         document.getElementById('shipmentForm').reset();
+        renderMiddlePaymentsRows([]);
         document.getElementById('modalShipmentDate').value = today();
         await refreshShipmentNumber();
         updateModalLiveCalculations();
         document.body.classList.add('modal-open');
         modal.classList.remove('hidden');
+    });
+
+    document.getElementById('addMiddlePaymentBtn')?.addEventListener('click', () => {
+        addMiddlePaymentRow();
     });
 
     document.getElementById('refreshNumberBtn').addEventListener('click', refreshShipmentNumber);
@@ -589,24 +601,146 @@ function bindEvents() {
     });
 }
 
+function parseMiddlePaymentsFromRow(row) {
+    if (!row) return [];
+    if (Array.isArray(row.middle_payments)) return row.middle_payments;
+    if (typeof row.middle_payments_json === 'string' && row.middle_payments_json.trim()) {
+        try {
+            const parsed = JSON.parse(row.middle_payments_json);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+            return [];
+        }
+    }
+    return [];
+}
+
+function renumberMiddlePaymentRows() {
+    const container = document.getElementById('middlePaymentsContainer');
+    if (!container) return;
+    container.querySelectorAll('.middle-payment-row').forEach((rowEl, idx) => {
+        const num = idx + 1;
+        const usdLabel = rowEl.querySelector('.middle-usd-label');
+        const rateLabel = rowEl.querySelector('.middle-rate-label');
+        const egpLabel = rowEl.querySelector('.middle-egp-label');
+        if (usdLabel) usdLabel.textContent = `دفعة متوسطة ${num} ($)`;
+        if (rateLabel) rateLabel.textContent = `سعر صرف الدفعة ${num} (ج.م)`;
+        if (egpLabel) egpLabel.textContent = `المقابل للدفعة ${num} (ج.م)`;
+    });
+}
+
+function createMiddlePaymentRowElement(payment = {}, index = 1) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'middle-payment-row';
+    const usdVal = Number(payment.amount_usd) > 0 ? formatMoneyInputValue(payment.amount_usd) : '';
+    const rateVal = Number(payment.rate) > 0 ? formatMoneyInputValue(payment.rate) : '';
+    const egpVal = Number(payment.amount_egp) > 0 ? formatMoney(payment.amount_egp) : '';
+
+    rowEl.innerHTML = `
+        <div class="middle-payment-grid">
+            <div class="form-group">
+                <label class="middle-usd-label">دفعة متوسطة ${index} ($)</label>
+                <input type="text" inputmode="decimal" class="form-control money-input middle-usd-input" placeholder="0.00" value="${escapeHtml(usdVal)}">
+            </div>
+            <div class="form-group">
+                <label class="middle-rate-label">سعر صرف الدفعة ${index} (ج.م)</label>
+                <input type="text" inputmode="decimal" class="form-control money-input middle-rate-input" placeholder="مثال: 52.00" value="${escapeHtml(rateVal)}">
+            </div>
+            <div class="form-group">
+                <label class="middle-egp-label">المقابل للدفعة ${index} (ج.م)</label>
+                <input type="text" class="form-control uneditable middle-egp-input" readonly placeholder="0.00" value="${escapeHtml(egpVal)}">
+            </div>
+            <button type="button" class="btn-remove-middle-payment" title="حذف الدفعة" aria-label="حذف الدفعة">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+    `;
+
+    rowEl.querySelectorAll('.middle-usd-input, .middle-rate-input').forEach((input) => {
+        input.addEventListener('input', (e) => {
+            formatInputWithCursor(e.target);
+            updateModalLiveCalculations();
+        });
+    });
+
+    rowEl.querySelector('.btn-remove-middle-payment')?.addEventListener('click', () => {
+        rowEl.remove();
+        renumberMiddlePaymentRows();
+        updateModalLiveCalculations();
+    });
+
+    return rowEl;
+}
+
+function renderMiddlePaymentsRows(payments = []) {
+    const container = document.getElementById('middlePaymentsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    const list = Array.isArray(payments) ? payments : [];
+    list.forEach((payment, idx) => {
+        container.appendChild(createMiddlePaymentRowElement(payment, idx + 1));
+    });
+}
+
+function addMiddlePaymentRow(payment = {}) {
+    const container = document.getElementById('middlePaymentsContainer');
+    if (!container) return;
+    const nextIndex = container.querySelectorAll('.middle-payment-row').length + 1;
+    const rowEl = createMiddlePaymentRowElement(payment, nextIndex);
+    container.appendChild(rowEl);
+    rowEl.querySelector('.middle-usd-input')?.focus();
+}
+
+function collectMiddlePaymentsFromModal() {
+    const container = document.getElementById('middlePaymentsContainer');
+    if (!container) return [];
+    const list = [];
+    container.querySelectorAll('.middle-payment-row').forEach((rowEl, idx) => {
+        const amountUsd = parseNumber(rowEl.querySelector('.middle-usd-input')?.value);
+        const rate = parseNumber(rowEl.querySelector('.middle-rate-input')?.value);
+        const amountEgp = Math.round((amountUsd * rate + Number.EPSILON) * 100) / 100;
+        if (amountUsd > 0 || rate > 0) {
+            list.push({
+                label: `دفعة متوسطة ${idx + 1}`,
+                amount_usd: amountUsd,
+                rate,
+                amount_egp: amountEgp
+            });
+        }
+    });
+    return list;
+}
+
 function updateModalLiveCalculations() {
     const advanceUsd = parseNumber(document.getElementById('modalAdvanceUsd').value);
     const advanceRate = parseNumber(document.getElementById('modalAdvanceRate').value);
     const advanceEgp = Math.round((advanceUsd * advanceRate + Number.EPSILON) * 100) / 100;
     document.getElementById('modalAdvanceEgp').value = advanceEgp ? formatMoney(advanceEgp) : '';
 
+    let middleTotalUsd = 0;
+    let middleTotalEgp = 0;
+    document.querySelectorAll('#middlePaymentsContainer .middle-payment-row').forEach((rowEl) => {
+        const usd = parseNumber(rowEl.querySelector('.middle-usd-input')?.value);
+        const rate = parseNumber(rowEl.querySelector('.middle-rate-input')?.value);
+        const egp = Math.round((usd * rate + Number.EPSILON) * 100) / 100;
+        const egpInput = rowEl.querySelector('.middle-egp-input');
+        if (egpInput) egpInput.value = egp ? formatMoney(egp) : '';
+        middleTotalUsd += usd;
+        middleTotalEgp += egp;
+    });
+
     const finalUsd = parseNumber(document.getElementById('modalFinalUsd').value);
     const finalRate = parseNumber(document.getElementById('modalFinalRate').value);
     const finalEgp = Math.round((finalUsd * finalRate + Number.EPSILON) * 100) / 100;
     document.getElementById('modalFinalEgp').value = finalEgp ? formatMoney(finalEgp) : '';
 
-    const totalUsd = Math.round((advanceUsd + finalUsd + Number.EPSILON) * 100) / 100;
-    const totalEgp = Math.round((advanceEgp + finalEgp + Number.EPSILON) * 100) / 100;
+    const totalUsd = Math.round((advanceUsd + middleTotalUsd + finalUsd + Number.EPSILON) * 100) / 100;
+    const totalEgp = Math.round((advanceEgp + middleTotalEgp + finalEgp + Number.EPSILON) * 100) / 100;
 
     const shipping = parseNumber(document.getElementById('modalShippingExpensesEgp').value);
     const bankCommission = parseNumber(document.getElementById('modalBankCommissionEgp').value);
 
-    const purchaseCost = Math.round((finalEgp + advanceEgp + bankCommission + shipping + Number.EPSILON) * 100) / 100;
+    const purchaseCost = Math.round((totalEgp + bankCommission + shipping + Number.EPSILON) * 100) / 100;
     document.getElementById('modalPurchaseCostEgp').value = purchaseCost ? formatMoney(purchaseCost) : '';
 
     const quantityTons = parseNumber(document.getElementById('modalQuantityTons').value);
@@ -787,6 +921,16 @@ function viewShipmentDetails(id) {
                         <span>المقابل بالجنيه:</span>
                         <strong>${formatMoney(row.advance_amount_egp)} ج.م</strong>
                     </div>
+                    ${parseMiddlePaymentsFromRow(row).map((mp, idx) => `
+                    <div class="details-row">
+                        <span>${escapeHtml(mp.label || `دفعة متوسطة ${idx + 1}`)}:</span>
+                        <span>$${formatMoney(mp.amount_usd)} (سعر صرف: ${formatMoney(mp.rate)})</span>
+                    </div>
+                    <div class="details-row">
+                        <span>المقابل بالجنيه:</span>
+                        <strong>${formatMoney(mp.amount_egp)} ج.م</strong>
+                    </div>
+                    `).join('')}
                     <div class="details-row">
                         <span>دفعة نهائية:</span>
                         <span>$${formatMoney(row.final_amount_usd)} (سعر صرف: ${formatMoney(row.final_rate)})</span>
@@ -996,6 +1140,7 @@ async function openEditModal(id) {
 
     document.getElementById('modalAdvanceUsd').value = row.advance_amount_usd ? formatMoneyInputValue(row.advance_amount_usd) : '';
     document.getElementById('modalAdvanceRate').value = row.advance_rate ? formatMoneyInputValue(row.advance_rate) : '';
+    renderMiddlePaymentsRows(parseMiddlePaymentsFromRow(row));
     document.getElementById('modalFinalUsd').value = row.final_amount_usd ? formatMoneyInputValue(row.final_amount_usd) : '';
     document.getElementById('modalFinalRate').value = row.final_rate ? formatMoneyInputValue(row.final_rate) : '';
 
@@ -1046,6 +1191,7 @@ async function saveShipment(event) {
         item_description: (document.getElementById('modalItemDescription').value || '').trim(),
         advance_amount_usd: parseNumber(document.getElementById('modalAdvanceUsd').value),
         advance_rate: parseNumber(document.getElementById('modalAdvanceRate').value),
+        middle_payments: collectMiddlePaymentsFromModal(),
         final_amount_usd: parseNumber(document.getElementById('modalFinalUsd').value),
         final_rate: parseNumber(document.getElementById('modalFinalRate').value),
         shipping_expenses_egp: parseNumber(document.getElementById('modalShippingExpensesEgp').value),

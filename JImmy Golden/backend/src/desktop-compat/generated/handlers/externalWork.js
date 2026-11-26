@@ -29,22 +29,57 @@ function normalizeDate(value) {
     return text || new Date().toISOString().slice(0, 10);
 }
 
+function parseMiddlePayments(raw) {
+    let list = raw;
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return [];
+        try {
+            list = JSON.parse(trimmed);
+        } catch (_) {
+            return [];
+        }
+    }
+    if (!Array.isArray(list)) return [];
+
+    return list
+        .map((item, idx) => {
+            if (!item || typeof item !== 'object') return null;
+            const amountUsd = roundMoney(item.amount_usd);
+            const rate = roundMoney(item.rate);
+            const amountEgp = roundMoney(amountUsd * rate);
+            const label = String(item.label || '').trim() || `دفعة متوسطة ${idx + 1}`;
+            if (amountUsd <= 0 && rate <= 0) return null;
+            return {
+                label,
+                amount_usd: amountUsd,
+                rate,
+                amount_egp: amountEgp
+            };
+        })
+        .filter(Boolean);
+}
+
 function normalizePayload(data = {}) {
     const advanceAmountUsd = roundMoney(data.advance_amount_usd);
     const advanceRate = roundMoney(data.advance_rate);
     const advanceAmountEgp = roundMoney(advanceAmountUsd * advanceRate);
 
+    const middlePayments = parseMiddlePayments(data.middle_payments ?? data.middle_payments_json);
+    const middleTotalUsd = roundMoney(middlePayments.reduce((sum, p) => sum + p.amount_usd, 0));
+    const middleTotalEgp = roundMoney(middlePayments.reduce((sum, p) => sum + p.amount_egp, 0));
+
     const finalAmountUsd = roundMoney(data.final_amount_usd);
     const finalRate = roundMoney(data.final_rate);
     const finalAmountEgp = roundMoney(finalAmountUsd * finalRate);
 
-    const totalAmountUsd = roundMoney(advanceAmountUsd + finalAmountUsd);
-    const totalAmountEgp = roundMoney(advanceAmountEgp + finalAmountEgp);
+    const totalAmountUsd = roundMoney(advanceAmountUsd + middleTotalUsd + finalAmountUsd);
+    const totalAmountEgp = roundMoney(advanceAmountEgp + middleTotalEgp + finalAmountEgp);
 
     const shippingExpensesEgp = roundMoney(data.shipping_expenses_egp);
     const bankCommissionEgp = roundMoney(data.bank_commission_egp);
 
-    const purchaseCostEgp = roundMoney(advanceAmountEgp + finalAmountEgp + bankCommissionEgp + shippingExpensesEgp);
+    const purchaseCostEgp = roundMoney(totalAmountEgp + bankCommissionEgp + shippingExpensesEgp);
 
     const quantityTons = Number(data.quantity_tons) || 0;
     const costPerTonEgp = quantityTons > 0 ? roundMoney(purchaseCostEgp / quantityTons) : 0;
@@ -64,6 +99,7 @@ function normalizePayload(data = {}) {
         final_amount_usd: finalAmountUsd,
         final_rate: finalRate,
         final_amount_egp: finalAmountEgp,
+        middle_payments_json: JSON.stringify(middlePayments),
         total_amount_usd: totalAmountUsd,
         total_amount_egp: totalAmountEgp,
         shipping_expenses_egp: shippingExpensesEgp,
@@ -185,7 +221,10 @@ function register() {
                 ${whereSql ? whereSql.replace(/\b(shipment_date|shipment_number|client_name|item_description|swift_reference|statement|notes)\b/g, 's.$1') : ''}
                 ORDER BY s.shipment_date DESC, s.id DESC
                 LIMIT @pageSize OFFSET @offset
-            `).all({ ...args, pageSize, offset });
+            `).all({ ...args, pageSize, offset }).map((row) => ({
+                ...row,
+                middle_payments: parseMiddlePayments(row.middle_payments_json)
+            }));
 
             const totalQty = Number(statsRow.totalQuantityTons) || 0;
             const avgCostPerTon = totalQty > 0 ? roundMoney(Number(statsRow.totalPurchasesEgp) / totalQty) : 0;
@@ -232,7 +271,13 @@ function register() {
             if (!shipment) {
                 return { success: false, error: 'لم يتم العثور على الشحنة' };
             }
-            return { success: true, shipment };
+            return {
+                success: true,
+                shipment: {
+                    ...shipment,
+                    middle_payments: parseMiddlePayments(shipment.middle_payments_json)
+                }
+            };
         } catch (error) {
             return { success: false, error: error.message };
         }
@@ -251,6 +296,7 @@ function register() {
                     shipment_number, shipment_date, client_name, item_description, swift_reference,
                     advance_amount_usd, advance_rate, advance_amount_egp,
                     final_amount_usd, final_rate, final_amount_egp,
+                    middle_payments_json,
                     total_amount_usd, total_amount_egp,
                     shipping_expenses_egp, bank_commission_egp, purchase_cost_egp, agent_commission_egp,
                     quantity_tons, cost_per_ton_egp,
@@ -260,6 +306,7 @@ function register() {
                     @shipment_number, @shipment_date, @client_name, @item_description, @swift_reference,
                     @advance_amount_usd, @advance_rate, @advance_amount_egp,
                     @final_amount_usd, @final_rate, @final_amount_egp,
+                    @middle_payments_json,
                     @total_amount_usd, @total_amount_egp,
                     @shipping_expenses_egp, @bank_commission_egp, @purchase_cost_egp, @agent_commission_egp,
                     @quantity_tons, @cost_per_ton_egp,
@@ -310,6 +357,7 @@ function register() {
                     final_amount_usd = @final_amount_usd,
                     final_rate = @final_rate,
                     final_amount_egp = @final_amount_egp,
+                    middle_payments_json = @middle_payments_json,
                     total_amount_usd = @total_amount_usd,
                     total_amount_egp = @total_amount_egp,
                     shipping_expenses_egp = @shipping_expenses_egp,
